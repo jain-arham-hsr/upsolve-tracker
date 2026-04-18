@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "CF Trainer",
+  "version": "1.0",
+  "description": "Systematically upsolve Codeforces contests.",
+  "permissions": ["activeTab", "storage", "sidePanel"],
+  "host_permissions": ["*://*.codeforces.com/*"],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "192": "icons/icon-192.png",
+    "512": "icons/icon-512.png"
+  },
+  "action": {
+    "default_title": "Open CF Trainer",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "core/ui/index.html"
+  },
+  "background": {
+    "service_worker": "targets/chrome/background.js",
+    "type": "module"
+  }
+}

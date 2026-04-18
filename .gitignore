@@ -1,0 +1,8 @@
+.DS_STORE
+cache.db
+.env
+upsolve_queue.txt
+
+
+dist
+node_modules

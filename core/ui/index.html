@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CF Trainer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <h1>CF Trainer</h1>
+    </header>
+
+    <div class="action-area">
+      <button id="add-contest-btn" class="primary-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        Add Contest
+      </button>
+    </div>
+
+    <main id="queue-list" class="queue-container">
+      <a href="https://codeforces.com/" target="_blank" class="problem-card">
+        <div class="problem-title">01. Two Sum</div>
+        <div class="problem-rating">Rating: 1400</div>
+        <div class="problem-url">codeforces.com/...</div>
+      </a>
+
+      <a href="https://codeforces.com/" target="_blank" class="problem-card">
+        <div class="problem-title">02. Graph Problem</div>
+        <div class="problem-rating">Rating: 1800</div>
+        <div class="problem-url">codeforces.com/contest/2220/A</div>
+      </a>
+    </main>
+  </div>
+  <script type="module" src="index.js"></script>
+</body>
+
+</html>
