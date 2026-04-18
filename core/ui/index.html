@@ -5,19 +5,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CF Trainer</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="./style.css">
 </head>
 
 <body>
-  <div class="app-container">
+
+  <cf-app></cf-app>
+
+  <template id="tpl-app">
     <header class="app-header">
-      <h1>CF Trainer</h1>
+      <div class="brand">CF TRAINER</div>
+      <div class="controls">
+        <button id="btn-refresh" class="icon-btn" title="Refresh solved status">↻</button>
+        <button id="btn-view-list" class="icon-btn" title="Contest List">☰</button>
+      </div>
     </header>
+    <main id="router-outlet"></main>
+  </template>
 
-    <div id="app-root"></div>
-  </div>
-
-  <script type="module" src="index.js"></script>
+  <script type="module" src="./index.js"></script>
 </body>
 
 </html>

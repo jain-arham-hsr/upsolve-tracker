@@ -1,5 +1,3 @@
-// core/services/http-client.js
-
 export class HttpClient {
   static #requestCount = 0;
   static #COOLDOWN_THRESHOLD = 15; // Trigger a long pause every 15 requests
