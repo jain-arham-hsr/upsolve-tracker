@@ -1,0 +1,33 @@
+<style>
+  /* ... keep your existing styles ... */
+
+  .section-divider {
+    border: 0;
+    border-top: 1px solid var(--border-color, #333);
+    margin: 12px 0 16px 0;
+    width: 100%;
+  }
+
+  /* Optional: ensure the action area doesn't have too much bottom margin now */
+  .action-area {
+    margin-bottom: 8px;
+  }
+</style>
+
+<link rel="stylesheet" href="style.css">
+
+<div class="view-state">
+  <div class="action-area">
+    <button id="add-contest-btn" class="primary-btn" style="display: none;">
+      <span id="add-contest-text">Add Contest</span>
+    </button>
+    <div id="empty-state-msg" class="empty-state">
+      Navigate to a Codeforces contest page to add it.
+    </div>
+  </div>
+
+  <hr class="section-divider">
+
+  <main id="queue-list" class="queue-container">
+  </main>
+</div>

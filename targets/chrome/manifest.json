@@ -24,5 +24,9 @@
   "background": {
     "service_worker": "targets/chrome/background.js",
     "type": "module"
+  },
+  "options_ui": {
+    "page": "core/ui/options/index.html",
+    "open_in_tab": true
   }
 }

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CF Trainer Settings</title>
+  <link rel="stylesheet" href="./options.css">
+</head>
+
+<body>
+  <div class="settings-container">
+    <h2>CF Trainer Settings</h2>
+
+    <div class="form-group">
+      <label for="cf-handle">Codeforces Handle</label>
+      <p class="help-text">Used to verify your solved problems during a manual refresh.</p>
+      <input type="text" id="cf-handle" placeholder="e.g., tourist" spellcheck="false" />
+    </div>
+
+    <div class="form-group">
+      <label>Queue Storage Folder</label>
+      <p class="help-text">Select where your upsolve_queue.txt file will be saved. Your Documents folder is a good spot.</p>
+      <div class="folder-controls">
+        <button id="choose-folder-btn" class="btn secondary">Choose Folder</button>
+        <span id="folder-status" class="status-text warning">No folder selected</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="save-btn" class="btn primary">Save Settings</button>
+      <span id="save-msg" class="save-message hidden">Saved successfully!</span>
+    </div>
+  </div>
+
+  <script type="module" src="./options.js"></script>
+</body>
+
+</html>
