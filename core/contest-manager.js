@@ -1,5 +1,6 @@
 import { HttpClient } from "./services/http-client.js";
 import { estimateProblemRating } from "./rating-estimator.js";
+import { LocalDB } from "./services/storage.js";
 
 export async function processNewContest(url) {
   try {
@@ -98,14 +99,11 @@ export async function processNewContest(url) {
       participantRatings = await fetchGymRegistrantRatings(contestId);
     }
 
-    // 5. Estimate Difficulty
+    // 5. Run Rating Estimation
     if (participantRatings.length > 0) {
-      console.log(
-        `[Contest Manager] Running rating estimation using ${participantRatings.length} users...`,
-      );
+      console.log(`[Contest Manager] Running rating estimation...`);
       problems.forEach((problem) => {
         if (problem.rating === null) {
-          // Find the 50% success threshold
           problem.rating = estimateProblemRating(
             participantRatings,
             problem.officialSolves,
@@ -114,10 +112,32 @@ export async function processNewContest(url) {
       });
     }
 
-    console.log(`[Contest Manager] Final Results:`);
-    console.table(problems);
+    // 6. VALIDATION: Strict "Complete Data Only" Policy
+    // We check if EVERY problem in the array now has a non-null rating.
+    const allRated = problems.every((problem) => problem.rating !== null);
 
-    return { contestId, type, problems };
+    const contestData = {
+      id: contestId, // Mapped to 'id' so LocalDB can properly check for duplicates
+      type,
+      problems,
+    };
+
+    if (allRated) {
+      console.log(
+        "[Contest Manager] Validation passed. Saving to Chrome Local Storage...",
+      );
+      // Replaced DBService with our new LocalDB wrapper
+      await LocalDB.addTrackedContest(contestData);
+    } else {
+      console.warn(
+        "[Contest Manager] Skipping storage. Some problems are missing ratings.",
+      );
+      // We still return the data to the UI so the user can see it,
+      // but it won't persist after a refresh.
+    }
+
+    console.table(problems);
+    return contestData;
   } catch (error) {
     console.error("[Contest Manager] Failed:", error);
     throw error;
