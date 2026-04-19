@@ -24,26 +24,31 @@ export class ContestList extends HTMLElement {
     this.btnExport = this.querySelector("#btn-export");
     this.btnImport = this.querySelector("#btn-import");
     this.fileInput = this.querySelector("#import-file-input");
-    this.alertDiv = this.querySelector("#contest-alert"); // New reference
+    this.alertDiv = this.querySelector("#contest-alert");
 
-    // Initial State - DO NOT TOUCH TOOLTIP LOGIC
     this.btnAddContest.disabled = true;
     this.btnAddContest.setAttribute("data-tooltip", "Checking current page...");
 
-    // 1. Initial Render
     await this.renderQueue();
 
-    // 2. Add Contest Click - UPDATED WITH ALERT LOGIC
     this.btnAddContest.addEventListener("click", async () => {
       if (this.currentValidUrl) {
+        // 1. Instantly test/prompt and store the unlocked handle
+        const activeDirHandle = await this.verifyExportPermission();
+
         this.btnAddContest.textContent = "Fetching...";
         this.btnAddContest.disabled = true;
-        this.alertDiv.classList.add("hidden"); // Hide any old alerts
+        this.alertDiv.classList.add("hidden");
 
         try {
+          // 2. Run the slow Codeforces API logic
           await processNewContest(this.currentValidUrl);
           await this.renderQueue();
-          await this.autoExportIfEnabled();
+
+          // 3. Write using the exact handle we just unlocked
+          if (activeDirHandle) {
+            await this.executeAutoExport(activeDirHandle);
+          }
 
           this.btnAddContest.textContent = "✓ Added";
           this.btnAddContest.disabled = true;
@@ -52,16 +57,14 @@ export class ContestList extends HTMLElement {
             "Contest added successfully!",
           );
         } catch (error) {
-          // Requirement: Show inline alert instead of just console error
           this.showInlineAlert(error.message);
-
           this.btnAddContest.textContent = "+ Add Contest";
           this.btnAddContest.disabled = false;
         }
       }
     });
 
-    // 3. Management Actions
+    // Management Actions
     this.btnExport.addEventListener("click", async () => {
       const allData = await chrome.storage.local.get(null);
       const blob = new Blob([JSON.stringify(allData, null, 2)], {
@@ -98,29 +101,45 @@ export class ContestList extends HTMLElement {
   }
 
   /**
-   * If auto-export is enabled and a folder handle is stored, writes the full
-   * chrome.storage.local contents as JSON to the selected folder.
+   * Tests the directory handle immediately. If Chrome locked it after a restart,
+   * it catches the error and forces a prompt while the user click is still fresh.
+   * @returns {FileSystemDirectoryHandle|null} The unlocked handle, or null.
    */
-  async autoExportIfEnabled() {
+  async verifyExportPermission() {
     const settings = await chrome.storage.local.get("cf_trainer.auto_export");
-    if (!settings["cf_trainer.auto_export"]) return;
+    if (!settings["cf_trainer.auto_export"]) return null;
 
     const dirHandle = await loadDirHandle();
-    if (!dirHandle) return;
+    if (!dirHandle) return null;
 
     try {
-      // Re-verify permission — browser may revoke it between sessions
-      let permission = await dirHandle.queryPermission({ mode: "readwrite" });
-      if (permission !== "granted") {
-        permission = await dirHandle.requestPermission({ mode: "readwrite" });
+      // 1. TEST THE HANDLE: Try to access the file instantly.
+      // If Chrome is secretly blocking it, this throws a NotAllowedError.
+      await dirHandle.getFileHandle("cf_trainer_backup.json", { create: true });
+      return dirHandle;
+    } catch (error) {
+      // 2. CATCH & PROMPT: If blocked, force the prompt while the click is fresh!
+      if (error.name === "NotAllowedError") {
+        try {
+          const permission = await dirHandle.requestPermission({
+            mode: "readwrite",
+          });
+          if (permission === "granted") {
+            return dirHandle;
+          }
+        } catch (reqError) {
+          console.warn("[Auto-Export] Prompt rejected:", reqError.message);
+        }
       }
-      if (permission !== "granted") {
-        console.warn(
-          "[Auto-Export] Permission denied for directory. Skipping.",
-        );
-        return;
-      }
+      return null;
+    }
+  }
 
+  /**
+   * Performs the actual file writing using the pre-authorized handle.
+   */
+  async executeAutoExport(dirHandle) {
+    try {
       const allData = await chrome.storage.local.get(null);
       const json = JSON.stringify(allData, null, 2);
 
@@ -128,6 +147,7 @@ export class ContestList extends HTMLElement {
         "cf_trainer_backup.json",
         { create: true },
       );
+
       const writable = await fileHandle.createWritable();
       await writable.write(json);
       await writable.close();
@@ -135,26 +155,21 @@ export class ContestList extends HTMLElement {
       console.log("[Auto-Export] Backup written to", dirHandle.name);
     } catch (error) {
       console.warn("[Auto-Export] Failed to write backup:", error.message);
+      this.showInlineAlert(
+        "Added to Queue, but Auto-Export failed to write the file.",
+      );
     }
   }
 
-  /**
-   * Helper to display the professional green alert box
-   */
   showInlineAlert(message) {
-    // Strip the "Error: " prefix if the browser prepends it
     const cleanMessage = message.replace(/^Error:\s*/i, "");
-
     this.alertDiv.textContent = cleanMessage;
     this.alertDiv.classList.remove("hidden");
-
-    // Auto-hide after 6 seconds so it doesn't clutter the UI
     setTimeout(() => {
       this.alertDiv.classList.add("hidden");
     }, 6000);
   }
 
-  // --- RENDERING ENGINE ---
   async renderQueue() {
     const contests = await LocalDB.getTrackedContests();
 
