@@ -466,3 +466,17 @@ cf-contest-list,
   text-transform: uppercase;
   font-weight: bold;
 }
+
+.sync-alert {
+  background-color: rgba(76, 175, 80, 0.15); /* More visible green tint */
+  color: #a5d6a7;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  padding: 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-bottom: 20px;
+  text-align: center;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}

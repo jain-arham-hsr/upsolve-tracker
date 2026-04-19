@@ -23,6 +23,7 @@ export class ContestList extends HTMLElement {
     this.btnExport = this.querySelector("#btn-export");
     this.btnImport = this.querySelector("#btn-import");
     this.fileInput = this.querySelector("#import-file-input");
+    this.alertDiv = this.querySelector("#contest-alert"); // New reference
 
     // Initial State - DO NOT TOUCH TOOLTIP LOGIC
     this.btnAddContest.disabled = true;
@@ -31,17 +32,17 @@ export class ContestList extends HTMLElement {
     // 1. Initial Render
     await this.renderQueue();
 
-    // 2. Add Contest Click - UNTOUCHED ORIGINAL LOGIC
+    // 2. Add Contest Click - UPDATED WITH ALERT LOGIC
     this.btnAddContest.addEventListener("click", async () => {
       if (this.currentValidUrl) {
         this.btnAddContest.textContent = "Fetching...";
         this.btnAddContest.disabled = true;
+        this.alertDiv.classList.add("hidden"); // Hide any old alerts
 
         try {
           await processNewContest(this.currentValidUrl);
           await this.renderQueue();
 
-          // Set the final state after adding
           this.btnAddContest.textContent = "✓ Added";
           this.btnAddContest.disabled = true;
           this.btnAddContest.setAttribute(
@@ -49,7 +50,9 @@ export class ContestList extends HTMLElement {
             "Contest added successfully!",
           );
         } catch (error) {
-          console.error("Error adding contest:", error);
+          // Requirement: Show inline alert instead of just console error
+          this.showInlineAlert(error.message);
+
           this.btnAddContest.textContent = "+ Add Contest";
           this.btnAddContest.disabled = false;
         }
@@ -90,12 +93,25 @@ export class ContestList extends HTMLElement {
       reader.readAsText(file);
     });
 
-    // --- NO MANUAL CLICK LISTENER HERE ---
-    // Letting the <a> tags in renderQueue handle navigation natively.
-
     this.checkActiveTab();
     chrome.tabs.onActivated.addListener(this.boundCheckActiveTab);
     chrome.tabs.onUpdated.addListener(this.boundTabUpdatedHandler);
+  }
+
+  /**
+   * Helper to display the professional green alert box
+   */
+  showInlineAlert(message) {
+    // Strip the "Error: " prefix if the browser prepends it
+    const cleanMessage = message.replace(/^Error:\s*/i, "");
+
+    this.alertDiv.textContent = cleanMessage;
+    this.alertDiv.classList.remove("hidden");
+
+    // Auto-hide after 6 seconds so it doesn't clutter the UI
+    setTimeout(() => {
+      this.alertDiv.classList.add("hidden");
+    }, 6000);
   }
 
   // --- RENDERING ENGINE ---
@@ -109,17 +125,10 @@ export class ContestList extends HTMLElement {
 
     this.container.innerHTML = contests
       .map((contest) => {
-        // 1. Robust Type Check (CF API can return 'OFFICIAL', 'CONTEST', or 'CF')
-        const typeStr = (contest.type || "").toUpperCase();
-        const isOfficial =
-          typeStr === "OFFICIAL" || typeStr === "CONTEST" || typeStr === "CF";
-
-        // 2. Map to CF URL patterns
+        const isOfficial = contest.type === "OFFICIAL";
         const path = isOfficial ? "contest" : "gym";
         const label = isOfficial ? "Official" : "Gym";
         const typeClass = isOfficial ? "type-official" : "type-gym";
-
-        // 3. Construct URL
         const url = `https://codeforces.com/${path}/${contest.id}`;
 
         return `
@@ -138,7 +147,6 @@ export class ContestList extends HTMLElement {
   }
 
   async checkActiveTab() {
-    // 1. ALWAYS start by resetting the button to the default "Non-Contest" state
     this.currentValidUrl = null;
     this.btnAddContest.disabled = true;
     this.btnAddContest.textContent = "+ Add Contest";
@@ -156,7 +164,6 @@ export class ContestList extends HTMLElement {
         const match = tab.url.match(cfRegex);
 
         if (match) {
-          // 2. We ARE on a contest page - Now check if we already have it
           const contestId = match[3];
           this.currentValidUrl = tab.url;
 
@@ -173,7 +180,6 @@ export class ContestList extends HTMLElement {
               "Contest is already in your queue.",
             );
           } else {
-            // Valid contest and NOT tracked yet
             this.btnAddContest.disabled = false;
             this.btnAddContest.setAttribute(
               "data-tooltip",
@@ -181,14 +187,12 @@ export class ContestList extends HTMLElement {
             );
           }
         } else {
-          // Valid URL, but NOT a contest/gym page
           this.btnAddContest.setAttribute(
             "data-tooltip",
             "Must be on a CF contest or gym page.",
           );
         }
       } else {
-        // No tab or URL (e.g., settings page or restricted browser page)
         this.btnAddContest.setAttribute(
           "data-tooltip",
           "Navigate to a CF page first.",

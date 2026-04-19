@@ -1,6 +1,12 @@
-import { HttpClient } from "./services/http-client.js";
 import { estimateProblemRating } from "./rating-estimator.js";
 import { LocalDB } from "./services/storage.js";
+import { CodeforcesService } from "./services/codeforces-service.js";
+import {
+  getOfficialRatingDist,
+  getGymRatingDist,
+} from "./get-rating-distribution.js";
+import { getProblemStats } from "./get-prob-stats.js";
+import { buildSolvedKeys } from "./progress-manager.js";
 
 export async function processNewContest(url) {
   try {
@@ -10,98 +16,42 @@ export async function processNewContest(url) {
     const type = match[1].toLowerCase();
     const contestId = match[2];
 
-    // 1. Fetch standings with official participants only
-    const fetchUrl = `https://codeforces.com/${type}/${contestId}/standings?showUnofficial=false`;
+    const settings = await chrome.storage.local.get([
+      "cf_trainer.handle",
+      "cf_trainer.api_key",
+      "cf_trainer.api_secret",
+    ]);
 
-    console.log(
-      `[Contest Manager] Scraping official standings for ${type.toUpperCase()} ${contestId}...`,
+    if (!settings["cf_trainer.api_key"] || !settings["cf_trainer.api_secret"]) {
+      throw new Error("Missing API credentials. Please set them in Options.");
+    }
+
+    const cfService = new CodeforcesService(
+      settings["cf_trainer.api_key"],
+      settings["cf_trainer.api_secret"],
     );
 
-    const rawHtml = await HttpClient.get(fetchUrl);
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(rawHtml, "text/html");
+    const { contestName, problems } = await getProblemStats(
+      type,
+      contestId,
+      cfService,
+    );
 
-    const standingsTable = doc.querySelector("table.standings");
-    if (!standingsTable) {
-      throw new Error("Could not find the standings table.");
-    }
-
-    const problems = [];
-
-    // 2. Parse Header to get Problem metadata
-    const headerRow = standingsTable.querySelector("tr");
-    const problemLinks = headerRow.querySelectorAll('a[href*="/problem/"]');
-
-    problemLinks.forEach((a) => {
-      const problemIndex = a.textContent.trim();
-      const problemUrl = `https://codeforces.com${a.getAttribute("href")}`;
-
-      let name = a.getAttribute("title") || "Unknown Problem";
-      if (name.includes(" - ")) {
-        name = name.split(" - ").slice(1).join(" - ");
-      }
-
-      problems.push({
-        index: problemIndex,
-        name: name,
-        url: problemUrl,
-        rating: null,
-        officialSolves: 0,
-      });
-    });
-
-    // 3. Find the Totals Row
-    const allRows = Array.from(standingsTable.querySelectorAll("tr"));
-    const totalsRow = allRows.find((row) => row.innerText.includes("Accepted"));
-
-    if (totalsRow) {
-      const allCells = Array.from(totalsRow.querySelectorAll("td"));
-      const solveCells = allCells.slice(-problems.length);
-
-      problems.forEach((problem, i) => {
-        const cell = solveCells[i];
-        if (cell) {
-          /**
-           * SURGICAL EXTRACTION (Your working version):
-           * Instead of taking the whole text, we find the first child that is a TEXT node.
-           */
-          const firstTextNode = Array.from(cell.childNodes).find(
-            (node) =>
-              node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() !== "",
-          );
-
-          let acceptedText = "";
-          if (firstTextNode) {
-            acceptedText = firstTextNode.nodeValue.trim();
-          } else {
-            // Fallback: If CF wrapped the number in a span, grab the first element's text
-            acceptedText = cell.firstElementChild
-              ? cell.firstElementChild.innerText
-              : cell.innerText;
-            // Split by newline or space just in case
-            acceptedText = acceptedText.split(/[\n\s]/)[0];
-          }
-
-          // Clean up only the first number found
-          const cleanCount = acceptedText.replace(/\D/g, "");
-          problem.officialSolves = parseInt(cleanCount, 10) || 0;
-        }
-      });
-    }
-
-    // 4. Fetch Participant Ratings
     let participantRatings = [];
     if (type === "contest") {
-      // Use the official API for rated contests
-      participantRatings = await fetchParticipantRatings(contestId);
-    } else if (type === "gym") {
-      // Crawl gym registrant pages to build the rating pool
-      participantRatings = await fetchGymRegistrantRatings(contestId);
+      participantRatings = await getOfficialRatingDist(cfService, contestId);
+      if (participantRatings.length === 0) {
+        participantRatings = await getGymRatingDist(cfService, contestId);
+      }
+    } else {
+      participantRatings = await getGymRatingDist(cfService, contestId);
     }
 
-    // 5. Run Rating Estimation
+    console.log(
+      `[Contest Manager] Total rated participants found: ${participantRatings.length}`,
+    );
+
     if (participantRatings.length > 0) {
-      console.log(`[Contest Manager] Running rating estimation...`);
       problems.forEach((problem) => {
         if (problem.rating === null) {
           problem.rating = estimateProblemRating(
@@ -112,94 +62,52 @@ export async function processNewContest(url) {
       });
     }
 
-    // 6. VALIDATION: Strict "Complete Data Only" Policy
-    // We check if EVERY problem in the array now has a non-null rating.
-    const allRated = problems.every((problem) => problem.rating !== null);
+    // --- REMOVED THE 1500 FALLBACK COMPLETELY ---
 
-    const contestData = {
-      id: contestId, // Mapped to 'id' so LocalDB can properly check for duplicates
-      type,
-      problems,
-    };
+    const solvedKeys = await buildSolvedKeys(
+      cfService,
+      settings["cf_trainer.handle"],
+    );
 
-    if (allRated) {
-      console.log(
-        "[Contest Manager] Validation passed. Saving to Chrome Local Storage...",
+    let solvedCount = 0;
+    problems.forEach((prob) => {
+      if (solvedKeys.has(`${contestId}-${prob.index}`)) {
+        prob.solved = true;
+        solvedCount++;
+      }
+    });
+
+    if (solvedCount === problems.length && problems.length > 0) {
+      throw new Error(
+        `All problems in ${type === "contest" ? "Official" : "Gym"} contest ${contestId} are already solved!`,
       );
-      // Replaced DBService with our new LocalDB wrapper
-      await LocalDB.addTrackedContest(contestData);
-    } else {
-      console.warn(
-        "[Contest Manager] Skipping storage. Some problems are missing ratings.",
-      );
-      // We still return the data to the UI so the user can see it,
-      // but it won't persist after a refresh.
     }
 
     console.table(problems);
+
+    // --- RESTORED YOUR STRICT VALIDATION ---
+    const allRated = problems.every((problem) => problem.rating !== null);
+
+    const contestData = {
+      id: contestId,
+      name: contestName,
+      type: type === "contest" ? "OFFICIAL" : "GYM",
+      problems,
+      addedAt: Date.now(),
+    };
+
+    if (allRated) {
+      await LocalDB.addTrackedContest(contestData);
+    } else {
+      console.warn("[Contest Manager] Skipping storage. Missing ratings.");
+      throw new Error(
+        "Failed to estimate ratings. Check console for API errors.",
+      );
+    }
+
     return contestData;
   } catch (error) {
     console.error("[Contest Manager] Failed:", error);
     throw error;
-  }
-}
-
-/**
- * Crawls through the gymRegistrants pages to build the participant rating pool.
- */
-async function fetchGymRegistrantRatings(gymId) {
-  const ratings = [];
-  let page = 1;
-
-  console.log(`[Contest Manager] Starting Gym Registrant crawl...`);
-
-  while (true) {
-    const url = `https://codeforces.com/gymRegistrants/${gymId}/page/${page}`;
-    const rawHtml = await HttpClient.get(url);
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(rawHtml, "text/html");
-
-    const table = doc.querySelector(".datatable table");
-    if (!table) break;
-
-    const rows = table.querySelectorAll("tr:not(.first-row)");
-    if (rows.length === 0) break;
-
-    rows.forEach((row) => {
-      // Ratings are consistently in the 3rd column of the registrant table
-      const ratingCell = row.querySelector("td:nth-child(3)");
-      if (ratingCell) {
-        const r = parseInt(ratingCell.textContent.trim(), 10);
-        if (!isNaN(r) && r > 0) {
-          ratings.push(r);
-        }
-      }
-    });
-
-    // Check for the "→" (Next) link in the pagination block to continue flipping
-    const nextLink = Array.from(doc.querySelectorAll(".pagination a")).find(
-      (a) => a.innerText.includes("→"),
-    );
-
-    if (!nextLink) break;
-    page++;
-  }
-
-  return ratings;
-}
-
-async function fetchParticipantRatings(contestId) {
-  try {
-    const apiUrl = `https://codeforces.com/api/contest.ratingChanges?contestId=${contestId}`;
-    const rawText = await HttpClient.get(apiUrl);
-    const response = JSON.parse(rawText);
-    if (response && response.status === "OK") {
-      // Maps the pre-contest rating for all official entrants
-      return response.result.map((user) => user.oldRating);
-    }
-    return [];
-  } catch (error) {
-    console.warn(`[Contest Manager] Rating fetch failed:`, error.message);
-    return [];
   }
 }
