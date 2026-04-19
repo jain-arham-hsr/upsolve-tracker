@@ -1,6 +1,7 @@
 import templateHtml from "./contest-list.html?raw";
 import { processNewContest } from "../../contest-manager.js";
 import { LocalDB } from "../../services/storage.js";
+import { loadDirHandle } from "../../services/secure-store.js";
 
 export class ContestList extends HTMLElement {
   constructor() {
@@ -42,6 +43,7 @@ export class ContestList extends HTMLElement {
         try {
           await processNewContest(this.currentValidUrl);
           await this.renderQueue();
+          await this.autoExportIfEnabled();
 
           this.btnAddContest.textContent = "✓ Added";
           this.btnAddContest.disabled = true;
@@ -66,14 +68,11 @@ export class ContestList extends HTMLElement {
         type: "application/json",
       });
       const url = URL.createObjectURL(blob);
-      chrome.downloads.download(
-        {
-          url: url,
-          filename: "cf_trainer_backup.json",
-          saveAs: true,
-        },
-        () => URL.revokeObjectURL(url),
-      );
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "cf_trainer_backup.json";
+      a.click();
+      URL.revokeObjectURL(url);
     });
 
     this.btnImport.addEventListener("click", () => this.fileInput.click());
@@ -96,6 +95,47 @@ export class ContestList extends HTMLElement {
     this.checkActiveTab();
     chrome.tabs.onActivated.addListener(this.boundCheckActiveTab);
     chrome.tabs.onUpdated.addListener(this.boundTabUpdatedHandler);
+  }
+
+  /**
+   * If auto-export is enabled and a folder handle is stored, writes the full
+   * chrome.storage.local contents as JSON to the selected folder.
+   */
+  async autoExportIfEnabled() {
+    const settings = await chrome.storage.local.get("cf_trainer.auto_export");
+    if (!settings["cf_trainer.auto_export"]) return;
+
+    const dirHandle = await loadDirHandle();
+    if (!dirHandle) return;
+
+    try {
+      // Re-verify permission — browser may revoke it between sessions
+      let permission = await dirHandle.queryPermission({ mode: "readwrite" });
+      if (permission !== "granted") {
+        permission = await dirHandle.requestPermission({ mode: "readwrite" });
+      }
+      if (permission !== "granted") {
+        console.warn(
+          "[Auto-Export] Permission denied for directory. Skipping.",
+        );
+        return;
+      }
+
+      const allData = await chrome.storage.local.get(null);
+      const json = JSON.stringify(allData, null, 2);
+
+      const fileHandle = await dirHandle.getFileHandle(
+        "cf_trainer_backup.json",
+        { create: true },
+      );
+      const writable = await fileHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
+
+      console.log("[Auto-Export] Backup written to", dirHandle.name);
+    } catch (error) {
+      console.warn("[Auto-Export] Failed to write backup:", error.message);
+    }
   }
 
   /**

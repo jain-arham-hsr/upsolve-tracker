@@ -1,4 +1,12 @@
-document.addEventListener("DOMContentLoaded", () => {
+import {
+  saveDirHandle,
+  loadDirHandle,
+  clearDirHandle,
+  saveCredentials,
+  loadCredentials,
+} from "../../services/secure-store";
+
+document.addEventListener("DOMContentLoaded", async () => {
   const handleInput = document.getElementById("cf-handle");
   const apiKeyInput = document.getElementById("api-key");
   const apiSecretInput = document.getElementById("api-secret");
@@ -16,33 +24,26 @@ document.addEventListener("DOMContentLoaded", () => {
   // ==========================================
   // JOB 1: LOAD EXISTING SETTINGS
   // ==========================================
-  chrome.storage.local.get(
-    [
-      "cf_trainer.handle",
-      "cf_trainer.api_key",
-      "cf_trainer.api_secret",
-      "cf_trainer.auto_export",
-      "cf_trainer.data_dir_handle",
-    ],
-    (result) => {
-      if (result["cf_trainer.handle"])
-        handleInput.value = result["cf_trainer.handle"];
-      if (result["cf_trainer.api_key"])
-        apiKeyInput.value = result["cf_trainer.api_key"];
-      if (result["cf_trainer.api_secret"])
-        apiSecretInput.value = result["cf_trainer.api_secret"];
+  const [storageResult, credentials, dirHandle] = await Promise.all([
+    chrome.storage.local.get(["cf_trainer.handle", "cf_trainer.auto_export"]),
+    loadCredentials(),
+    loadDirHandle(),
+  ]);
 
-      if (result["cf_trainer.auto_export"]) {
-        autoExportCheckbox.checked = true;
-        folderInfo.classList.remove("hidden");
-      }
+  if (storageResult["cf_trainer.handle"])
+    handleInput.value = storageResult["cf_trainer.handle"];
+  if (credentials.apiKey) apiKeyInput.value = credentials.apiKey;
+  if (credentials.apiSecret) apiSecretInput.value = credentials.apiSecret;
 
-      if (result["cf_trainer.data_dir_handle"]) {
-        pendingDirHandle = result["cf_trainer.data_dir_handle"];
-        folderStatus.textContent = `✓ Folder: ${pendingDirHandle.name}`;
-      }
-    },
-  );
+  if (storageResult["cf_trainer.auto_export"]) {
+    autoExportCheckbox.checked = true;
+    folderInfo.classList.remove("hidden");
+  }
+
+  pendingDirHandle = dirHandle;
+  if (pendingDirHandle) {
+    folderStatus.textContent = `✓ Folder: ${pendingDirHandle.name}`;
+  }
 
   // ==========================================
   // JOB 2: AUTO-EXPORT & FOLDER PICKER
@@ -50,45 +51,42 @@ document.addEventListener("DOMContentLoaded", () => {
   autoExportCheckbox.addEventListener("change", async () => {
     if (autoExportCheckbox.checked) {
       try {
-        // Trigger picker immediately when checked
         pendingDirHandle = await window.showDirectoryPicker();
+        await saveDirHandle(pendingDirHandle);
         folderStatus.textContent = `✓ Folder: ${pendingDirHandle.name}`;
         folderInfo.classList.remove("hidden");
-      } catch (error) {
-        // Revert if user cancels
+      } catch {
         autoExportCheckbox.checked = false;
         console.log("Folder selection cancelled.");
       }
     } else {
       folderInfo.classList.add("hidden");
+      await clearDirHandle();
+      pendingDirHandle = null;
     }
   });
 
   chooseFolderBtn.addEventListener("click", async () => {
     try {
       pendingDirHandle = await window.showDirectoryPicker();
+      await saveDirHandle(pendingDirHandle);
       folderStatus.textContent = `✓ Folder: ${pendingDirHandle.name}`;
-    } catch (error) {}
+    } catch {}
   });
 
   // ==========================================
   // JOB 3: SAVE TO STORAGE
   // ==========================================
-  saveBtn.addEventListener("click", () => {
-    const dataToSave = {
-      "cf_trainer.handle": handleInput.value.trim(),
-      "cf_trainer.api_key": apiKeyInput.value.trim(),
-      "cf_trainer.api_secret": apiSecretInput.value.trim(),
-      "cf_trainer.auto_export": autoExportCheckbox.checked,
-    };
+  saveBtn.addEventListener("click", async () => {
+    await Promise.all([
+      chrome.storage.local.set({
+        "cf_trainer.handle": handleInput.value.trim(),
+        "cf_trainer.auto_export": autoExportCheckbox.checked,
+      }),
+      saveCredentials(apiKeyInput.value.trim(), apiSecretInput.value.trim()),
+    ]);
 
-    if (pendingDirHandle) {
-      dataToSave["cf_trainer.data_dir_handle"] = pendingDirHandle;
-    }
-
-    chrome.storage.local.set(dataToSave, () => {
-      saveMsg.classList.remove("hidden");
-      setTimeout(() => saveMsg.classList.add("hidden"), 2500);
-    });
+    saveMsg.classList.remove("hidden");
+    setTimeout(() => saveMsg.classList.add("hidden"), 2500);
   });
 });

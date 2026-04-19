@@ -1,5 +1,6 @@
 import { CodeforcesService } from "./services/codeforces-service.js";
 import { LocalDB } from "./services/storage.js";
+import { loadCredentials } from "./services/secure-store.js";
 
 /**
  * Fetches all accepted submissions for a user and returns them as a Set
@@ -25,15 +26,12 @@ export async function buildSolvedKeys(cfService, handle) {
  */
 export async function updateSolvedStatus() {
   // 1. Fetch credentials from storage
-  const settings = await chrome.storage.local.get([
-    "cf_trainer.handle",
-    "cf_trainer.api_key",
-    "cf_trainer.api_secret",
+  const [storageSettings, { apiKey, apiSecret }] = await Promise.all([
+    chrome.storage.local.get("cf_trainer.handle"),
+    loadCredentials(),
   ]);
 
-  const handle = settings["cf_trainer.handle"];
-  const apiKey = settings["cf_trainer.api_key"];
-  const apiSecret = settings["cf_trainer.api_secret"];
+  const handle = storageSettings["cf_trainer.handle"];
 
   // Exit if credentials haven't been set up yet
   if (!handle || !apiKey || !apiSecret) {

@@ -1,13 +1,53 @@
+import { scrapeParticipantHandles } from "./services/scraping-service";
+
 export async function getOfficialRatingDist(cfService, contestId) {
   try {
     const ratingChanges = await cfService.getContestRatingChanges(contestId);
     if (ratingChanges?.length > 0) {
       return ratingChanges.map((user) => user.oldRating);
     }
-    return [];
   } catch (error) {
     console.warn(
       `[Rating Dist] ratingChanges failed for ${contestId}:`,
+      error.message,
+    );
+  }
+
+  console.warn(
+    `[Rating Dist] ratingChanges empty for ${contestId}. Falling back to standings scrape.`,
+  );
+  return scrapeOfficialStandings(cfService, contestId);
+}
+
+async function scrapeOfficialStandings(cfService, contestId) {
+  try {
+    const handles = await scrapeParticipantHandles(contestId);
+    if (handles.length === 0) return [];
+
+    const chunkSize = 250;
+    const handleToRating = {};
+    const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
+    for (let i = 0; i < handles.length; i += chunkSize) {
+      try {
+        const usersInfo = await cfService.getUsersInfo(
+          handles.slice(i, i + chunkSize),
+        );
+        usersInfo?.forEach((u) => {
+          handleToRating[u.handle] = u.rating ?? 800;
+        });
+      } catch {
+        console.warn(
+          `[Rating Dist] Chunk ${Math.floor(i / chunkSize) + 1} rejected. Skipping.`,
+        );
+      }
+      if (i + chunkSize < handles.length) await delay(2000);
+    }
+
+    return handles.map((handle) => handleToRating[handle] ?? 800);
+  } catch (error) {
+    console.warn(
+      `[Rating Dist] Standings scrape failed for ${contestId}:`,
       error.message,
     );
     return [];
@@ -21,7 +61,6 @@ export async function getGymRatingDist(cfService, contestId) {
 async function getRatingsFromStandings(cfService, contestId) {
   try {
     const standings = await cfService.getContestStandings(contestId);
-    console.log(standings);
 
     if (!standings?.rows?.length) {
       console.warn(

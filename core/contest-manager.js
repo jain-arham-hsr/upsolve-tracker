@@ -7,6 +7,7 @@ import {
 } from "./get-rating-distribution.js";
 import { getProblemStats } from "./get-prob-stats.js";
 import { buildSolvedKeys } from "./progress-manager.js";
+import { loadCredentials } from "./services/secure-store.js";
 
 export async function processNewContest(url) {
   try {
@@ -16,20 +17,18 @@ export async function processNewContest(url) {
     const type = match[1].toLowerCase();
     const contestId = match[2];
 
-    const settings = await chrome.storage.local.get([
-      "cf_trainer.handle",
-      "cf_trainer.api_key",
-      "cf_trainer.api_secret",
+    const [storageSettings, { apiKey, apiSecret }] = await Promise.all([
+      chrome.storage.local.get("cf_trainer.handle"),
+      loadCredentials(),
     ]);
 
-    if (!settings["cf_trainer.api_key"] || !settings["cf_trainer.api_secret"]) {
+    const handle = storageSettings["cf_trainer.handle"];
+
+    if (!apiKey || !apiSecret) {
       throw new Error("Missing API credentials. Please set them in Options.");
     }
 
-    const cfService = new CodeforcesService(
-      settings["cf_trainer.api_key"],
-      settings["cf_trainer.api_secret"],
-    );
+    const cfService = new CodeforcesService(apiKey, apiSecret);
 
     const { contestName, problems } = await getProblemStats(
       type,
@@ -64,10 +63,7 @@ export async function processNewContest(url) {
 
     // --- REMOVED THE 1500 FALLBACK COMPLETELY ---
 
-    const solvedKeys = await buildSolvedKeys(
-      cfService,
-      settings["cf_trainer.handle"],
-    );
+    const solvedKeys = await buildSolvedKeys(cfService, handle);
 
     let solvedCount = 0;
     problems.forEach((prob) => {
