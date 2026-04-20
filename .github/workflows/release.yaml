@@ -1,0 +1,81 @@
+name: Build & Release Extension
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Chrome extension
+        run: npm run build:chrome
+
+      - name: Get version from manifest
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' targets/chrome/manifest.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Zip the extension
+        run: |
+          cd dist/chrome
+          zip -r ../../cf-trainer-chrome-v${{ steps.version.outputs.version }}.zip .
+
+      - name: Delete existing release and tag (if any)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Delete the GitHub release if it exists (ignore errors if it doesn't)
+          gh release delete ${{ steps.version.outputs.tag }} --yes --cleanup-tag 2>/dev/null || true
+
+      - name: Create Git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin ${{ steps.version.outputs.tag }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release ${{ steps.version.outputs.tag }}
+          body: |
+            ## cf-trainer ${{ steps.version.outputs.tag }}
+
+            Built from commit ${{ github.sha }} by @${{ github.actor }}.
+
+            ### Installation
+            1. Download `cf-trainer-chrome-v${{ steps.version.outputs.version }}.zip`
+            2. Unzip it
+            3. Open Chrome → `chrome://extensions` → Enable **Developer mode**
+            4. Click **Load unpacked** and select the unzipped folder
+          files: cf-trainer-chrome-v${{ steps.version.outputs.version }}.zip
+          draft: false
+          prerelease: false
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cf-trainer-chrome-v${{ steps.version.outputs.version }}
+          path: dist/chrome/
+          retention-days: 30
