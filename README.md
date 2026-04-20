@@ -52,10 +52,6 @@ A browser extension that helps you systematically upsolve Codeforces contests by
      npm run build:firefox
      ```
 
-   ```
-
-   ```
-
 #### Loading the Extension
 
 ##### Chrome
