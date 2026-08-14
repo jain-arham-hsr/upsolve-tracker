@@ -5,6 +5,15 @@
     <button id="btn-add-contest" class="btn outline">+ Add Contest</button>
   </div>
 
+  <div class="list-toolbar">
+    <label class="filter-label" for="contest-filter">Show</label>
+    <select id="contest-filter" class="filter-select">
+      <option value="ALL">All contests</option>
+      <option value="OFFICIAL">Official only</option>
+      <option value="GYM">Gym only</option>
+    </select>
+  </div>
+
   <div id="contest-alert" class="sync-alert hidden"></div>
 
   <div id="contest-items"></div>

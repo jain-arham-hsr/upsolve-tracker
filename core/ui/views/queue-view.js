@@ -1,5 +1,6 @@
 import templateHtml from "./queue-view.html?raw";
 import { LocalDB } from "../../services/storage.js";
+import { escapeHtml } from "../escape-html.js";
 
 export class QueueView extends HTMLElement {
   constructor() {
@@ -87,14 +88,22 @@ export class QueueView extends HTMLElement {
         const displayIndex = (i + 1).toString().padStart(2, "0");
         const rating = prob.rating ? `Rating: ${prob.rating}` : "Rating: ???";
 
+        // Names and problem indices are scraped from Codeforces markup, and the
+        // index also feeds the href and the source label.
+        const name = escapeHtml(
+          prob.name?.replace(/\s+/g, " ").trim() || "Unknown Problem",
+        );
+        const url = escapeHtml(prob.url);
+        const sourceLabel = escapeHtml(prob.sourceLabel);
+
         return `
-        <a href="${prob.url}" target="_blank" class="problem-row">
+        <a href="${url}" target="_blank" class="problem-row">
           <div class="problem-index">${displayIndex}.</div>
           <div class="problem-content">
-            <div class="problem-title">${prob.name}</div>
+            <div class="problem-title">${name}</div>
             <div class="problem-meta">
               <span class="rating">${rating}</span>
-              <span class="source">${prob.sourceLabel}</span>
+              <span class="source">${sourceLabel}</span>
             </div>
           </div>
         </a>

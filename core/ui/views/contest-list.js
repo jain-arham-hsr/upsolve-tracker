@@ -2,6 +2,9 @@ import templateHtml from "./contest-list.html?raw";
 import { processNewContest } from "../../contest-manager.js";
 import { LocalDB } from "../../services/storage.js";
 import { loadDirHandle } from "../../services/secure-store.js";
+import { escapeHtml } from "../escape-html.js";
+
+const FILTER_KEY = "cf_trainer.contest_filter";
 
 export class ContestList extends HTMLElement {
   constructor() {
@@ -13,6 +16,7 @@ export class ContestList extends HTMLElement {
       }
     };
     this.currentValidUrl = null;
+    this.filter = "ALL";
   }
 
   async connectedCallback() {
@@ -25,9 +29,24 @@ export class ContestList extends HTMLElement {
     this.btnImport = this.querySelector("#btn-import");
     this.fileInput = this.querySelector("#import-file-input");
     this.alertDiv = this.querySelector("#contest-alert");
+    this.filterSelect = this.querySelector("#contest-filter");
 
     this.btnAddContest.disabled = true;
     this.btnAddContest.setAttribute("data-tooltip", "Checking current page...");
+
+    // The view is destroyed on every navigation, so the choice is persisted
+    // rather than kept on the instance.
+    const filterSetting = await chrome.storage.local.get({
+      [FILTER_KEY]: "ALL",
+    });
+    this.filter = filterSetting[FILTER_KEY];
+    this.filterSelect.value = this.filter;
+
+    this.filterSelect.addEventListener("change", async () => {
+      this.filter = this.filterSelect.value;
+      await chrome.storage.local.set({ [FILTER_KEY]: this.filter });
+      await this.renderQueue();
+    });
 
     await this.renderQueue();
 
@@ -171,10 +190,23 @@ export class ContestList extends HTMLElement {
   }
 
   async renderQueue() {
-    const contests = await LocalDB.getTrackedContests();
+    const allContests = await LocalDB.getTrackedContests();
+
+    if (allContests.length === 0) {
+      this.container.innerHTML = `<div class="muted">No contests in queue.</div>`;
+      return;
+    }
+
+    const contests =
+      this.filter === "ALL"
+        ? allContests
+        : allContests.filter(
+            (contest) => (contest.type ?? "").toUpperCase() === this.filter,
+          );
 
     if (contests.length === 0) {
-      this.container.innerHTML = `<div class="muted">No contests in queue.</div>`;
+      const label = this.filter === "OFFICIAL" ? "official" : "gym";
+      this.container.innerHTML = `<div class="muted">No ${label} contests in queue.</div>`;
       return;
     }
 
@@ -186,10 +218,17 @@ export class ContestList extends HTMLElement {
         const typeClass = isOfficial ? "type-official" : "type-gym";
         const url = `https://codeforces.com/${path}/${contest.id}`;
 
+        // Scraped names carry stray newlines/indentation from the CF page.
+        const rawName = contest.name?.replace(/\s+/g, " ").trim();
+        const name = escapeHtml(rawName || `Contest ${contest.id}`);
+
         return `
         <a href="${url}" target="_blank" class="contest-row">
-          <span class="contest-id">Contest ${contest.id}</span>
-          <span class="contest-type ${typeClass}">${label}</span>
+          <span class="contest-name">${name}</span>
+          <span class="contest-tags">
+            <span class="contest-id">#${contest.id}</span>
+            <span class="contest-type ${typeClass}">${label}</span>
+          </span>
         </a>
       `;
       })
