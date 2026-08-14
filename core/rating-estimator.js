@@ -6,9 +6,20 @@ function getProbability(userRating, problemRating) {
   return 1.0 / (1.0 + Math.pow(10, (problemRating - userRating) / 400.0));
 }
 
-function getExpectedSolves(participantRatings, candidateRating) {
-  return participantRatings.reduce((sum, userRating) => {
-    return sum + getProbability(userRating, candidateRating);
+/**
+ * Expected solves across the whole field.
+ *
+ * Each stratum is weighted by its scale, which carries a sampled group back up
+ * to the size it represents: summing over a tenth of a group and multiplying
+ * by ten estimates the same total, because expectation is linear. Strata read
+ * in full carry a scale of 1 and so contribute exactly.
+ */
+function getExpectedSolves(strata, candidateRating) {
+  return strata.reduce((total, { ratings, scale }) => {
+    const stratumSum = ratings.reduce((sum, userRating) => {
+      return sum + getProbability(userRating, candidateRating);
+    }, 0);
+    return total + stratumSum * scale;
   }, 0);
 }
 
@@ -16,13 +27,16 @@ function getExpectedSolves(participantRatings, candidateRating) {
  * Performs a binary search to find the rating R such that the expected
  * number of solves matches the actual number of official solves.
  * Rounds to the nearest 100 and enforces a minimum of 800.
+ *
+ * @param {{ strata: Array<{ratings: number[], scale: number}> }} distribution
+ * @param {number} actualSolves
  */
-export function estimateProblemRating(participantRatings, actualSolves) {
-  if (
-    !participantRatings ||
-    participantRatings.length === 0 ||
-    actualSolves < 0
-  ) {
+export function estimateProblemRating(distribution, actualSolves) {
+  const strata = (distribution?.strata ?? []).filter(
+    (stratum) => stratum.ratings?.length > 0,
+  );
+
+  if (strata.length === 0 || actualSolves < 0) {
     return null;
   }
 
@@ -35,7 +49,7 @@ export function estimateProblemRating(participantRatings, actualSolves) {
 
   for (let i = 0; i < 25; i++) {
     let mid = (low + high) / 2.0;
-    let expected = getExpectedSolves(participantRatings, mid);
+    let expected = getExpectedSolves(strata, mid);
 
     // We now compare against our targetSolves
     if (expected > targetSolves) {

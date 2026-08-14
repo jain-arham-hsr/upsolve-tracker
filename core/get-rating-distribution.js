@@ -1,10 +1,35 @@
-import { scrapeParticipantHandles } from "./services/scraping-service";
+import { sampleParticipantHandles } from "./services/scraping-service";
 
-export async function getOfficialRatingDist(cfService, contestId) {
+/**
+ * A rating distribution the estimator can work from, as one or more strata.
+ *
+ * Each stratum's `scale` is how many real competitors one of its members
+ * stands for: 1 where the whole group was read, higher where it was sampled.
+ * Expected solve counts are weighted by it, so a partially-read field answers
+ * as if it had been read whole.
+ *
+ * @typedef {{ strata: Array<{ratings: number[], scale: number}> }} RatingDistribution
+ */
+
+const FULL_FIELD = (ratings) => ({ strata: [{ ratings, scale: 1 }] });
+
+/** Total competitors represented, sampled or not. */
+export function distributionSize(distribution) {
+  return (distribution?.strata ?? []).reduce(
+    (sum, { ratings }) => sum + ratings.length,
+    0,
+  );
+}
+
+export async function getOfficialRatingDist(
+  cfService,
+  contestId,
+  onProgress = () => {},
+) {
   try {
     const ratingChanges = await cfService.getContestRatingChanges(contestId);
     if (ratingChanges?.length > 0) {
-      return ratingChanges.map((user) => user.oldRating);
+      return FULL_FIELD(ratingChanges.map((user) => user.oldRating));
     }
   } catch (error) {
     console.warn(
@@ -14,48 +39,73 @@ export async function getOfficialRatingDist(cfService, contestId) {
   }
 
   console.warn(
-    `[Rating Dist] ratingChanges empty for ${contestId}. Falling back to standings scrape.`,
+    `[Rating Dist] ratingChanges empty for ${contestId}. Falling back to standings.`,
   );
-  return scrapeOfficialStandings(cfService, contestId);
+  return sampleOfficialStandings(cfService, contestId, onProgress);
 }
 
-async function scrapeOfficialStandings(cfService, contestId) {
+async function sampleOfficialStandings(cfService, contestId, onProgress) {
   try {
-    const handles = await scrapeParticipantHandles(contestId);
-    if (handles.length === 0) return [];
+    const { groups } = await sampleParticipantHandles(contestId, onProgress);
+    if (groups.length === 0) return FULL_FIELD([]);
 
-    const chunkSize = 250;
-    const handleToRating = {};
-    const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+    onProgress("Looking up competitor ratings…");
 
-    for (let i = 0; i < handles.length; i += chunkSize) {
-      try {
-        const usersInfo = await cfService.getUsersInfo(
-          handles.slice(i, i + chunkSize),
-        );
-        usersInfo?.forEach((u) => {
-          handleToRating[u.handle] = u.rating ?? 800;
-        });
-      } catch {
-        console.warn(
-          `[Rating Dist] Chunk ${Math.floor(i / chunkSize) + 1} rejected. Skipping.`,
-        );
-      }
-      if (i + chunkSize < handles.length) await delay(2000);
-    }
+    // One lookup pass over every handle, then split back into strata, so the
+    // rate-limited chunking doesn't happen twice.
+    const allHandles = groups.flatMap((group) => group.handles);
+    const byHandle = await lookupRatings(cfService, allHandles);
 
-    return handles.map((handle) => handleToRating[handle] ?? 800);
+    const strata = groups
+      .map(({ handles, scale }) => ({
+        ratings: handles.map((handle) => byHandle.get(handle) ?? 800),
+        scale,
+      }))
+      .filter((stratum) => stratum.ratings.length > 0);
+
+    return strata.length > 0 ? { strata } : FULL_FIELD([]);
   } catch (error) {
     console.warn(
-      `[Rating Dist] Standings scrape failed for ${contestId}:`,
+      `[Rating Dist] Standings sampling failed for ${contestId}:`,
       error.message,
     );
-    return [];
+    return FULL_FIELD([]);
   }
 }
 
+/**
+ * Resolves handles to ratings in chunks, spaced to stay inside the API's rate
+ * limit. Unrated accounts count as 800, the floor Codeforces itself uses.
+ *
+ * @returns {Promise<Map<string, number>>}
+ */
+async function lookupRatings(cfService, handles) {
+  const chunkSize = 250;
+  const handleToRating = new Map();
+  const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
+  for (let i = 0; i < handles.length; i += chunkSize) {
+    try {
+      const usersInfo = await cfService.getUsersInfo(
+        handles.slice(i, i + chunkSize),
+      );
+      usersInfo?.forEach((user) => {
+        handleToRating.set(user.handle, user.rating ?? 800);
+      });
+    } catch {
+      console.warn(
+        `[Rating Dist] Chunk ${Math.floor(i / chunkSize) + 1} rejected. Skipping.`,
+      );
+    }
+    if (i + chunkSize < handles.length) await delay(2000);
+  }
+
+  return handleToRating;
+}
+
 export async function getGymRatingDist(cfService, contestId) {
-  return getRatingsFromStandings(cfService, contestId);
+  // Gym standings arrive whole from the API, so there's nothing to sample.
+  return FULL_FIELD(await getRatingsFromStandings(cfService, contestId));
 }
 
 async function getRatingsFromStandings(cfService, contestId) {

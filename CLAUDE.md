@@ -41,9 +41,22 @@ Vanilla ES modules and custom elements — no framework, no bundled UI library.
 `core/contest-manager.js#processNewContest(url)` is the orchestrator. Given a `/contest/<id>` or `/gym/<id>` URL:
 
 1. `get-prob-stats.js` — scrape problems from the standings header row. Official contests read solve counts from the "Accepted" totals row; gyms instead count `bestSubmissionTimeSeconds` in `contest.standings`, excluding ghost parties.
-2. `get-rating-distribution.js` — produce the participant rating vector. Official: `contest.ratingChanges` `oldRating`s; if empty, fall back to scraping every handle from paginated standings and batching `user.info` in chunks of 250 (2 s apart), defaulting unrated users to 800. Gym/ICPC: build from `contest.standings`, collapsing each team into one effective rating via `computeTeamRating` (binary search for R where the product of per-member loss probabilities is 0.5).
+2. `get-rating-distribution.js` — produce the participant rating distribution, as **strata**: `{ strata: [{ ratings, scale }] }`, where `scale` is how many real competitors one read competitor stands for. Official: `contest.ratingChanges` `oldRating`s at scale 1; if empty, fall back to sampling the standings (below). Gym/ICPC: build from `contest.standings`, collapsing each team into one effective rating via `computeTeamRating` (binary search for R where the product of per-member loss probabilities is 0.5).
 3. `rating-estimator.js` — binary-search the rating R whose Elo-expected solve count over that participant vector matches actual solves; round to the nearest 100, floor 800. Zero solves targets 0.5 expected solves rather than 0.
 4. Mark already-solved problems from `user.status`, then **store only if every problem got a rating** — a partial result throws instead of persisting. There is intentionally no default-1500 fallback (see the comments in `contest-manager.js`); reintroducing one would silently corrupt the queue's sort order.
+
+### Sampling the field (`scraping-service.js`)
+
+When `contest.ratingChanges` is empty — which is exactly the freshly-finished contest you most want to upsolve — the participant distribution has to come from the standings pages. Reading all of them costs one throttled request per 50 competitors, so a big round ran to hundreds of requests. `sampleParticipantHandles` reads ~32 instead, regardless of turnout.
+
+**Do not "simplify" this to a uniform random sample of pages.** It was tried and measured: standings are rank-ordered, so a page is a narrow band of near-identical ratings rather than a random slice. Sampling pages at random is cluster sampling with near-total intra-cluster correlation — 20 pages of 50 behaves like 20 draws, not 1000 — and estimates land 400–800 points off. Spreading pages evenly fixes the variance but biases estimates *downward*, because a random start offset can skip the very top of the field, and hard problems are decided almost entirely by the strongest few competitors.
+
+What works, and what's implemented, is two strata:
+
+- **Head** — `HEAD_PAGES` (10) read in full at scale 1. Small, but it's what rates the hard problems.
+- **Tail** — `TAIL_PAGES` (20) at even intervals over the remainder, scaled by the competitors each represents.
+
+Verified against full-field estimates on simulated fields of 3k–45k: 30 of 33 cases reproduce the rating exactly, the rest are one 100-point bucket off. Contests of 30 pages or fewer are still read whole, since sampling would cost the same. The last page is confirmed to actually be last before its number is used to size the field — a wrong count would undercount the field and skew every rating.
 
 ### Tags
 

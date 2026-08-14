@@ -4,6 +4,7 @@ import { CodeforcesService } from "./services/codeforces-service.js";
 import {
   getOfficialRatingDist,
   getGymRatingDist,
+  distributionSize,
 } from "./get-rating-distribution.js";
 import { getProblemStats } from "./get-prob-stats.js";
 import { buildSolvedKeys } from "./progress-manager.js";
@@ -39,26 +40,36 @@ export async function processNewContest(url, onProgress = () => {}) {
       await getProblemStats(type, contestId, cfService);
 
     onProgress("Measuring the field…");
-    let participantRatings = [];
+    let distribution = { strata: [] };
     if (type === "contest") {
-      participantRatings = await getOfficialRatingDist(cfService, contestId);
-      if (participantRatings.length === 0) {
-        participantRatings = await getGymRatingDist(cfService, contestId);
+      distribution = await getOfficialRatingDist(
+        cfService,
+        contestId,
+        onProgress,
+      );
+      if (distributionSize(distribution) === 0) {
+        distribution = await getGymRatingDist(cfService, contestId);
       }
     } else {
-      participantRatings = await getGymRatingDist(cfService, contestId);
+      distribution = await getGymRatingDist(cfService, contestId);
     }
 
     console.log(
-      `[Contest Manager] Total rated participants found: ${participantRatings.length}`,
+      `[Contest Manager] Distribution: ${distributionSize(distribution)} competitors read, ` +
+        `representing ~${Math.round(
+          distribution.strata.reduce(
+            (sum, s) => sum + s.ratings.length * s.scale,
+            0,
+          ),
+        )}.`,
     );
 
-    if (participantRatings.length > 0) {
+    if (distributionSize(distribution) > 0) {
       onProgress("Estimating problem ratings…");
       problems.forEach((problem) => {
         if (problem.rating === null) {
           problem.rating = estimateProblemRating(
-            participantRatings,
+            distribution,
             problem.officialSolves,
           );
         }
@@ -109,7 +120,7 @@ export async function processNewContest(url, onProgress = () => {}) {
       console.warn("[Contest Manager] Skipping storage. Missing ratings.");
       const missing = problems.filter((problem) => problem.rating === null);
       throw new Error(
-        participantRatings.length === 0
+        distributionSize(distribution) === 0
           ? `Couldn't rate this contest: Codeforces returned no participant ratings for ${contestId}. Private or unrated standings can't be measured.`
           : `Couldn't rate ${missing.length} of ${problems.length} problems (${missing.map((p) => p.index).join(", ")}), so the contest wasn't added.`,
       );
