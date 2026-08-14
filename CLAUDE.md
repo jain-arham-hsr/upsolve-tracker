@@ -14,7 +14,7 @@ npm run build:chrome    # -> dist/chrome
 npm test                # node --test over tests/ — no framework, no browser
 ```
 
-`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, backup validation and queue ordering. UI wiring has no coverage — verify that manually by building and loading `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked). There is no linter or formatter configured.
+`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, the sampling arithmetic (via `scraping-service.test.js`, which stubs `HttpClient` so no network is touched), backup validation and queue ordering. UI wiring has no coverage — verify that manually by building and loading `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked). There is no linter or formatter configured.
 
 `tests/sampling.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
 
