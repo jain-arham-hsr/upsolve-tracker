@@ -88,6 +88,76 @@ cf-stats-view {
   color: var(--text-main);
 }
 
+.icon-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.icon-btn.spinning {
+  color: var(--text-main);
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- Sync Status Strip --- */
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 20px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background-color: var(--panel-bg);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Indeterminate: the work has no total to count against. */
+.sync-status::before {
+  content: "";
+  width: 100%;
+  height: 2px;
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-color),
+    transparent
+  );
+  animation: syncSweep 1.4s ease-in-out infinite;
+}
+
+.sync-status {
+  position: relative;
+  overflow: hidden;
+}
+
+.sync-status.is-error {
+  color: #ef9a9a;
+}
+
+/* The sweep implies work in flight; a finished error shouldn't animate. */
+.sync-status.is-error::before {
+  animation: none;
+  background: rgba(239, 83, 80, 0.5);
+}
+
+@keyframes syncSweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 /* --- Main Router & View Container --- */
 #router-outlet {
   flex: 1; /* Takes up all space below the main app header */
@@ -492,6 +562,79 @@ cf-stats-view,
   letter-spacing: 0.5px;
   background-color: rgba(255, 255, 255, 0.06);
   color: var(--text-muted);
+}
+
+/* --- Hold-to-Remove --- */
+
+/* Registered so the conic-gradient below is animatable at all; a plain
+   custom property would jump from 0% to 100% instead of sweeping. */
+@property --hold-progress {
+  syntax: "<percentage>";
+  initial-value: 0%;
+  inherits: false;
+}
+
+.contest-item {
+  position: relative;
+}
+
+/* Hover lives on the wrapper: the button overlays the row as a sibling, so
+   keying off .contest-row:hover would drop the highlight under the cursor. */
+.contest-item:hover .contest-row {
+  background-color: #222;
+}
+
+.contest-delete {
+  --hold-progress: 0%;
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  background: conic-gradient(
+    rgba(239, 83, 80, 0.85) var(--hold-progress),
+    rgba(255, 255, 255, 0.07) 0
+  );
+}
+
+.contest-item:hover .contest-delete,
+.contest-delete:focus-visible {
+  opacity: 1;
+}
+
+.contest-delete:hover {
+  color: var(--text-main);
+}
+
+.contest-delete.holding {
+  color: #fff;
+  /* Duration is set from JS so it always matches the hold timer. */
+  animation: holdFill linear forwards;
+}
+
+@keyframes holdFill {
+  from {
+    --hold-progress: 0%;
+  }
+  to {
+    --hold-progress: 100%;
+  }
+}
+
+/* Keep the name and pills clear of the button */
+.contest-row {
+  padding-right: 36px;
 }
 
 /* --- Filter Toolbar --- */

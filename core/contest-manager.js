@@ -9,6 +9,7 @@ import { getProblemStats } from "./get-prob-stats.js";
 import { buildSolvedKeys } from "./progress-manager.js";
 import { loadCredentials } from "./services/secure-store.js";
 import { syncOfficialTags } from "./tag-service.js";
+import { syncStartTimes } from "./start-time-service.js";
 
 export async function processNewContest(url) {
   try {
@@ -31,11 +32,8 @@ export async function processNewContest(url) {
 
     const cfService = new CodeforcesService(apiKey, apiSecret);
 
-    const { contestName, problems, tagsSynced } = await getProblemStats(
-      type,
-      contestId,
-      cfService,
-    );
+    const { contestName, problems, tagsSynced, startTimeSeconds } =
+      await getProblemStats(type, contestId, cfService);
 
     let participantRatings = [];
     if (type === "contest") {
@@ -90,11 +88,13 @@ export async function processNewContest(url) {
       name: contestName,
       type: type === "contest" ? "OFFICIAL" : "GYM",
       problems,
-      tagsSynced,
+      tagsSyncedAt: tagsSynced ? Date.now() : null,
+      startTimeSeconds,
       addedAt: Date.now(),
     };
 
     await syncOfficialTags(cfService, [contestData]);
+    await syncStartTimes(cfService, [contestData]);
 
     if (allRated) {
       await LocalDB.addTrackedContest(contestData);

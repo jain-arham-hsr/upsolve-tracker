@@ -13,18 +13,22 @@ export async function getProblemStats(type, contestId, cfService = null) {
   const { contestName, problems } = await scrapeContestProblems(type, contestId);
 
   if (type !== "gym") {
-    // Official tags come from the problemset in bulk — see tag-service.js.
-    return { contestName, problems, tagsSynced: false };
+    // Official tags and start times come from bulk endpoints — see
+    // tag-service.js and start-time-service.js.
+    return { contestName, problems, tagsSynced: false, startTimeSeconds: null };
   }
 
   const standings = await cfService.getContestStandings(contestId);
   populateSolveCountsFromApi(standings, problems);
 
   // The same response is the only tag source gyms have, so take it while
-  // we're here rather than paying for the call twice.
+  // we're here rather than paying for the call twice. It also carries the
+  // start time, which matters for private gyms and mashups: those never
+  // appear in contest.list, so this is the only place to get it.
   const tagsSynced = populateTagsFromStandings(standings, problems);
+  const startTimeSeconds = standings?.contest?.startTimeSeconds ?? null;
 
-  return { contestName, problems, tagsSynced };
+  return { contestName, problems, tagsSynced, startTimeSeconds };
 }
 
 function populateTagsFromStandings(standings, problems) {

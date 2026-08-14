@@ -2,6 +2,10 @@ import "./views/queue-view.js";
 import "./views/contest-list.js";
 import "./views/stats-view.js";
 import { updateSolvedStatus } from "../progress-manager.js"; // Import the logic
+import {
+  verifyExportPermission,
+  writeBackup,
+} from "../services/auto-export.js";
 
 // Inline so it inherits the header's colour and hover transition, which a
 // colour emoji would ignore.
@@ -25,6 +29,7 @@ export class CFApp extends HTMLElement {
     this.btnViewList = this.querySelector("#btn-view-list");
     this.btnStats = this.querySelector("#btn-stats");
     this.btnRefresh = this.querySelector("#btn-refresh");
+    this.syncStatus = this.querySelector("#sync-status");
 
     this.setupListeners();
     this.navigate("cf-queue-view");
@@ -49,23 +54,62 @@ export class CFApp extends HTMLElement {
     // 1. UI Feedback: Start spinning
     this.btnRefresh.classList.add("spinning");
     this.btnRefresh.disabled = true;
+    this.setSyncStatus("Starting sync…");
+
+    // 2. Unlock the export handle while the click is still fresh. A lapsed
+    // permission can only be re-prompted under user activation, which will
+    // not survive the sync below.
+    const dirHandle = await verifyExportPermission();
 
     try {
-      // 2. Run the sync logic
-      const removedContests = await updateSolvedStatus();
+      // 3. Run the sync logic, reporting each stage as it starts
+      const removedContests = await updateSolvedStatus((message) =>
+        this.setSyncStatus(message),
+      );
 
-      // 3. If we are currently looking at the queue, tell it to update
+      // 4. The sync rewrites stored contests, so the backup has to follow it
+      // or the file drifts from what the extension shows.
+      if (dirHandle) {
+        this.setSyncStatus("Writing backup…");
+        await writeBackup(dirHandle);
+      }
+
+      // 5. If we are currently looking at the queue, tell it to update
       const currentView = this.routerOutlet.firstElementChild;
       if (currentView && typeof currentView.refreshData === "function") {
         await currentView.refreshData(removedContests);
       }
     } catch (error) {
       console.error("Refresh failed:", error);
+      this.setSyncStatus(`Sync failed: ${error.message}`, { sticky: true });
     } finally {
-      // 4. UI Feedback: Stop spinning
+      // 6. UI Feedback: Stop spinning
       this.btnRefresh.classList.remove("spinning");
       this.btnRefresh.disabled = false;
+      this.clearSyncStatus();
     }
+  }
+
+  /**
+   * The stages have no measurable total, so this reports what is happening
+   * rather than how far along it is.
+   */
+  setSyncStatus(message, { sticky = false } = {}) {
+    clearTimeout(this.syncStatusTimer);
+    this.syncStatus.textContent = message;
+    this.syncStatus.classList.remove("hidden");
+    this.syncStatus.classList.toggle("is-error", sticky);
+    this.stickyStatus = sticky;
+  }
+
+  clearSyncStatus() {
+    // A failure message outlives the spinner; progress text does not.
+    const delay = this.stickyStatus ? 6000 : 400;
+    this.syncStatusTimer = setTimeout(() => {
+      this.syncStatus.classList.add("hidden");
+      this.syncStatus.classList.remove("is-error");
+      this.stickyStatus = false;
+    }, delay);
   }
 
   /**
@@ -84,7 +128,7 @@ export class CFApp extends HTMLElement {
     const newView = document.createElement(componentTagName);
     this.routerOutlet.appendChild(newView);
 
-    // Refresh syncs solved status and backfills tags, so it's useful on both
+    // Refresh syncs solved status and tags, so it's useful on both
     // data views. Each secondary button turns into a close affordance while
     // its own view is open.
     this.btnRefresh.classList.toggle(

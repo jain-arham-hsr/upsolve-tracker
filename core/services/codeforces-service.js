@@ -44,6 +44,14 @@ export class CodeforcesService {
   }
 
   /**
+   * Fetches contest metadata (including startTimeSeconds) in bulk.
+   * @param {boolean} gym - Gym contests are a separate list from official ones.
+   */
+  async getContestList(gym = false) {
+    return this._callMethod("contest.list", gym ? { gym: true } : {});
+  }
+
+  /**
    * Fetches the entire public problemset, which is the only bulk source of
    * problem tags. Roughly 2MB covering every official contest — cheaper than
    * contest.standings, whose response embeds every participant row (~12MB for

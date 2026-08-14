@@ -2,6 +2,7 @@ import { CodeforcesService } from "./services/codeforces-service.js";
 import { LocalDB } from "./services/storage.js";
 import { loadCredentials } from "./services/secure-store.js";
 import { syncOfficialTags } from "./tag-service.js";
+import { syncStartTimes } from "./start-time-service.js";
 
 /**
  * Fetches all accepted submissions for a user and returns them as a Set
@@ -25,7 +26,7 @@ export async function buildSolvedKeys(cfService, handle) {
  * contests that are 100% completed.
  * * @returns {Promise<Object[]>} List of {type, id} for contests removed.
  */
-export async function updateSolvedStatus() {
+export async function updateSolvedStatus(onProgress = () => {}) {
   // 1. Fetch credentials from storage
   const [storageSettings, { apiKey, apiSecret }] = await Promise.all([
     chrome.storage.local.get("cf_trainer.handle"),
@@ -42,14 +43,18 @@ export async function updateSolvedStatus() {
 
   // 2. Initialize service and fetch solved keys
   const cfService = new CodeforcesService(apiKey, apiSecret);
+  onProgress("Checking your submissions…");
   const solvedKeys = await buildSolvedKeys(cfService, handle);
 
   // 3. Update the Queue
   const trackedContests = await LocalDB.getTrackedContests();
 
-  // Backfill tags for contests queued before tags were captured. No-ops once
-  // everything is tagged, so it only costs a request on the first refresh.
-  await syncOfficialTags(cfService, trackedContests);
+  // Fill in metadata for contests still missing it. Both no-op once every
+  // contest is resolved, so they usually cost nothing.
+  await syncOfficialTags(cfService, trackedContests, onProgress);
+  await syncStartTimes(cfService, trackedContests, onProgress);
+
+  onProgress("Updating your queue…");
   const updatedContests = [];
   const removedDetails = [];
 

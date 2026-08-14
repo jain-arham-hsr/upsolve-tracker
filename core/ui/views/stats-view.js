@@ -48,8 +48,8 @@ export class StatsView extends HTMLElement {
   }
 
   /**
-   * Called by the shell after a global refresh, which is also what backfills
-   * tags for contests queued before they were captured.
+   * Called by the shell after a global refresh, which is also what fills in
+   * tags for contests still missing them.
    */
   async refreshData() {
     await this.render();
@@ -130,7 +130,10 @@ export class StatsView extends HTMLElement {
 
   renderHint(contests) {
     const untagged = contests.filter(
-      (contest) => contest.type === "OFFICIAL" && !contest.tagsSynced,
+      (contest) =>
+        contest.type === "OFFICIAL" &&
+        !contest.tagsSyncedAt &&
+        !contest.tagsSynced,
     ).length;
 
     if (untagged === 0) {

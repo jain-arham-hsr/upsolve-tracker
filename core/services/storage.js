@@ -41,6 +41,17 @@ export class LocalDB {
     await this.saveTrackedContests(contests);
   }
 
+  /**
+   * Drops a contest from the queue. Ids are compared as strings because
+   * imported backups can carry them as numbers.
+   */
+  static async removeTrackedContest(contestId) {
+    const contests = await this.getTrackedContests();
+    await this.saveTrackedContests(
+      contests.filter((contest) => String(contest.id) !== String(contestId)),
+    );
+  }
+
   // ==========================================
   // 2. SOLVED CACHE (The Dynamic Data)
   // ==========================================

@@ -52,7 +52,16 @@ Tags are absent from the standings HTML, so `tag-service.js` gets them from the 
 - **Official** — `problemset.problems`, one ~2 MB request covering all ~11k problems, keyed by `contestId-index`. The per-contest alternative (`contest.standings`) also returns tags but embeds every participant row — ~12 MB for one Div. 3 — so it must not be used in a loop. Note this endpoint rejects `from`/`count` for non-gym contests; it only answers anonymous parameter-less GETs.
 - **Gym** — absent from the problemset entirely. Tags are lifted from the `problems` array of the standings response that adding a gym already fetches, and are usually empty since gyms sit outside CF's taxonomy.
 
-`contest.tagsSynced` records that a tag source was actually consulted, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it the backfill would retry untagged gyms forever. `syncOfficialTags` runs both at add time and from the refresh, and no-ops once every contest carries the flag.
+`contest.tagsSyncedAt` records *when* a tag source was consulted, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever. Records written before this field existed carry a `tagsSynced` boolean instead and are read as "synced long ago".
+
+CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `syncOfficialTags` therefore re-checks a contest that still has bare problems, but only once a week; contests where every problem is tagged are never re-requested. It runs at add time and from the refresh, and costs at most one request per sync regardless of how many contests are stale.
+
+### Start times
+
+`start-time-service.js` fills `contest.startTimeSeconds`, which orders the contest list. Contest IDs are *not* chronological (2205 ran a day before 2200), so sorting by ID is not a substitute.
+
+- **Official** — `contest.list`, one ~400 KB request. A finished contest's start time never changes, so unlike tags there's no re-check: a contest is asked about once and only if the field is missing.
+- **Gym** — `contest.list?gym=true`, but private gyms and mashups (the 6xxxxx IDs) don't appear there at all. Those are covered at add time from `standings.contest.startTimeSeconds`, which `get-prob-stats.js` already has in hand. Anything still unresolved sorts to the bottom rather than being treated as ancient.
 
 `progress-manager.js#updateSolvedStatus()` re-syncs on demand: re-fetches accepted submissions, flips `prob.solved`, drops fully-solved contests from storage, and returns the removed ones so the UI can announce them.
 
@@ -69,4 +78,7 @@ Caveat: `LocalDB.getHandle`/`setHandle` read a `cfHandle` key that nothing else 
 
 `queue-view` flattens all unsolved problems across contests and sorts ascending by rating (null → 9999). `contest-list` watches `chrome.tabs` events to enable "+ Add Contest" only on a Codeforces contest/gym page.
 
-**Auto-export gotcha:** `contest-list.js` calls `verifyExportPermission()` *before* the slow `processNewContest` await, because a `FileSystemDirectoryHandle` re-permission prompt only succeeds while the user gesture is still fresh. Moving that call after the fetch breaks auto-export after every browser restart.
+**Auto-export gotchas** (`services/auto-export.js`, used by both the add-contest handler and the global refresh):
+
+- `verifyExportPermission()` must be called *before* the slow await in a click handler, because a `FileSystemDirectoryHandle` re-permission prompt only succeeds while the user gesture is still fresh. Moving it after the network work breaks auto-export after every browser restart.
+- Any path that mutates `chrome.storage.local` must call `writeBackup()` afterwards. The refresh writes solved status and tags straight to storage, so without that call the on-disk JSON silently drifts from what the UI shows — which is exactly how tags ended up visible in the extension but missing from the backup.

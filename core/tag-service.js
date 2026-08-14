@@ -12,17 +12,44 @@
  * adding a gym contest already fetches (see get-prob-stats.js).
  */
 
+/** How long before a partially tagged contest is worth asking about again. */
+const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
 /**
- * Fills in tags for every official contest that hasn't been tagged yet.
+ * Codeforces tags are editable after publication, so a problem can pick up
+ * tags days after its contest ends. A contest is therefore worth asking about
+ * again when some of its problems are still bare — but only occasionally,
+ * since plenty of problems (April Fools rounds, for instance) never get tags.
+ *
+ * Contests where every problem already has tags are never re-requested.
+ */
+function needsTags(contest, now) {
+  if (contest.type !== "OFFICIAL") return false;
+
+  // Pre-timestamp records used a boolean; treat those as synced long ago.
+  const syncedAt = contest.tagsSyncedAt ?? (contest.tagsSynced ? 0 : null);
+  if (syncedAt === null) return true;
+
+  const anyBare = contest.problems.some((prob) => !prob.tags?.length);
+  return anyBare && now - syncedAt > RECHECK_AFTER_MS;
+}
+
+/**
+ * Fills in tags for every official contest that is missing them.
  * Mutates the passed contests; persisting them is the caller's job.
  *
- * @returns {Promise<number>} How many contests were tagged.
+ * @returns {Promise<number>} How many contests were updated.
  */
-export async function syncOfficialTags(cfService, contests) {
-  const pending = contests.filter(
-    (contest) => contest.type === "OFFICIAL" && !contest.tagsSynced,
-  );
+export async function syncOfficialTags(
+  cfService,
+  contests,
+  onProgress = () => {},
+) {
+  const now = Date.now();
+  const pending = contests.filter((contest) => needsTags(contest, now));
   if (pending.length === 0) return 0;
+
+  onProgress("Fetching problem tags…");
 
   let problemset;
   try {
@@ -44,10 +71,11 @@ export async function syncOfficialTags(cfService, contests) {
     contest.problems.forEach((prob) => {
       prob.tags = tagsByKey.get(`${contest.id}-${prob.index}`) ?? prob.tags ?? [];
     });
-    contest.tagsSynced = true;
+    contest.tagsSyncedAt = now;
+    delete contest.tagsSynced;
   });
 
-  console.log(`[Tag Service] Tagged ${pending.length} official contest(s).`);
+  console.log(`[Tag Service] Synced tags for ${pending.length} contest(s).`);
   return pending.length;
 }
 

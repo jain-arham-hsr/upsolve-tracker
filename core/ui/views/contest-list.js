@@ -1,10 +1,18 @@
 import templateHtml from "./contest-list.html?raw";
 import { processNewContest } from "../../contest-manager.js";
 import { LocalDB } from "../../services/storage.js";
-import { loadDirHandle } from "../../services/secure-store.js";
+import {
+  BACKUP_FILENAME,
+  verifyExportPermission,
+  writeBackup,
+} from "../../services/auto-export.js";
+import { byStartTimeDesc } from "../../start-time-service.js";
 import { escapeHtml } from "../escape-html.js";
 
 const FILTER_KEY = "cf_trainer.contest_filter";
+
+/** How long the remove button must be held. Drives the fill animation too. */
+const HOLD_MS = 700;
 
 export class ContestList extends HTMLElement {
   constructor() {
@@ -17,6 +25,8 @@ export class ContestList extends HTMLElement {
     };
     this.currentValidUrl = null;
     this.filter = "ALL";
+    this.hold = null;
+    this.boundCancelHold = () => this.cancelHold();
   }
 
   async connectedCallback() {
@@ -53,7 +63,7 @@ export class ContestList extends HTMLElement {
     this.btnAddContest.addEventListener("click", async () => {
       if (this.currentValidUrl) {
         // 1. Instantly test/prompt and store the unlocked handle
-        const activeDirHandle = await this.verifyExportPermission();
+        const activeDirHandle = await verifyExportPermission();
 
         this.btnAddContest.textContent = "Fetching...";
         this.btnAddContest.disabled = true;
@@ -65,8 +75,10 @@ export class ContestList extends HTMLElement {
           await this.renderQueue();
 
           // 3. Write using the exact handle we just unlocked
-          if (activeDirHandle) {
-            await this.executeAutoExport(activeDirHandle);
+          if (activeDirHandle && !(await writeBackup(activeDirHandle))) {
+            this.showInlineAlert(
+              "Added to Queue, but Auto-Export failed to write the file.",
+            );
           }
 
           this.btnAddContest.textContent = "✓ Added";
@@ -92,7 +104,7 @@ export class ContestList extends HTMLElement {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "cf_trainer_backup.json";
+      a.download = BACKUP_FILENAME;
       a.click();
       URL.revokeObjectURL(url);
     });
@@ -114,70 +126,69 @@ export class ContestList extends HTMLElement {
       reader.readAsText(file);
     });
 
+    // Delegated so the handlers outlive each renderQueue() rewrite.
+    this.container.addEventListener("pointerdown", (e) => this.startHold(e));
+    // pointerleave doesn't bubble, so catch it on the way down.
+    this.container.addEventListener(
+      "pointerleave",
+      (e) => {
+        if (this.hold && e.target === this.hold.button) this.cancelHold();
+      },
+      true,
+    );
+    // Releasing anywhere aborts, including outside the panel.
+    document.addEventListener("pointerup", this.boundCancelHold);
+    document.addEventListener("pointercancel", this.boundCancelHold);
+
     this.checkActiveTab();
     chrome.tabs.onActivated.addListener(this.boundCheckActiveTab);
     chrome.tabs.onUpdated.addListener(this.boundTabUpdatedHandler);
   }
 
   /**
-   * Tests the directory handle immediately. If Chrome locked it after a restart,
-   * it catches the error and forces a prompt while the user click is still fresh.
-   * @returns {FileSystemDirectoryHandle|null} The unlocked handle, or null.
+   * Deleting is a hold rather than a click, so a stray press does nothing at
+   * all — no dialog to dismiss, no state changed.
    */
-  async verifyExportPermission() {
-    const settings = await chrome.storage.local.get("cf_trainer.auto_export");
-    if (!settings["cf_trainer.auto_export"]) return null;
+  startHold(event) {
+    if (event.button !== 0) return; // Left button / primary touch only
+    const button = event.target.closest(".contest-delete");
+    if (!button) return;
 
-    const dirHandle = await loadDirHandle();
-    if (!dirHandle) return null;
+    event.preventDefault(); // Suppress focus ring, text selection and drag
+    this.cancelHold();
 
-    try {
-      // 1. TEST THE HANDLE: Try to access the file instantly.
-      // If Chrome is secretly blocking it, this throws a NotAllowedError.
-      await dirHandle.getFileHandle("cf_trainer_backup.json", { create: true });
-      return dirHandle;
-    } catch (error) {
-      // 2. CATCH & PROMPT: If blocked, force the prompt while the click is fresh!
-      if (error.name === "NotAllowedError") {
-        try {
-          const permission = await dirHandle.requestPermission({
-            mode: "readwrite",
-          });
-          if (permission === "granted") {
-            return dirHandle;
-          }
-        } catch (reqError) {
-          console.warn("[Auto-Export] Prompt rejected:", reqError.message);
-        }
-      }
-      return null;
-    }
+    button.style.animationDuration = `${HOLD_MS}ms`;
+    button.classList.add("holding");
+
+    this.hold = {
+      button,
+      contestId: button.dataset.id,
+      timer: setTimeout(() => this.completeHold(), HOLD_MS),
+    };
   }
 
-  /**
-   * Performs the actual file writing using the pre-authorized handle.
-   */
-  async executeAutoExport(dirHandle) {
-    try {
-      const allData = await chrome.storage.local.get(null);
-      const json = JSON.stringify(allData, null, 2);
+  cancelHold() {
+    if (!this.hold) return;
+    clearTimeout(this.hold.timer);
+    this.hold.button.classList.remove("holding");
+    this.hold = null;
+  }
 
-      const fileHandle = await dirHandle.getFileHandle(
-        "cf_trainer_backup.json",
-        { create: true },
-      );
+  async completeHold() {
+    if (!this.hold) return;
+    const { contestId } = this.hold;
+    this.cancelHold();
 
-      const writable = await fileHandle.createWritable();
-      await writable.write(json);
-      await writable.close();
+    await LocalDB.removeTrackedContest(contestId);
+    await this.renderQueue();
 
-      console.log("[Auto-Export] Backup written to", dirHandle.name);
-    } catch (error) {
-      console.warn("[Auto-Export] Failed to write backup:", error.message);
-      this.showInlineAlert(
-        "Added to Queue, but Auto-Export failed to write the file.",
-      );
-    }
+    // Storage changed, so the backup has to follow. Still inside the
+    // activation window opened by the pointerdown that began the hold.
+    const dirHandle = await verifyExportPermission();
+    if (dirHandle) await writeBackup(dirHandle);
+
+    // Re-enables "+ Add Contest" if the removed contest is the open tab.
+    await this.checkActiveTab();
   }
 
   showInlineAlert(message) {
@@ -197,12 +208,13 @@ export class ContestList extends HTMLElement {
       return;
     }
 
-    const contests =
+    const contests = (
       this.filter === "ALL"
-        ? allContests
+        ? [...allContests]
         : allContests.filter(
             (contest) => (contest.type ?? "").toUpperCase() === this.filter,
-          );
+          )
+    ).sort(byStartTimeDesc);
 
     if (contests.length === 0) {
       const label = this.filter === "OFFICIAL" ? "official" : "gym";
@@ -222,20 +234,30 @@ export class ContestList extends HTMLElement {
         const rawName = contest.name?.replace(/\s+/g, " ").trim();
         const name = escapeHtml(rawName || `Contest ${contest.id}`);
 
+        // The button has to sit outside the anchor: nesting it would make
+        // every press navigate to Codeforces.
         return `
-        <a href="${url}" target="_blank" class="contest-row">
-          <span class="contest-name">${name}</span>
-          <span class="contest-tags">
-            <span class="contest-id">#${contest.id}</span>
-            <span class="contest-type ${typeClass}">${label}</span>
-          </span>
-        </a>
+        <div class="contest-item">
+          <a href="${url}" target="_blank" class="contest-row">
+            <span class="contest-name">${name}</span>
+            <span class="contest-tags">
+              <span class="contest-id">#${contest.id}</span>
+              <span class="contest-type ${typeClass}">${label}</span>
+            </span>
+          </a>
+          <button type="button" class="contest-delete"
+                  data-id="${escapeHtml(contest.id)}"
+                  title="Hold to remove from queue">✕</button>
+        </div>
       `;
       })
       .join("");
   }
 
   disconnectedCallback() {
+    this.cancelHold();
+    document.removeEventListener("pointerup", this.boundCancelHold);
+    document.removeEventListener("pointercancel", this.boundCancelHold);
     chrome.tabs.onActivated.removeListener(this.boundCheckActiveTab);
     chrome.tabs.onUpdated.removeListener(this.boundTabUpdatedHandler);
   }
