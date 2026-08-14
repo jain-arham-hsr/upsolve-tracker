@@ -8,6 +8,7 @@ import {
 import { getProblemStats } from "./get-prob-stats.js";
 import { buildSolvedKeys } from "./progress-manager.js";
 import { loadCredentials } from "./services/secure-store.js";
+import { syncOfficialTags } from "./tag-service.js";
 
 export async function processNewContest(url) {
   try {
@@ -30,7 +31,7 @@ export async function processNewContest(url) {
 
     const cfService = new CodeforcesService(apiKey, apiSecret);
 
-    const { contestName, problems } = await getProblemStats(
+    const { contestName, problems, tagsSynced } = await getProblemStats(
       type,
       contestId,
       cfService,
@@ -89,8 +90,11 @@ export async function processNewContest(url) {
       name: contestName,
       type: type === "contest" ? "OFFICIAL" : "GYM",
       problems,
+      tagsSynced,
       addedAt: Date.now(),
     };
+
+    await syncOfficialTags(cfService, [contestData]);
 
     if (allRated) {
       await LocalDB.addTrackedContest(contestData);

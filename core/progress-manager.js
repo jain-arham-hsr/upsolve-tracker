@@ -1,6 +1,7 @@
 import { CodeforcesService } from "./services/codeforces-service.js";
 import { LocalDB } from "./services/storage.js";
 import { loadCredentials } from "./services/secure-store.js";
+import { syncOfficialTags } from "./tag-service.js";
 
 /**
  * Fetches all accepted submissions for a user and returns them as a Set
@@ -45,6 +46,10 @@ export async function updateSolvedStatus() {
 
   // 3. Update the Queue
   const trackedContests = await LocalDB.getTrackedContests();
+
+  // Backfill tags for contests queued before tags were captured. No-ops once
+  // everything is tagged, so it only costs a request on the first refresh.
+  await syncOfficialTags(cfService, trackedContests);
   const updatedContests = [];
   const removedDetails = [];
 

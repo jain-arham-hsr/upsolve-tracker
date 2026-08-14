@@ -7,23 +7,41 @@ import { scrapeContestProblems } from "./services/scraping-service";
  * @param {string} type - "contest" or "gym"
  * @param {string} contestId
  * @param {CodeforcesService} [cfService] - Required for gym contests
- * @returns {{ contestName: string, problems: object[] }}
+ * @returns {{ contestName: string, problems: object[], tagsSynced: boolean }}
  */
 export async function getProblemStats(type, contestId, cfService = null) {
-  if (type === "gym") {
-    const { contestName, problems } = await scrapeContestProblems(
-      type,
-      contestId,
-    );
-    await populateSolveCountsFromApi(cfService, contestId, problems);
-    return { contestName, problems };
+  const { contestName, problems } = await scrapeContestProblems(type, contestId);
+
+  if (type !== "gym") {
+    // Official tags come from the problemset in bulk — see tag-service.js.
+    return { contestName, problems, tagsSynced: false };
   }
 
-  return scrapeContestProblems(type, contestId);
+  const standings = await cfService.getContestStandings(contestId);
+  populateSolveCountsFromApi(standings, problems);
+
+  // The same response is the only tag source gyms have, so take it while
+  // we're here rather than paying for the call twice.
+  const tagsSynced = populateTagsFromStandings(standings, problems);
+
+  return { contestName, problems, tagsSynced };
 }
 
-async function populateSolveCountsFromApi(cfService, contestId, problems) {
-  const standings = await cfService.getContestStandings(contestId);
+function populateTagsFromStandings(standings, problems) {
+  const apiProblems = standings?.problems;
+  if (!apiProblems?.length) return false;
+
+  const tagsByIndex = new Map(
+    apiProblems.map((problem) => [problem.index, problem.tags ?? []]),
+  );
+  problems.forEach((problem) => {
+    problem.tags = tagsByIndex.get(problem.index) ?? [];
+  });
+
+  return true;
+}
+
+function populateSolveCountsFromApi(standings, problems) {
   if (!standings?.rows?.length) return;
 
   const validRows = standings.rows.filter((row) => !row.party.ghost);

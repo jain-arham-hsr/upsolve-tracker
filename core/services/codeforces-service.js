@@ -44,6 +44,16 @@ export class CodeforcesService {
   }
 
   /**
+   * Fetches the entire public problemset, which is the only bulk source of
+   * problem tags. Roughly 2MB covering every official contest — cheaper than
+   * contest.standings, whose response embeds every participant row (~12MB for
+   * a single Div. 3).
+   */
+  async getProblemsetProblems() {
+    return this._callMethod("problemset.problems", {});
+  }
+
+  /**
    * Fetches user info for an array of handles.
    * @param {string[]} handles
    */

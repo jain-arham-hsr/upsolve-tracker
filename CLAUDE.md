@@ -45,6 +45,15 @@ Vanilla ES modules and custom elements — no framework, no bundled UI library.
 3. `rating-estimator.js` — binary-search the rating R whose Elo-expected solve count over that participant vector matches actual solves; round to the nearest 100, floor 800. Zero solves targets 0.5 expected solves rather than 0.
 4. Mark already-solved problems from `user.status`, then **store only if every problem got a rating** — a partial result throws instead of persisting. There is intentionally no default-1500 fallback (see the comments in `contest-manager.js`); reintroducing one would silently corrupt the queue's sort order.
 
+### Tags
+
+Tags are absent from the standings HTML, so `tag-service.js` gets them from the API, and the source differs by contest type:
+
+- **Official** — `problemset.problems`, one ~2 MB request covering all ~11k problems, keyed by `contestId-index`. The per-contest alternative (`contest.standings`) also returns tags but embeds every participant row — ~12 MB for one Div. 3 — so it must not be used in a loop. Note this endpoint rejects `from`/`count` for non-gym contests; it only answers anonymous parameter-less GETs.
+- **Gym** — absent from the problemset entirely. Tags are lifted from the `problems` array of the standings response that adding a gym already fetches, and are usually empty since gyms sit outside CF's taxonomy.
+
+`contest.tagsSynced` records that a tag source was actually consulted, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it the backfill would retry untagged gyms forever. `syncOfficialTags` runs both at add time and from the refresh, and no-ops once every contest carries the flag.
+
 `progress-manager.js#updateSolvedStatus()` re-syncs on demand: re-fetches accepted submissions, flips `prob.solved`, drops fully-solved contests from storage, and returns the removed ones so the UI can announce them.
 
 ### Storage split — this is deliberate

@@ -39,6 +39,7 @@ export async function scrapeContestProblems(type, contestId) {
     rating: null,
     officialSolves: 0,
     solved: false,
+    tags: [], // Filled from the API; the standings page doesn't carry tags.
   }));
 
   populateSolveCountsFromTable(standingsTable, problems);

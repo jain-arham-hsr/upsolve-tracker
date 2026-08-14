@@ -1,6 +1,15 @@
 import "./views/queue-view.js";
 import "./views/contest-list.js";
+import "./views/stats-view.js";
 import { updateSolvedStatus } from "../progress-manager.js"; // Import the logic
+
+// Inline so it inherits the header's colour and hover transition, which a
+// colour emoji would ignore.
+const STATS_ICON = `<svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
+  <rect x="1" y="9" width="3.4" height="6" rx="0.7"></rect>
+  <rect x="6.3" y="5" width="3.4" height="10" rx="0.7"></rect>
+  <rect x="11.6" y="1.5" width="3.4" height="13.5" rx="0.7"></rect>
+</svg>`;
 
 export class CFApp extends HTMLElement {
   constructor() {
@@ -14,6 +23,7 @@ export class CFApp extends HTMLElement {
 
     this.routerOutlet = this.querySelector("#router-outlet");
     this.btnViewList = this.querySelector("#btn-view-list");
+    this.btnStats = this.querySelector("#btn-stats");
     this.btnRefresh = this.querySelector("#btn-refresh");
 
     this.setupListeners();
@@ -22,13 +32,11 @@ export class CFApp extends HTMLElement {
 
   setupListeners() {
     this.btnViewList.addEventListener("click", () => {
-      const currentView =
-        this.routerOutlet.firstElementChild?.tagName.toLowerCase();
-      if (currentView === "cf-contest-list") {
-        this.navigate("cf-queue-view");
-      } else {
-        this.navigate("cf-contest-list");
-      }
+      this.toggleView("cf-contest-list");
+    });
+
+    this.btnStats.addEventListener("click", () => {
+      this.toggleView("cf-stats-view");
     });
 
     // Handle Global Refresh Click
@@ -60,18 +68,33 @@ export class CFApp extends HTMLElement {
     }
   }
 
+  /**
+   * Opens a secondary view, or returns to the queue if it's already showing.
+   */
+  toggleView(componentTagName) {
+    const currentView =
+      this.routerOutlet.firstElementChild?.tagName.toLowerCase();
+    this.navigate(
+      currentView === componentTagName ? "cf-queue-view" : componentTagName,
+    );
+  }
+
   navigate(componentTagName) {
     this.routerOutlet.innerHTML = "";
     const newView = document.createElement(componentTagName);
     this.routerOutlet.appendChild(newView);
 
-    if (componentTagName === "cf-queue-view") {
-      this.btnRefresh.classList.remove("hidden");
-      this.btnViewList.textContent = "☰";
-    } else {
-      this.btnRefresh.classList.add("hidden");
-      this.btnViewList.textContent = "✕";
-    }
+    // Refresh syncs solved status and backfills tags, so it's useful on both
+    // data views. Each secondary button turns into a close affordance while
+    // its own view is open.
+    this.btnRefresh.classList.toggle(
+      "hidden",
+      componentTagName === "cf-contest-list",
+    );
+    this.btnViewList.textContent =
+      componentTagName === "cf-contest-list" ? "✕" : "☰";
+    this.btnStats.innerHTML =
+      componentTagName === "cf-stats-view" ? "✕" : STATS_ICON;
   }
 }
 

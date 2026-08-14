@@ -40,7 +40,8 @@ cf-app {
 }
 
 cf-queue-view,
-cf-contest-list {
+cf-contest-list,
+cf-stats-view {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -251,6 +252,7 @@ cf-app,
 #router-outlet,
 cf-queue-view,
 cf-contest-list,
+cf-stats-view,
 .view-container {
   min-height: 0; /* Forces containers to respect the height of the window */
 }
@@ -546,6 +548,160 @@ cf-contest-list,
 .filter-select option {
   background-color: var(--panel-bg);
   color: var(--text-main);
+}
+
+/* --- Stats View --- */
+#stats-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 20px;
+}
+
+#stats-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+#stats-body::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 2px;
+}
+
+.stats-section-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding-bottom: 8px;
+  margin: 20px 0 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.stats-section-title:first-child {
+  margin-top: 0;
+}
+
+.stats-empty {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 8px 0 4px;
+}
+
+.stats-hint {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* --- Rating Histogram --- */
+.hist-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.hist-label {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.hist-track {
+  flex: 1;
+  height: 14px;
+  min-width: 0;
+  background-color: rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hist-bar {
+  height: 100%;
+  min-width: 3px; /* Keeps a single-problem bucket visible */
+  border-radius: 3px;
+}
+
+.hist-count {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: var(--text-main);
+  min-width: 16px;
+  flex-shrink: 0;
+}
+
+.hist-count.is-zero {
+  color: #444;
+}
+
+/* --- Tag Frequency --- */
+.tag-row {
+  padding: 6px 0;
+}
+
+.tag-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.tag-name {
+  font-size: 0.8rem;
+  color: var(--text-main);
+  overflow-wrap: anywhere;
+}
+
+.tag-count {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.tag-track {
+  height: 4px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.tag-bar {
+  height: 100%;
+  min-width: 2px;
+  background-color: #6e7681;
+  border-radius: 2px;
+}
+
+/* Codeforces rank colours, lightened for the dark panel */
+.band-gray {
+  background-color: #9e9e9e;
+}
+.band-green {
+  background-color: #4caf50;
+}
+.band-cyan {
+  background-color: #26c6da;
+}
+.band-blue {
+  background-color: #5c85ff;
+}
+.band-violet {
+  background-color: #c77dff;
+}
+.band-orange {
+  background-color: #ffa726;
+}
+.band-red {
+  background-color: #ef5350;
 }
 
 .sync-alert {
