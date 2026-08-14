@@ -6,13 +6,16 @@ import {
   verifyExportPermission,
   writeBackup,
 } from "../services/auto-export.js";
+import { hasCompleteSetup } from "../services/secure-store.js";
 
 // Inline so it inherits the header's colour and hover transition, which a
-// colour emoji would ignore.
-const STATS_ICON = `<svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
-  <rect x="1" y="9" width="3.4" height="6" rx="0.7"></rect>
-  <rect x="6.3" y="5" width="3.4" height="10" rx="0.7"></rect>
-  <rect x="11.6" y="1.5" width="3.4" height="13.5" rx="0.7"></rect>
+// colour emoji would ignore. Knobs are filled with the header background so
+// they read as sitting on the sliders rather than behind them.
+const SETTINGS_ICON = `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+  <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"></path>
+  <circle cx="6" cy="4.5" r="1.9" fill="var(--panel-bg)"></circle>
+  <circle cx="10.5" cy="8" r="1.9" fill="var(--panel-bg)"></circle>
+  <circle cx="5" cy="11.5" r="1.9" fill="var(--panel-bg)"></circle>
 </svg>`;
 
 export class CFApp extends HTMLElement {
@@ -26,22 +29,35 @@ export class CFApp extends HTMLElement {
     this.appendChild(content);
 
     this.routerOutlet = this.querySelector("#router-outlet");
-    this.btnViewList = this.querySelector("#btn-view-list");
-    this.btnStats = this.querySelector("#btn-stats");
+    this.btnSettings = this.querySelector("#btn-settings");
     this.btnRefresh = this.querySelector("#btn-refresh");
     this.syncStatus = this.querySelector("#sync-status");
+    this.tabBar = this.querySelector("#tab-bar");
+
+    this.btnSettings.innerHTML = SETTINGS_ICON;
 
     this.setupListeners();
     this.navigate("cf-queue-view");
   }
 
   setupListeners() {
-    this.btnViewList.addEventListener("click", () => {
-      this.toggleView("cf-contest-list");
+    this.btnSettings.addEventListener("click", () => {
+      chrome.runtime.openOptionsPage();
     });
 
-    this.btnStats.addEventListener("click", () => {
-      this.toggleView("cf-stats-view");
+    this.tabBar.addEventListener("click", (event) => {
+      const tab = event.target.closest(".tab");
+      if (tab) this.navigate(tab.dataset.view);
+    });
+
+    // Views report long operations through the shell's status strip rather
+    // than each growing their own progress UI. null clears it.
+    this.routerOutlet.addEventListener("cf-status", (event) => {
+      if (event.detail === null) {
+        this.clearSyncStatus();
+      } else {
+        this.setSyncStatus(event.detail);
+      }
     });
 
     // Handle Global Refresh Click
@@ -51,6 +67,17 @@ export class CFApp extends HTMLElement {
   }
 
   async handleGlobalRefresh() {
+    // Without credentials the sync returns silently, which reads as a dead
+    // button. Say so instead.
+    if (!(await hasCompleteSetup())) {
+      this.setSyncStatus(
+        "Add your handle and API key in Settings to sync.",
+        { sticky: true },
+      );
+      this.clearSyncStatus();
+      return;
+    }
+
     // 1. UI Feedback: Start spinning
     this.btnRefresh.classList.add("spinning");
     this.btnRefresh.disabled = true;
@@ -112,33 +139,14 @@ export class CFApp extends HTMLElement {
     }, delay);
   }
 
-  /**
-   * Opens a secondary view, or returns to the queue if it's already showing.
-   */
-  toggleView(componentTagName) {
-    const currentView =
-      this.routerOutlet.firstElementChild?.tagName.toLowerCase();
-    this.navigate(
-      currentView === componentTagName ? "cf-queue-view" : componentTagName,
-    );
-  }
-
   navigate(componentTagName) {
     this.routerOutlet.innerHTML = "";
     const newView = document.createElement(componentTagName);
     this.routerOutlet.appendChild(newView);
 
-    // Refresh syncs solved status and tags, so it's useful on both
-    // data views. Each secondary button turns into a close affordance while
-    // its own view is open.
-    this.btnRefresh.classList.toggle(
-      "hidden",
-      componentTagName === "cf-contest-list",
-    );
-    this.btnViewList.textContent =
-      componentTagName === "cf-contest-list" ? "✕" : "☰";
-    this.btnStats.innerHTML =
-      componentTagName === "cf-stats-view" ? "✕" : STATS_ICON;
+    this.tabBar.querySelectorAll(".tab").forEach((tab) => {
+      tab.classList.toggle("is-active", tab.dataset.view === componentTagName);
+    });
   }
 }
 

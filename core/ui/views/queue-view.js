@@ -1,6 +1,7 @@
 import templateHtml from "./queue-view.html?raw";
 import { LocalDB } from "../../services/storage.js";
 import { escapeHtml } from "../escape-html.js";
+import { hasCompleteSetup } from "../../services/secure-store.js";
 
 export class QueueView extends HTMLElement {
   constructor() {
@@ -12,6 +13,15 @@ export class QueueView extends HTMLElement {
     this.container = this.querySelector("#problem-list");
     this.countLabel = this.querySelector("#pending-count");
     this.alertDiv = this.querySelector("#sync-alert");
+    this.setupPrompt = this.querySelector("#setup-prompt");
+
+    this.querySelector("#btn-open-settings").addEventListener("click", () => {
+      chrome.runtime.openOptionsPage();
+    });
+
+    // Nothing here works without credentials, so say so up front rather than
+    // letting the queue look merely empty.
+    this.setupPrompt.classList.toggle("hidden", await hasCompleteSetup());
 
     await this.renderQueue();
   }

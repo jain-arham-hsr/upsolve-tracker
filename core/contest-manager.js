@@ -11,7 +11,7 @@ import { loadCredentials } from "./services/secure-store.js";
 import { syncOfficialTags } from "./tag-service.js";
 import { syncStartTimes } from "./start-time-service.js";
 
-export async function processNewContest(url) {
+export async function processNewContest(url, onProgress = () => {}) {
   try {
     const match = url.match(/(contest|gym)\/(\d+)/i);
     if (!match) throw new Error("Invalid Codeforces URL");
@@ -27,14 +27,18 @@ export async function processNewContest(url) {
     const handle = storageSettings["cf_trainer.handle"];
 
     if (!apiKey || !apiSecret) {
-      throw new Error("Missing API credentials. Please set them in Options.");
+      throw new Error(
+        "No API key set yet. Open Settings and add your Codeforces handle, key and secret.",
+      );
     }
 
     const cfService = new CodeforcesService(apiKey, apiSecret);
 
+    onProgress("Reading the standings…");
     const { contestName, problems, tagsSynced, startTimeSeconds } =
       await getProblemStats(type, contestId, cfService);
 
+    onProgress("Measuring the field…");
     let participantRatings = [];
     if (type === "contest") {
       participantRatings = await getOfficialRatingDist(cfService, contestId);
@@ -50,6 +54,7 @@ export async function processNewContest(url) {
     );
 
     if (participantRatings.length > 0) {
+      onProgress("Estimating problem ratings…");
       problems.forEach((problem) => {
         if (problem.rating === null) {
           problem.rating = estimateProblemRating(
@@ -62,6 +67,7 @@ export async function processNewContest(url) {
 
     // --- REMOVED THE 1500 FALLBACK COMPLETELY ---
 
+    onProgress("Checking your submissions…");
     const solvedKeys = await buildSolvedKeys(cfService, handle);
 
     let solvedCount = 0;
@@ -93,15 +99,19 @@ export async function processNewContest(url) {
       addedAt: Date.now(),
     };
 
-    await syncOfficialTags(cfService, [contestData]);
-    await syncStartTimes(cfService, [contestData]);
+    await syncOfficialTags(cfService, [contestData], onProgress);
+    await syncStartTimes(cfService, [contestData], onProgress);
 
     if (allRated) {
+      onProgress("Saving to your queue…");
       await LocalDB.addTrackedContest(contestData);
     } else {
       console.warn("[Contest Manager] Skipping storage. Missing ratings.");
+      const missing = problems.filter((problem) => problem.rating === null);
       throw new Error(
-        "Failed to estimate ratings. Check console for API errors.",
+        participantRatings.length === 0
+          ? `Couldn't rate this contest: Codeforces returned no participant ratings for ${contestId}. Private or unrated standings can't be measured.`
+          : `Couldn't rate ${missing.length} of ${problems.length} problems (${missing.map((p) => p.index).join(", ")}), so the contest wasn't added.`,
       );
     }
 

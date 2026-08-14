@@ -14,6 +14,27 @@ const FILTER_KEY = "cf_trainer.contest_filter";
 /** How long the remove button must be held. Drives the fill animation too. */
 const HOLD_MS = 700;
 
+/**
+ * Import writes straight into chrome.storage, so a wrong file would quietly
+ * replace the queue. Returns a human-readable reason to refuse, or null.
+ */
+function describeBackupProblem(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return "That file isn't a CF Trainer backup.";
+  }
+  if (!Array.isArray(data.trackedContests)) {
+    return "That file has no contest queue in it.";
+  }
+  // some(), not find(): a null entry is itself falsy and would slip through.
+  const malformed = data.trackedContests.some(
+    (contest) => !contest?.id || !Array.isArray(contest.problems),
+  );
+  if (malformed) {
+    return "That backup has malformed contest entries, so it wasn't imported.";
+  }
+  return null;
+}
+
 export class ContestList extends HTMLElement {
   constructor() {
     super();
@@ -70,8 +91,10 @@ export class ContestList extends HTMLElement {
         this.alertDiv.classList.add("hidden");
 
         try {
-          // 2. Run the slow Codeforces API logic
-          await processNewContest(this.currentValidUrl);
+          // 2. Run the slow Codeforces API logic, reporting each stage
+          await processNewContest(this.currentValidUrl, (message) =>
+            this.reportStatus(message),
+          );
           await this.renderQueue();
 
           // 3. Write using the exact handle we just unlocked
@@ -91,6 +114,8 @@ export class ContestList extends HTMLElement {
           this.showInlineAlert(error.message);
           this.btnAddContest.textContent = "+ Add Contest";
           this.btnAddContest.disabled = false;
+        } finally {
+          this.reportStatus(null);
         }
       }
     });
@@ -112,18 +137,25 @@ export class ContestList extends HTMLElement {
     this.btnImport.addEventListener("click", () => this.fileInput.click());
     this.fileInput.addEventListener("change", async (e) => {
       const file = e.target.files[0];
+      // Reset so re-picking the same file fires change again.
+      this.fileInput.value = "";
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const data = JSON.parse(event.target.result);
-          await chrome.storage.local.set(data);
-          await this.renderQueue();
-        } catch (err) {
-          console.error("Import failed:", err);
-        }
-      };
-      reader.readAsText(file);
+
+      let data;
+      try {
+        data = JSON.parse(await file.text());
+      } catch {
+        this.showInlineAlert(`${file.name} isn't valid JSON.`);
+        return;
+      }
+
+      const problem = describeBackupProblem(data);
+      if (problem) {
+        this.showInlineAlert(problem);
+        return;
+      }
+
+      this.confirmImport(data);
     });
 
     // Delegated so the handlers outlive each renderQueue() rewrite.
@@ -191,11 +223,63 @@ export class ContestList extends HTMLElement {
     await this.checkActiveTab();
   }
 
+  /**
+   * Called by the shell after a global refresh. The sync can drop fully
+   * solved contests and resolve missing dates, both of which change this list.
+   */
+  async refreshData() {
+    await this.renderQueue();
+  }
+
+  /** Routes a long-operation message to the shell's status strip. */
+  reportStatus(message) {
+    this.dispatchEvent(
+      new CustomEvent("cf-status", { detail: message, bubbles: true }),
+    );
+  }
+
+  /**
+   * Importing overwrites the queue with no undo, so it states what is about
+   * to happen and waits rather than acting on the file picker alone.
+   */
+  confirmImport(data) {
+    const incoming = data.trackedContests.length;
+    const current = this.container.querySelectorAll(".contest-item").length;
+
+    this.alertDiv.innerHTML = `
+      <div>Replace your queue with ${incoming} contest${incoming === 1 ? "" : "s"} from this backup?
+      ${current > 0 ? `The ${current} currently listed will be discarded.` : ""}</div>
+      <div class="alert-actions">
+        <button type="button" class="btn outline" data-import-confirm>Import</button>
+        <button type="button" class="btn outline" data-import-cancel>Cancel</button>
+      </div>`;
+    this.alertDiv.classList.remove("hidden");
+    clearTimeout(this.alertTimer);
+
+    this.alertDiv
+      .querySelector("[data-import-cancel]")
+      .addEventListener("click", () => this.alertDiv.classList.add("hidden"));
+
+    this.alertDiv
+      .querySelector("[data-import-confirm]")
+      .addEventListener("click", async () => {
+        try {
+          await chrome.storage.local.set(data);
+          await this.renderQueue();
+          this.showInlineAlert(`Imported ${incoming} contest(s).`);
+        } catch (error) {
+          this.showInlineAlert(`Import failed: ${error.message}`);
+        }
+      });
+  }
+
   showInlineAlert(message) {
     const cleanMessage = message.replace(/^Error:\s*/i, "");
     this.alertDiv.textContent = cleanMessage;
     this.alertDiv.classList.remove("hidden");
-    setTimeout(() => {
+    // Tracked so a pending hide can't dismiss a confirmation mid-decision.
+    clearTimeout(this.alertTimer);
+    this.alertTimer = setTimeout(() => {
       this.alertDiv.classList.add("hidden");
     }, 6000);
   }

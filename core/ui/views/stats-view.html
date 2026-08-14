@@ -8,21 +8,25 @@
   <div id="stats-body">
     <div id="stats-hint" class="stats-hint hidden"></div>
 
-    <div class="stats-section-title">RATING SPREAD</div>
-    <div id="stats-histogram"></div>
+    <section class="stats-section">
+      <div class="stats-section-title">TAG FREQUENCY</div>
 
-    <div class="stats-section-title">TAG FREQUENCY</div>
+      <div id="tag-range" class="tag-range hidden">
+        <label class="filter-label" for="tag-range-min">Rating</label>
+        <select id="tag-range-min" class="filter-select compact"></select>
+        <span class="tag-range-sep">to</span>
+        <select id="tag-range-max" class="filter-select compact"></select>
+      </div>
 
-    <div id="tag-range" class="tag-range hidden">
-      <label class="filter-label" for="tag-range-min">Rating</label>
-      <select id="tag-range-min" class="filter-select compact"></select>
-      <span class="tag-range-sep">to</span>
-      <select id="tag-range-max" class="filter-select compact"></select>
-    </div>
+      <div id="tag-range-caption" class="tag-range-caption"></div>
 
-    <div id="tag-range-caption" class="tag-range-caption"></div>
+      <div id="stats-tags"></div>
+    </section>
 
-    <div id="stats-tags"></div>
+    <section class="stats-section">
+      <div class="stats-section-title">RATING SPREAD</div>
+      <div id="stats-histogram"></div>
+    </section>
   </div>
 
 </div>

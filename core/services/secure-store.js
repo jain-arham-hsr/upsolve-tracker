@@ -67,3 +67,16 @@ export const loadCredentials = async () => ({
   apiKey: await get(KEYS.API_KEY),
   apiSecret: await get(KEYS.API_SECRET),
 });
+
+/**
+ * Whether the extension has everything it needs to talk to Codeforces.
+ * Credentials live in IndexedDB and the handle in chrome.storage, so this is
+ * the one place that knows to check both.
+ */
+export async function hasCompleteSetup() {
+  const [settings, { apiKey, apiSecret }] = await Promise.all([
+    chrome.storage.local.get("cf_trainer.handle"),
+    loadCredentials(),
+  ]);
+  return Boolean(settings["cf_trainer.handle"] && apiKey && apiSecret);
+}
