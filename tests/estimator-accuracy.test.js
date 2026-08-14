@@ -1,0 +1,90 @@
+/**
+ * Checks the estimator against reality: real in-contest solve counts fed
+ * through the real field, compared with the rating Codeforces later published
+ * for the same problem.
+ *
+ * There is a known systematic bias here, measured and asserted below rather
+ * than papered over. The Elo model treats every competitor as having attempted
+ * every problem, when most never open the hard ones. Non-attempts therefore
+ * look like failures caused by difficulty, the model over-predicts solves at a
+ * given rating, and the search compensates by settling too low. The gap widens
+ * with difficulty, reaching about 300 points on the hardest problems.
+ *
+ * This matters less than it used to: official problems now take Codeforces'
+ * published rating when one exists (problemset-sync.js), so the estimator
+ * mainly serves gyms and contests too fresh to be rated. Tightening these
+ * bounds would mean modelling attempts, not just ability.
+ */
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { estimateProblemRating } from "../core/rating-estimator.js";
+
+const { fields } = JSON.parse(
+  readFileSync(new URL("./fixtures/real-contest-fields.json", import.meta.url)),
+);
+
+const rated = fields.flatMap((field) =>
+  field.problems
+    .filter((problem) => problem.officialRating != null)
+    .map((problem) => ({ ...problem, field })),
+);
+
+const estimateFor = (problem) =>
+  estimateProblemRating(
+    { strata: [{ ratings: problem.field.ratings, scale: 1 }] },
+    problem.solves,
+  );
+
+test("the fixture has published ratings to compare against", () => {
+  assert.ok(rated.length >= 10);
+});
+
+test("estimates land within 300 of the rating Codeforces published", () => {
+  for (const problem of rated) {
+    const estimate = estimateFor(problem);
+    assert.ok(
+      Math.abs(estimate - problem.officialRating) <= 300,
+      `${problem.field.name} ${problem.index}: estimated ${estimate}, CF says ${problem.officialRating}`,
+    );
+  }
+});
+
+test("widely-solved problems are estimated tightly", () => {
+  // Where most of the field attempted, the attempt assumption roughly holds.
+  const popular = rated.filter(
+    (problem) => problem.solves > problem.field.ratings.length * 0.25,
+  );
+  assert.ok(popular.length >= 5, "expected several widely-solved problems");
+
+  for (const problem of popular) {
+    assert.ok(
+      Math.abs(estimateFor(problem) - problem.officialRating) <= 200,
+      `${problem.field.name} ${problem.index}: estimated ${estimateFor(problem)}, CF says ${problem.officialRating}`,
+    );
+  }
+});
+
+test("the bias is downward — the model over-predicts solves", () => {
+  // Documents the direction, so a change that flips it gets noticed.
+  const deltas = rated.map((problem) => estimateFor(problem) - problem.officialRating);
+  const mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+  assert.ok(mean < 0, `expected a downward bias, mean delta was ${mean}`);
+  assert.ok(mean > -200, `bias grew beyond the recorded level: ${mean}`);
+});
+
+test("harder problems ordered by solve count stay ordered by rating", () => {
+  // Relative ordering is what the queue relies on, and it survives the bias.
+  for (const field of fields) {
+    const bySolves = [...field.problems].sort((a, b) => b.solves - a.solves);
+    const estimates = bySolves.map((problem) => estimateFor({ ...problem, field }));
+
+    for (let i = 1; i < estimates.length; i++) {
+      assert.ok(
+        estimates[i] >= estimates[i - 1],
+        `${field.name}: ${bySolves[i].index} (${bySolves[i].solves} solves) rated ${estimates[i]}, ` +
+          `but ${bySolves[i - 1].index} (${bySolves[i - 1].solves} solves) rated ${estimates[i - 1]}`,
+      );
+    }
+  }
+});

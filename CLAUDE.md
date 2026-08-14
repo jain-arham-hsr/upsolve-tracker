@@ -18,6 +18,8 @@ npm test                # node --test over tests/ — no framework, no browser
 
 `tests/sampling.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
 
+`tests/estimator-accuracy.test.js` records a **known bias**: estimates run below Codeforces' published ratings, by up to ~300 on the hardest problems. The Elo model assumes everyone attempted every problem, when most never open the hard ones — non-attempts read as difficulty-driven failures, so the model over-predicts solves and the search settles too low. Fixing it means modelling attempts, not ability. It matters less now that official problems take CF's published rating when one exists, leaving the estimator to gyms and contests too fresh to be rated.
+
 The build is still target-parameterized (`TARGET` selects `targets/<name>/manifest.json` and `dist/<name>`), but only `chrome` exists — the previous `dev:firefox` / `build:firefox` scripts were removed because they failed at config load. A real Firefox target needs more than a manifest: `targets/chrome/` depends on `chrome.sidePanel`, which Firefox answers with `sidebar_action`, and CRXJS emits a Chrome-style service-worker loader. Everything under `core/` already sticks to APIs both browsers implement.
 
 Pushing to `main` triggers `.github/workflows/release.yaml`: it builds Chrome, reads the version from `targets/chrome/manifest.json`, **deletes any existing release/tag with that version**, and republishes. Bump the manifest version when you want a distinct release; leaving it unchanged silently replaces the previous one.
@@ -62,7 +64,7 @@ What works, and what's implemented, is two strata:
 - **Head** — `HEAD_PAGES` (10) read in full at scale 1. Small, but it's what rates the hard problems.
 - **Tail** — `TAIL_PAGES` (20) at even intervals over the remainder, scaled by the competitors each represents.
 
-Verified against full-field estimates on simulated fields of 3k–45k: 30 of 33 cases reproduce the rating exactly, the rest are one 100-point bucket off. Contests of 30 pages or fewer are still read whole, since sampling would cost the same. The last page is confirmed to actually be last before its number is used to size the field — a wrong count would undercount the field and skew every rating.
+Verified against **real** rounds captured in `tests/fixtures/real-contest-fields.json` (rank order, pre-contest ratings and in-contest solve counts, all from the API): 14 of 15 problems reproduce the full-field rating exactly, one is 100 off. Real rank/rating correlation is about -0.65, not -1, so pages cluster less than a synthetic sorted field suggests — don't re-verify this with simulated data. Contests of 30 pages or fewer are still read whole, since sampling would cost the same. The last page is confirmed to actually be last before its number is used to size the field — a wrong count would undercount the field and skew every rating.
 
 ### Scraped markup is quarantined in `services/standings-dom.js`
 
