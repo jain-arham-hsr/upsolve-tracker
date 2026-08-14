@@ -46,9 +46,12 @@ Requires Node 20.19+ or 22.12+ (Vite 8's requirement).
 ```bash
 npm install
 npm run build:chrome   # -> dist/chrome
+npm test               # rating maths, standings parsing, sampling accuracy
 ```
 
 Then load `dist/chrome` via **Load unpacked** as above. `npm run dev:chrome` runs a dev server with hot reload.
+
+The tests run offline against real contest data captured in `tests/fixtures/`, and cover the parts that would fail quietly rather than loudly. The UI itself has no automated coverage — check that by loading the built extension.
 
 ## Limitations
 

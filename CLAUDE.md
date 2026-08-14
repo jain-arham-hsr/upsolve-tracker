@@ -31,7 +31,7 @@ Pushing to `main` triggers `.github/workflows/release.yaml`: it builds Chrome, r
 - The manifest is the entry-point graph. HTML entries (`side_panel.default_path`, `options_ui.page`) and the service worker point at **source** paths (`core/ui/index.html`, `targets/chrome/background.js`); CRXJS crawls and rewrites them. A new page must be registered in the manifest to be built.
 - `@core` aliases to `core/`, though most existing imports use relative paths.
 - `core/` is target-agnostic business logic; `targets/<browser>/` holds only the manifest and background worker. Keep browser-specific glue in `targets/`.
-- `linkedom` is a devDependency used only by `tests/standings-dom.test.js` to parse HTML in Node; shipped code uses the browser's `DOMParser`.
+- `linkedom` is a devDependency used only by the tests (`standings-dom.test.js`, `scraping-service.test.js`) to parse HTML in Node; shipped code uses the browser's `DOMParser`.
 
 ## Architecture
 
@@ -40,18 +40,19 @@ Vanilla ES modules and custom elements — no framework, no bundled UI library.
 ### Data acquisition: two channels, both required
 
 1. **Signed API** (`core/services/codeforces-service.js`) — builds the `apiSig` (SHA-512 over `rand/method?sortedParams#secret`) via `crypto.subtle`. Used for `user.status`, `contest.ratingChanges`, `contest.standings`, `user.info`.
-2. **HTML scraping** (`core/services/scraping-service.js` → `core/services/http-client.js`) — the standings page is the only source for problem names/URLs and official solve counts.
+2. **HTML scraping** (`core/services/scraping-service.js` → `core/services/http-client.js`, parsing in `core/services/standings-dom.js`) — the standings page is the only source for problem names/URLs and official in-contest solve counts. `problemStatistics.solvedCount` is *not* a substitute: it counts all-time solves including practice, which the estimator can't use.
 
-`HttpClient.get` deliberately throttles: 1–2.5 s jitter before *every* request and a 6–12 s cooldown every 15 requests, with `credentials: "include"` so the user's Codeforces session cookie is sent, plus 403 / "Just a moment" detection that surfaces a "visit codeforces.com" error. Scraping paginates full standings, so these delays are what keeps the extension from being blocked — do not remove or shorten them when optimizing.
+`HttpClient.get` deliberately throttles: 1–2.5 s jitter before *every* request and a 6–12 s cooldown every 15 requests, with `credentials: "include"` so the user's Codeforces session cookie is sent, plus 403 / "Just a moment" detection that surfaces a "visit codeforces.com" error. Even sampled, adding a contest issues tens of requests, so these delays are what keeps the extension from being blocked — do not remove or shorten them when optimizing.
 
 ### Rating estimation pipeline
 
 `core/contest-manager.js#processNewContest(url)` is the orchestrator. Given a `/contest/<id>` or `/gym/<id>` URL:
 
-1. `get-prob-stats.js` — scrape problems from the standings header row. Official contests read solve counts from the "Accepted" totals row; gyms instead count `bestSubmissionTimeSeconds` in `contest.standings`, excluding ghost parties.
-2. `get-rating-distribution.js` — produce the participant rating distribution, as **strata**: `{ strata: [{ ratings, scale }] }`, where `scale` is how many real competitors one read competitor stands for. Official: `contest.ratingChanges` `oldRating`s at scale 1; if empty, fall back to sampling the standings (below). Gym/ICPC: build from `contest.standings`, collapsing each team into one effective rating via `computeTeamRating` (binary search for R where the product of per-member loss probabilities is 0.5).
-3. `rating-estimator.js` — binary-search the rating R whose Elo-expected solve count over that participant vector matches actual solves; round to the nearest 100, floor 800. Zero solves targets 0.5 expected solves rather than 0.
-4. Mark already-solved problems from `user.status`, then **store only if every problem got a rating** — a partial result throws instead of persisting. There is intentionally no default-1500 fallback (see the comments in `contest-manager.js`); reintroducing one would silently corrupt the queue's sort order.
+1. `get-prob-stats.js` — scrape problems from the standings header row. Official contests read solve counts from the "Accepted" totals row; gyms instead count `bestSubmissionTimeSeconds` in `contest.standings`, excluding ghost parties. Returns `solveCountsRead`, which is false when the totals row wouldn't parse.
+2. `problemset-sync.js` — apply Codeforces' published ratings and tags. Anything rated here needs no estimate, which is why this runs *before* the expensive steps. Only now, knowing what still needs estimating, does `contest-manager` refuse an unreadable totals row — and only if some problem has no published rating to fall back on.
+3. `get-rating-distribution.js` — produce the participant rating distribution, as **strata**: `{ strata: [{ ratings, scale }] }`, where `scale` is how many real competitors one read competitor stands for. Official: `contest.ratingChanges` `oldRating`s at scale 1; if empty, fall back to sampling the standings (below). Gym/ICPC: build from `contest.standings`, collapsing each team into one effective rating via `computeTeamRating` (binary search for R where the product of per-member loss probabilities is 0.5).
+4. `rating-estimator.js` — binary-search the rating R whose Elo-expected solve count, summed over the strata and weighted by each one's scale, matches actual solves; round to the nearest 100, floor 800. Zero solves targets 0.5 expected solves rather than 0.
+5. Mark already-solved problems from `user.status`, then **store only if every problem got a rating** — a partial result throws instead of persisting. There is intentionally no default-1500 fallback (see the comments in `contest-manager.js`); reintroducing one would silently corrupt the queue's sort order.
 
 ### Sampling the field (`scraping-service.js`)
 
@@ -85,7 +86,7 @@ The tag source differs by contest type:
 
 `contest.tagsSyncedAt` records *when* the problemset was last consulted, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever. Records written before this field existed carry a `tagsSynced` boolean instead and are read as "synced long ago".
 
-CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `syncOfficialTags` therefore re-checks a contest that still has bare problems, but only once a week; contests where every problem is tagged are never re-requested. It runs at add time and from the refresh, and costs at most one request per sync regardless of how many contests are stale.
+CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `syncOfficialProblemData` therefore re-checks a contest that still has bare problems, but only once a week; contests where every problem is tagged are never re-requested. It runs at add time and from the refresh, and costs at most one request per sync regardless of how many contests are stale.
 
 ### Start times
 
@@ -101,13 +102,24 @@ CF tags are editable after publication, so a problem can gain tags days later �
 - **`chrome.storage.local`** (`services/storage.js`, `LocalDB`) — `trackedContests` array, plus settings under dotted keys `cf_trainer.handle` and `cf_trainer.auto_export`. This is what the Export/Import JSON backup dumps wholesale.
 - **IndexedDB** (`services/secure-store.js`) — API key/secret and the `FileSystemDirectoryHandle`. Credentials live here specifically so they never land in an exported backup; the directory handle lives here because handles aren't serializable into `chrome.storage`.
 
-Caveat: `LocalDB.getHandle`/`setHandle` read a `cfHandle` key that nothing else uses — every real call site reads `cf_trainer.handle` directly. Use the dotted key; treat those two methods as stale.
+`LocalDB` deliberately holds only the tracked-contest methods. Settings are read directly from their dotted keys (`cf_trainer.handle`, `cf_trainer.auto_export`, `cf_trainer.contest_filter`, `cf_trainer.tag_rating_range`), and solved state is derived fresh from `user.status` on every sync rather than cached. Earlier accessors for a `cfHandle` key and a `solvedCache` were removed — nothing wrote them.
 
 ### UI shell
 
-`core/ui/index.js` defines `<cf-app>`, which clones the `#tpl-app` template from `index.html` and hand-rolls a router that swaps `<cf-queue-view>` and `<cf-contest-list>` in `#router-outlet`. Views import their markup with Vite `?raw` imports and set `innerHTML`. The shell calls `refreshData(removedContests)` on the current view after a global refresh — a view that needs post-sync updates must expose that method.
+`core/ui/index.js` defines `<cf-app>`, which clones the `#tpl-app` template from `index.html` and hand-rolls a router over three views in `#router-outlet`: `<cf-queue-view>`, `<cf-contest-list>` and `<cf-stats-view>`. Navigation is the tab bar; the header holds only refresh and settings, which act on the app rather than on a view. Views import their markup with Vite `?raw` imports and set `innerHTML`, and are **destroyed and rebuilt on every tab switch** — which is why selections that should survive (the contest type filter, the tag rating range) are persisted to `chrome.storage.local` rather than held on the instance.
 
-`queue-view` flattens all unsolved problems across contests and sorts ascending by rating (null → 9999). `contest-list` watches `chrome.tabs` events to enable "+ Add Contest" only on a Codeforces contest/gym page.
+Two conventions the shell depends on:
+
+- **`refreshData()`** — called on the current view after a global refresh. A view that needs post-sync updates must expose it; `queue-view` also takes the removed-contest list to announce.
+- **`cf-status` event** — views report long operations by dispatching a bubbling `CustomEvent` that the shell renders in its status strip (`null` clears it). That's how adding a contest narrates its stages without each view growing its own progress UI. The same `onProgress` callback is threaded through `processNewContest` and `updateSolvedStatus`; stages that no-op stay silent rather than claiming work they skipped.
+
+`queue-view` flattens all unsolved problems across contests and sorts ascending by rating (null → 9999), and shows a setup prompt when `hasCompleteSetup()` is false — without it, a missing handle or API key made refresh look like a dead button. `contest-list` watches `chrome.tabs` events to enable "+ Add Contest" only on a Codeforces contest/gym page, sorts by `startTimeSeconds` (newest first, unknown last), and deletes on a 700 ms hold rather than a click so a stray press does nothing at all.
+
+### Untrusted input
+
+Views build rows with template strings and `innerHTML`, so anything originating outside the extension goes through `ui/escape-html.js` first. That covers contest names, problem names and tags (scraped or API-supplied), and the problem URL and source label, which are both built from a scraped problem index. Values the extension derives itself — counts, ratings, the type badge — don't need it.
+
+`backup-validation.js` guards Import, which writes straight into `chrome.storage.local` with no undo. Note it uses `.some()`, not `.find()`: a `null` entry in `trackedContests` is itself falsy, so a truthiness check on `find`'s return value silently accepted malformed backups. There's a test for exactly that case.
 
 **Auto-export gotchas** (`services/auto-export.js`, used by both the add-contest handler and the global refresh):
 
