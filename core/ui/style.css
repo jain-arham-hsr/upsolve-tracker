@@ -467,10 +467,12 @@ cf-stats-view,
   overflow-wrap: anywhere;
 }
 
-/* Pill group, sitting under the name */
+/* Pill group, sitting under the name against the right edge. align-self
+   overrides the row's flex-start, which keeps the name itself left. */
 .contest-tags {
   display: flex;
   align-items: center;
+  align-self: flex-end;
   gap: 6px;
   flex-shrink: 0;
 }
