@@ -67,6 +67,12 @@ What works, and what's implemented, is two strata:
 
 Verified against **real** rounds captured in `tests/fixtures/real-contest-fields.json` (rank order, pre-contest ratings and in-contest solve counts, all from the API): 14 of 15 problems reproduce the full-field rating exactly, one is 100 off. Real rank/rating correlation is about -0.65, not -1, so pages cluster less than a synthetic sorted field suggests — don't re-verify this with simulated data. Contests of 30 pages or fewer are still read whole, since sampling would cost the same. The last page is confirmed to actually be last before its number is used to size the field — a wrong count would undercount the field and skew every rating.
 
+### You cannot fetch Codeforces HTML from a dev machine
+
+`codeforces.com/contest/<id>/standings` answers a plain `curl`/`fetch` with a Cloudflare interstitial — HTTP 403 and a "Just a moment" body — regardless of User-Agent headers. Browser-like headers don't help; the extension only gets through because it runs inside a browser with a real session. **Don't burn time trying**; the API (`codeforces.com/api/*`) is unaffected and answers fine.
+
+The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/scraping-service.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live standings page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: an understated page count either takes the walk-every-page branch or trips the `hasPageLink` guard (slow but correct), a missing contest name falls back to `Contest <id>`, and an unreadable totals row refuses loudly. The residual risk is a slow add, not a wrong rating. Adding a just-finished contest in the real extension is the only way to confirm it.
+
 ### Scraped markup is quarantined in `services/standings-dom.js`
 
 Every CSS selector and parsing rule for Codeforces' HTML lives in that one file, with ordered fallback chains (contest name tries `.contest-name`, then `.caption`, then `<title>`). A CF layout change should be a one-file fix.
