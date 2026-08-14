@@ -12,7 +12,7 @@ npm run build:chrome    # -> dist/chrome
 
 There is no test suite, linter, or formatter configured. Verification is manual: build, then load `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked).
 
-`dev:firefox` / `build:firefox` exist in package.json but `targets/firefox/manifest.json` does not, so they currently fail at config load. Adding that manifest is all that's needed — the build is target-parameterized.
+The build is still target-parameterized (`TARGET` selects `targets/<name>/manifest.json` and `dist/<name>`), but only `chrome` exists — the previous `dev:firefox` / `build:firefox` scripts were removed because they failed at config load. A real Firefox target needs more than a manifest: `targets/chrome/` depends on `chrome.sidePanel`, which Firefox answers with `sidebar_action`, and CRXJS emits a Chrome-style service-worker loader. Everything under `core/` already sticks to APIs both browsers implement.
 
 Pushing to `main` triggers `.github/workflows/release.yaml`: it builds Chrome, reads the version from `targets/chrome/manifest.json`, **deletes any existing release/tag with that version**, and republishes. Bump the manifest version when you want a distinct release; leaving it unchanged silently replaces the previous one.
 

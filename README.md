@@ -1,129 +1,64 @@
 # CF Trainer
 
-A browser extension that helps you systematically upsolve Codeforces contests by maintaining a queue of contests and presenting unsolved problems sorted by difficulty rating.
+A Chrome extension that turns Codeforces contests into an upsolving queue, ordered easiest-first — including the problems Codeforces never assigned a rating to.
 
-## Features
+## Why
 
-- **Add Contests to Queue**: Easily add any Codeforces contest to your upsolving queue
-- **Sorted Problem List**: View all unsolved problems from your queued contests, automatically sorted by estimated rating
-- **Progress Tracking**: Automatically syncs with your Codeforces submissions to mark problems as solved
-- **Simple Interface**: Clean, focused UI accessible via browser extension popup or side panel
+Upsolving works best in difficulty order, but a lot of problems have no rating: gym and ICPC contests have none at all, and recent rounds go unrated for a while. CF Trainer estimates the missing ones instead of skipping them.
 
-## Installation
+The estimate comes from the contest itself. Given everyone who competed and how many of them solved a problem, there is exactly one rating **R** at which the Elo model predicts that many solves — so the extension binary-searches for it. A problem solved by 40 people in a room of 3000 gets the rating that difficulty implies, whether or not Codeforces ever published one. Team contests collapse each team into the single rating at which it would lose half the time.
 
-### From GitHub Releases (Recommended)
+## Install
 
-1. Go to the [Releases page](https://github.com/your-username/cf-trainer/releases)
-2. Download the latest `cf-trainer-chrome-vX.X.zip` file
-3. Unzip the downloaded file
-4. Open Chrome and go to `chrome://extensions/`
-5. Enable "Developer mode" in the top right
-6. Click "Load unpacked" and select the unzipped folder
+1. Download `cf-trainer-chrome-vX.Y.zip` from the [Releases page](https://github.com/jain-arham-hsr/cf-trainer/releases) and unzip it.
+2. Open `chrome://extensions` and turn on **Developer mode** (top right).
+3. Click **Load unpacked** and select the unzipped folder.
+4. Click the extension icon to open the side panel.
 
-### Manual Build (For Developers)
+## Setup
 
-#### Prerequisites
+The extension needs read-only access to your Codeforces account to see what you've already solved.
 
-- Node.js (v16 or higher)
-- npm or yarn
+1. Generate a key pair at [codeforces.com/settings/api](https://codeforces.com/settings/api).
+2. Open the ⚙ settings from the side panel and enter your handle, key and secret.
+3. Press **Test connection** to confirm they work before relying on them.
 
-#### Building the Extension
+Your key and secret are stored in this browser only. They are used to sign requests to codeforces.com and are sent nowhere else — and they're deliberately excluded from the JSON backup, so exporting your queue never leaks them.
 
-1. Clone the repository:
+## Use
 
-   ```bash
-   git clone <repository-url>
-   cd cf-trainer
-   ```
+**Add a contest.** Open any Codeforces contest or gym page, then press **+ Add Contest** on the Contests tab. Working out the ratings takes a few seconds — the panel reports each step. Contests are only saved once every problem has a rating, so a partial result is never stored.
 
-2. Install dependencies:
+**Work the queue.** The Queue tab lists every unsolved problem from every tracked contest, sorted by rating, easiest first.
 
-   ```bash
-   npm install
-   ```
+**Stay in sync.** Press ↻ to pull your latest accepted submissions. Solved problems drop out of the queue, and contests you've fully cleared drop out of the list.
 
-3. Build for your browser:
-   - For Chrome:
-     ```bash
-     npm run build:chrome
-     ```
-   - For Firefox:
-     ```bash
-     npm run build:firefox
-     ```
+**See the shape of your queue.** The Stats tab charts your pending problems by rating, coloured by Codeforces rank band, and ranks the tags you're facing most — filterable to a rating range, so you can ask "what topics are hurting me between 1600 and 1900?"
 
-#### Loading the Extension
+**Prune.** On the Contests tab, hover a row and hold the ✕ for a moment to remove it. A stray click does nothing.
 
-##### Chrome
+**Back up.** Export writes a JSON file you can re-import later. Enable auto-export in settings to have that file kept current automatically as your queue changes.
 
-1. Open Chrome and go to `chrome://extensions/`
-2. Enable "Developer mode" in the top right
-3. Click "Load unpacked"
-4. Select the `dist` folder (for Chrome) or `dist-firefox` folder (for Firefox)
+## Build from source
 
-##### Firefox
+Requires Node 18+.
 
-1. Open Firefox and go to `about:debugging`
-2. Click "This Firefox" in the sidebar
-3. Click "Load Temporary Add-on"
-4. Select the `manifest.json` file from the built extension folder
-
-## Usage
-
-### Initial Setup
-
-1. Click the extension icon in your browser toolbar
-2. Go to Options (accessible via the extension menu or options page)
-3. Enter your Codeforces API key and secret (get these from [Codeforces API settings](https://codeforces.com/settings/api))
-4. Enter your Codeforces handle
-
-### Adding Contests
-
-1. Navigate to any Codeforces contest page (e.g., `https://codeforces.com/contest/123`)
-2. Click the extension icon
-3. Click "Add to Queue" to add the contest to your upsolving queue
-
-### Viewing Your Upsolving Queue
-
-- Open the extension's side panel or popup to see all unsolved problems from your queued contests
-- Problems are automatically sorted by estimated rating (easiest first)
-- Problems are marked as solved when you submit correct solutions on Codeforces
-- Click the refresh button to sync your latest submissions
-
-## Development
-
-### Running in Development Mode
-
-- Chrome: `npm run dev:chrome`
-- Firefox: `npm run dev:firefox`
-
-This will start a development server with hot reloading.
-
-### Project Structure
-
-```
-cf-trainer/
-├── core/                    # Core business logic
-│   ├── services/           # API and data services
-│   └── ui/                 # User interface components
-├── targets/                # Browser-specific builds
-│   └── chrome/             # Chrome extension files
-├── public/                 # Static assets
-└── dist/                   # Built extension (generated)
+```bash
+npm install
+npm run build:chrome   # -> dist/chrome
 ```
 
-## Contributing
+Then load `dist/chrome` via **Load unpacked** as above. `npm run dev:chrome` runs a dev server with hot reload.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+## Limitations
 
-## License
+- **Chrome only.** The side panel uses `chrome.sidePanel`, which has no direct Firefox equivalent; a port would need `sidebar_action` and a Firefox manifest under `targets/`. The shared code in `core/` already avoids Chrome-only APIs.
+- **Some data is scraped.** Problem names and official solve counts come from the standings page, because the API doesn't expose them. If Codeforces changes that page's markup, adding contests will break until the scraper is updated.
+- **Requests are deliberately slow.** Scraping is spaced out with pauses to avoid tripping Codeforces' rate limiting. Adding a contest is not instant by design.
+- **Gym tags are usually empty.** Gym problems sit outside the Codeforces tag taxonomy, so tag stats mostly reflect official contests.
 
-ISC License - see package.json for details
+## Licence
 
-## Disclaimer
+ISC — see [LICENSE](LICENSE).
 
-This extension is not officially affiliated with Codeforces. Use at your own risk and in accordance with Codeforces terms of service.
+Not affiliated with Codeforces. Use in accordance with their terms of service.

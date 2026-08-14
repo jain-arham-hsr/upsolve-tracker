@@ -5,6 +5,7 @@ import {
   saveCredentials,
   loadCredentials,
 } from "../../services/secure-store";
+import { CodeforcesService } from "../../services/codeforces-service.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const handleInput = document.getElementById("cf-handle");
@@ -18,6 +19,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const saveBtn = document.getElementById("save-btn");
   const saveMsg = document.getElementById("save-msg");
+
+  const testBtn = document.getElementById("test-btn");
+  const testMsg = document.getElementById("test-msg");
 
   let pendingDirHandle = null;
 
@@ -75,7 +79,48 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // ==========================================
-  // JOB 3: SAVE TO STORAGE
+  // JOB 3: VERIFY CREDENTIALS
+  // ==========================================
+  const showTestResult = (message, ok) => {
+    testMsg.textContent = message;
+    testMsg.classList.remove("hidden");
+    testMsg.classList.toggle("success", ok);
+    testMsg.classList.toggle("failure", !ok);
+  };
+
+  testBtn.addEventListener("click", async () => {
+    const handle = handleInput.value.trim();
+    const apiKey = apiKeyInput.value.trim();
+    const apiSecret = apiSecretInput.value.trim();
+
+    if (!handle || !apiKey || !apiSecret) {
+      showTestResult("Fill in all three fields first.", false);
+      return;
+    }
+
+    testBtn.disabled = true;
+    showTestResult("Checking…", true);
+
+    try {
+      // user.status needs a valid signature AND a real handle, so one call
+      // covers every way these three fields can be wrong.
+      const service = new CodeforcesService(apiKey, apiSecret);
+      const submissions = await service.getUserStatus(handle);
+      showTestResult(
+        `✓ Connected as ${handle} — ${submissions.length} recent submissions.`,
+        true,
+      );
+    } catch (error) {
+      // Codeforces explains the failure well; pass it through rather than
+      // guessing which field was wrong.
+      showTestResult(`✕ ${error.message}`, false);
+    } finally {
+      testBtn.disabled = false;
+    }
+  });
+
+  // ==========================================
+  // JOB 4: SAVE TO STORAGE
   // ==========================================
   saveBtn.addEventListener("click", async () => {
     await Promise.all([

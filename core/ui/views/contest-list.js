@@ -61,6 +61,7 @@ export class ContestList extends HTMLElement {
     this.fileInput = this.querySelector("#import-file-input");
     this.alertDiv = this.querySelector("#contest-alert");
     this.filterSelect = this.querySelector("#contest-filter");
+    this.countLabel = this.querySelector("#contest-count");
 
     this.btnAddContest.disabled = true;
     this.btnAddContest.setAttribute("data-tooltip", "Checking current page...");
@@ -288,6 +289,7 @@ export class ContestList extends HTMLElement {
     const allContests = await LocalDB.getTrackedContests();
 
     if (allContests.length === 0) {
+      this.countLabel.textContent = "Nothing queued";
       this.container.innerHTML = `<div class="muted">No contests in queue.</div>`;
       return;
     }
@@ -299,6 +301,12 @@ export class ContestList extends HTMLElement {
             (contest) => (contest.type ?? "").toUpperCase() === this.filter,
           )
     ).sort(byStartTimeDesc);
+
+    // Says "8 of 14" only when a filter is actually hiding something.
+    this.countLabel.textContent =
+      contests.length === allContests.length
+        ? `${allContests.length} contest${allContests.length === 1 ? "" : "s"}`
+        : `${contests.length} of ${allContests.length} contests`;
 
     if (contests.length === 0) {
       const label = this.filter === "OFFICIAL" ? "official" : "gym";

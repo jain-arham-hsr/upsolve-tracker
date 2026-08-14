@@ -12,30 +12,51 @@
   <div class="settings-container">
     <h2>CF Trainer Settings</h2>
 
+    <p class="intro">
+      CF Trainer needs read-only access to your Codeforces account to see which problems
+      you've solved. Your key and secret are stored in this browser only — they're used to
+      sign requests to codeforces.com and are never sent anywhere else. They're also kept
+      out of the JSON backup on purpose.
+    </p>
+
     <div class="form-group">
       <label for="cf-handle">Codeforces Handle</label>
-      <p class="help-text">Used to verify your solved problems during a manual refresh.</p>
+      <p class="help-text">Used to look up your accepted submissions.</p>
       <input type="text" id="cf-handle" placeholder="e.g., tourist" spellcheck="false" />
     </div>
 
     <div class="form-group">
       <label for="api-key">API Key</label>
-      <p class="help-text">Found in your Codeforces settings under the 'API' tab.</p>
+      <p class="help-text">
+        Generate a key pair at
+        <a href="https://codeforces.com/settings/api" target="_blank" rel="noreferrer">codeforces.com/settings/api</a>,
+        then paste both halves below.
+      </p>
       <input type="text" id="api-key" placeholder="e.g., 70f9b..." spellcheck="false" />
     </div>
 
     <div class="form-group">
       <label for="api-secret">API Secret</label>
-      <p class="help-text">Your private API secret. This is stored only on your local machine.</p>
+      <p class="help-text">The secret half of the same key pair.</p>
       <input type="password" id="api-secret" placeholder="••••••••" spellcheck="false" />
+    </div>
+
+    <div class="form-group">
+      <button id="test-btn" class="btn secondary">Test connection</button>
+      <span id="test-msg" class="status-text hidden"></span>
+      <p class="help-text">Checks the handle and key against Codeforces before you rely on them.</p>
     </div>
 
     <div class="form-group">
       <div class="checkbox-row">
         <input type="checkbox" id="auto-export-checkbox">
-        <label for="auto-export-checkbox">Auto-export queue on contest addition</label>
+        <label for="auto-export-checkbox">Keep a backup file up to date</label>
       </div>
-      <p class="help-text">Automatically saves your upsolve_queue.txt to a local folder whenever a new contest is tracked.</p>
+      <p class="help-text">
+        Writes <code>cf_trainer_backup.json</code> to a folder you choose, refreshing it
+        whenever your queue changes — adding a contest, removing one, or syncing.
+        Import it from the Contests tab to restore.
+      </p>
 
       <div id="folder-info" class="folder-controls hidden">
         <span id="folder-status" class="status-text success">✓ Folder: None</span>
