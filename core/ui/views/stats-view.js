@@ -4,6 +4,7 @@ import { countPendingTags } from "../../tag-service.js";
 import { escapeHtml } from "../escape-html.js";
 
 const BUCKET_SIZE = 100;
+const RANGE_KEY = "cf_trainer.tag_rating_range";
 
 /**
  * Codeforces rank bands, so a bar's colour carries the same meaning it does
@@ -30,6 +31,18 @@ export class StatsView extends HTMLElement {
     this.tagList = this.querySelector("#stats-tags");
     this.summary = this.querySelector("#stats-summary");
     this.hint = this.querySelector("#stats-hint");
+    this.rangeBox = this.querySelector("#tag-range");
+    this.rangeMin = this.querySelector("#tag-range-min");
+    this.rangeMax = this.querySelector("#tag-range-max");
+    this.rangeCaption = this.querySelector("#tag-range-caption");
+
+    // The view is rebuilt on every navigation, so the selection is persisted
+    // the same way the contest list's type filter is.
+    const stored = await chrome.storage.local.get({ [RANGE_KEY]: null });
+    this.range = stored[RANGE_KEY];
+
+    this.rangeMin.addEventListener("change", () => this.onRangeChange("min"));
+    this.rangeMax.addEventListener("change", () => this.onRangeChange("max"));
 
     await this.render();
   }
@@ -43,13 +56,76 @@ export class StatsView extends HTMLElement {
   }
 
   async render() {
-    const contests = await LocalDB.getTrackedContests();
-    const { ratings, unrated } = collectRatings(contests);
+    this.contests = await LocalDB.getTrackedContests();
+    const { ratings, unrated } = collectRatings(this.contests);
+    this.ratings = ratings;
 
-    this.renderHint(contests);
+    this.renderHint(this.contests);
     this.renderHistogram(ratings);
-    this.renderTags(countPendingTags(contests));
+    this.syncRangeControls(ratings);
+    this.renderTags();
     this.summary.textContent = buildSummary(ratings, unrated);
+  }
+
+  /**
+   * Rebuilds the From/To options from the buckets the queue actually spans,
+   * and clamps any stored selection into them — the queue changes shape as
+   * contests are added and solved, so a saved range can fall out of bounds.
+   */
+  syncRangeControls(ratings) {
+    if (ratings.length === 0) {
+      this.bounds = null;
+      this.rangeBox.classList.add("hidden");
+      return;
+    }
+
+    const lowest = bucketOf(Math.min(...ratings));
+    const highest = bucketOf(Math.max(...ratings));
+    this.bounds = { lowest, highest };
+
+    // A stored range that no longer overlaps the queue at all resets to the
+    // full span; clamping it would silently pin the view to one end bucket.
+    const stored = this.range;
+    const overlaps = stored && stored.min <= highest && stored.max >= lowest;
+
+    let min = overlaps ? clamp(stored.min, lowest, highest) : lowest;
+    let max = overlaps ? clamp(stored.max, lowest, highest) : highest;
+    if (min > max) [min, max] = [lowest, highest];
+    this.range = { min, max };
+
+    const options = [];
+    for (let bucket = lowest; bucket <= highest; bucket += BUCKET_SIZE) {
+      options.push(`<option value="${bucket}">${bucket}</option>`);
+    }
+
+    this.rangeMin.innerHTML = options.join("");
+    this.rangeMax.innerHTML = options.join("");
+    this.rangeMin.value = String(min);
+    this.rangeMax.value = String(max);
+
+    // A single bucket leaves nothing to choose between.
+    this.rangeBox.classList.toggle("hidden", options.length < 2);
+  }
+
+  async onRangeChange(changed) {
+    let min = Number(this.rangeMin.value);
+    let max = Number(this.rangeMax.value);
+
+    // Pushing one endpoint past the other drags it along, rather than
+    // leaving an inverted range that silently matches nothing.
+    if (min > max) {
+      if (changed === "min") {
+        max = min;
+        this.rangeMax.value = String(max);
+      } else {
+        min = max;
+        this.rangeMin.value = String(min);
+      }
+    }
+
+    this.range = { min, max };
+    await chrome.storage.local.set({ [RANGE_KEY]: this.range });
+    this.renderTags();
   }
 
   renderHint(contests) {
@@ -74,7 +150,7 @@ export class StatsView extends HTMLElement {
 
     const counts = new Map();
     ratings.forEach((rating) => {
-      const bucket = Math.floor(rating / BUCKET_SIZE) * BUCKET_SIZE;
+      const bucket = bucketOf(rating);
       counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
     });
 
@@ -102,9 +178,24 @@ export class StatsView extends HTMLElement {
     this.histogram.innerHTML = rows.join("");
   }
 
-  renderTags(tagCounts) {
+  renderTags() {
+    // Only narrow the count when the selection is actually narrower than the
+    // queue; at full span unrated problems still contribute their tags.
+    const isFullSpan =
+      !this.bounds ||
+      (this.range.min === this.bounds.lowest &&
+        this.range.max === this.bounds.highest);
+    const range = isFullSpan ? null : this.range;
+
+    const tagCounts = countPendingTags(this.contests, range);
+    this.renderRangeCaption(range, tagCounts.length);
+
     if (tagCounts.length === 0) {
-      this.tagList.innerHTML = `<div class="stats-empty">No tags on the pending problems.</div>`;
+      this.tagList.innerHTML = `<div class="stats-empty">${
+        range
+          ? "No tagged problems in that rating range."
+          : "No tags on the pending problems."
+      }</div>`;
       return;
     }
 
@@ -125,6 +216,30 @@ export class StatsView extends HTMLElement {
       )
       .join("");
   }
+
+  renderRangeCaption(range, tagCount) {
+    if (!this.bounds) {
+      this.rangeCaption.textContent = "";
+      return;
+    }
+
+    const matched = range
+      ? this.ratings.filter(
+          (rating) => rating >= range.min && rating <= range.max,
+        ).length
+      : this.ratings.length;
+
+    const scope = range ? `rated ${range.min}–${range.max}` : "across all ratings";
+    this.rangeCaption.textContent = `${tagCount} tag${tagCount === 1 ? "" : "s"} across ${matched} problem${matched === 1 ? "" : "s"} ${scope}`;
+  }
+}
+
+function bucketOf(rating) {
+  return Math.floor(rating / BUCKET_SIZE) * BUCKET_SIZE;
+}
+
+function clamp(value, low, high) {
+  return Math.min(Math.max(value, low), high);
 }
 
 /**

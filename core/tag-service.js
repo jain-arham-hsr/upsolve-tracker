@@ -55,14 +55,22 @@ export async function syncOfficialTags(cfService, contests) {
  * Counts tag occurrences across the pending problems of the given contests.
  * A problem with three tags contributes to three counts.
  *
+ * @param {object[]} contests
+ * @param {{ min: number, max: number }} [range] - Inclusive rating bounds.
+ *   Unrated problems can't be placed on the scale, so they drop out whenever
+ *   a range is supplied; pass nothing to count everything.
  * @returns {{ tag: string, count: number }[]} Sorted by count, then name.
  */
-export function countPendingTags(contests) {
+export function countPendingTags(contests, range = null) {
   const counts = new Map();
 
   contests.forEach((contest) => {
     contest.problems.forEach((prob) => {
       if (prob.solved) return;
+      if (range) {
+        if (typeof prob.rating !== "number") return;
+        if (prob.rating < range.min || prob.rating > range.max) return;
+      }
       (prob.tags ?? []).forEach((tag) => {
         counts.set(tag, (counts.get(tag) ?? 0) + 1);
       });

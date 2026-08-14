@@ -644,6 +644,31 @@ cf-stats-view,
 }
 
 /* --- Tag Frequency --- */
+.tag-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.filter-select.compact {
+  padding: 5px 24px 5px 8px;
+  font-size: 0.75rem;
+  background-position: right 8px center;
+}
+
+.tag-range-sep {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.tag-range-caption {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
 .tag-row {
   padding: 6px 0;
 }
