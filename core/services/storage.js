@@ -52,37 +52,8 @@ export class LocalDB {
     );
   }
 
-  // ==========================================
-  // 2. SOLVED CACHE (The Dynamic Data)
-  // ==========================================
-
-  /**
-   * Retrieves the user's solved problems.
-   * Converts the stored Array into a Set for ultra-fast O(1) lookups in the UI.
-   */
-  static async getSolvedCache() {
-    const data = await chrome.storage.local.get({ solvedCache: [] });
-    return new Set(data.solvedCache);
-  }
-
-  /**
-   * Saves the list of solved problem IDs (e.g., ["1800-A", "123456-B"]).
-   * Note: We must store it as an Array because Sets don't serialize well in Chrome Storage.
-   */
-  static async updateSolvedCache(solvedArray) {
-    await chrome.storage.local.set({ solvedCache: Array.from(solvedArray) });
-  }
-
-  // ==========================================
-  // 3. USER CONFIGURATION
-  // ==========================================
-
-  static async getHandle() {
-    const data = await chrome.storage.local.get({ cfHandle: "" });
-    return data.cfHandle;
-  }
-
-  static async setHandle(handle) {
-    await chrome.storage.local.set({ cfHandle: handle });
-  }
+  // Settings live under dotted `cf_trainer.*` keys, read directly by the code
+  // that needs them; credentials live in IndexedDB (see secure-store.js).
+  // Solved state is derived fresh from user.status on every sync rather than
+  // cached, so there is deliberately nothing else here.
 }

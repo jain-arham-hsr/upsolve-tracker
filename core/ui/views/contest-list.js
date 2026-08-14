@@ -7,6 +7,7 @@ import {
   writeBackup,
 } from "../../services/auto-export.js";
 import { byStartTimeDesc } from "../../start-time-service.js";
+import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
 
 const FILTER_KEY = "cf_trainer.contest_filter";
@@ -14,26 +15,6 @@ const FILTER_KEY = "cf_trainer.contest_filter";
 /** How long the remove button must be held. Drives the fill animation too. */
 const HOLD_MS = 700;
 
-/**
- * Import writes straight into chrome.storage, so a wrong file would quietly
- * replace the queue. Returns a human-readable reason to refuse, or null.
- */
-function describeBackupProblem(data) {
-  if (!data || typeof data !== "object" || Array.isArray(data)) {
-    return "That file isn't a CF Trainer backup.";
-  }
-  if (!Array.isArray(data.trackedContests)) {
-    return "That file has no contest queue in it.";
-  }
-  // some(), not find(): a null entry is itself falsy and would slip through.
-  const malformed = data.trackedContests.some(
-    (contest) => !contest?.id || !Array.isArray(contest.problems),
-  );
-  if (malformed) {
-    return "That backup has malformed contest entries, so it wasn't imported.";
-  }
-  return null;
-}
 
 export class ContestList extends HTMLElement {
   constructor() {

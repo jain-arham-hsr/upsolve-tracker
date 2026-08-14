@@ -10,7 +10,13 @@ npm run dev:chrome      # Vite dev server (port 5173, strictPort) + CRXJS HMR
 npm run build:chrome    # -> dist/chrome
 ```
 
-There is no test suite, linter, or formatter configured. Verification is manual: build, then load `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked).
+```bash
+npm test                # node --test over tests/ — no framework, no browser
+```
+
+`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, backup validation and queue ordering. UI wiring has no coverage — verify that manually by building and loading `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked). There is no linter or formatter configured.
+
+`tests/sampling.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
 
 The build is still target-parameterized (`TARGET` selects `targets/<name>/manifest.json` and `dist/<name>`), but only `chrome` exists — the previous `dev:firefox` / `build:firefox` scripts were removed because they failed at config load. A real Firefox target needs more than a manifest: `targets/chrome/` depends on `chrome.sidePanel`, which Firefox answers with `sidebar_action`, and CRXJS emits a Chrome-style service-worker loader. Everything under `core/` already sticks to APIs both browsers implement.
 
@@ -23,7 +29,7 @@ Pushing to `main` triggers `.github/workflows/release.yaml`: it builds Chrome, r
 - The manifest is the entry-point graph. HTML entries (`side_panel.default_path`, `options_ui.page`) and the service worker point at **source** paths (`core/ui/index.html`, `targets/chrome/background.js`); CRXJS crawls and rewrites them. A new page must be registered in the manifest to be built.
 - `@core` aliases to `core/`, though most existing imports use relative paths.
 - `core/` is target-agnostic business logic; `targets/<browser>/` holds only the manifest and background worker. Keep browser-specific glue in `targets/`.
-- `linkedom` is a declared dependency but unused — parsing uses the browser's `DOMParser`.
+- `linkedom` is a devDependency used only by `tests/standings-dom.test.js` to parse HTML in Node; shipped code uses the browser's `DOMParser`.
 
 ## Architecture
 
@@ -58,14 +64,24 @@ What works, and what's implemented, is two strata:
 
 Verified against full-field estimates on simulated fields of 3k–45k: 30 of 33 cases reproduce the rating exactly, the rest are one 100-point bucket off. Contests of 30 pages or fewer are still read whole, since sampling would cost the same. The last page is confirmed to actually be last before its number is used to size the field — a wrong count would undercount the field and skew every rating.
 
-### Tags
+### Scraped markup is quarantined in `services/standings-dom.js`
 
-Tags are absent from the standings HTML, so `tag-service.js` gets them from the API, and the source differs by contest type:
+Every CSS selector and parsing rule for Codeforces' HTML lives in that one file, with ordered fallback chains (contest name tries `.contest-name`, then `.caption`, then `<title>`). A CF layout change should be a one-file fix.
+
+**Extractors return `null`, never a plausible default.** This is the important invariant. The old code left solve counts at `0` when the totals row went missing and `parseInt(...) || 0` turned an unparseable cell into a zero — so a markup change didn't break anything visibly, it produced *confidently wrong ratings* that were stored and sorted like real ones. Returning `null` forces the caller to decide.
+
+`contest-manager.js` makes that decision as late as possible: it only refuses when unreadable counts actually matter, i.e. when some problem has no published rating to fall back on. A rated official contest doesn't need the totals row at all.
+
+### Tags and published ratings
+
+Both come from `problemset.problems` via `problemset-sync.js` (`tag-service.js` now only counts tags for the stats view). Ratings are preferred over estimates — same quantity, measured rather than inferred — and `problem.ratingSource` records `"official"` or `"estimated"`. Because CF publishes ratings days after a round, the weekly re-check means estimates converge to real ratings over time; a contest added right after it ends starts estimated and settles.
+
+The tag source differs by contest type:
 
 - **Official** — `problemset.problems`, one ~2 MB request covering all ~11k problems, keyed by `contestId-index`. The per-contest alternative (`contest.standings`) also returns tags but embeds every participant row — ~12 MB for one Div. 3 — so it must not be used in a loop. Note this endpoint rejects `from`/`count` for non-gym contests; it only answers anonymous parameter-less GETs.
 - **Gym** — absent from the problemset entirely. Tags are lifted from the `problems` array of the standings response that adding a gym already fetches, and are usually empty since gyms sit outside CF's taxonomy.
 
-`contest.tagsSyncedAt` records *when* a tag source was consulted, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever. Records written before this field existed carry a `tagsSynced` boolean instead and are read as "synced long ago".
+`contest.tagsSyncedAt` records *when* the problemset was last consulted, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever. Records written before this field existed carry a `tagsSynced` boolean instead and are read as "synced long ago".
 
 CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `syncOfficialTags` therefore re-checks a contest that still has bare problems, but only once a week; contests where every problem is tagged are never re-requested. It runs at add time and from the refresh, and costs at most one request per sync regardless of how many contests are stale.
 

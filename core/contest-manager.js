@@ -9,7 +9,7 @@ import {
 import { getProblemStats } from "./get-prob-stats.js";
 import { buildSolvedKeys } from "./progress-manager.js";
 import { loadCredentials } from "./services/secure-store.js";
-import { syncOfficialTags } from "./tag-service.js";
+import { syncOfficialProblemData } from "./problemset-sync.js";
 import { syncStartTimes } from "./start-time-service.js";
 
 export async function processNewContest(url, onProgress = () => {}) {
@@ -36,44 +36,80 @@ export async function processNewContest(url, onProgress = () => {}) {
     const cfService = new CodeforcesService(apiKey, apiSecret);
 
     onProgress("Reading the standings…");
-    const { contestName, problems, tagsSynced, startTimeSeconds } =
-      await getProblemStats(type, contestId, cfService);
+    const {
+      contestName,
+      problems,
+      tagsSynced,
+      startTimeSeconds,
+      solveCountsRead,
+    } = await getProblemStats(type, contestId, cfService);
 
-    onProgress("Measuring the field…");
-    let distribution = { strata: [] };
-    if (type === "contest") {
-      distribution = await getOfficialRatingDist(
-        cfService,
-        contestId,
-        onProgress,
-      );
-      if (distributionSize(distribution) === 0) {
-        distribution = await getGymRatingDist(cfService, contestId);
-      }
-    } else {
-      distribution = await getGymRatingDist(cfService, contestId);
-    }
+    const contestData = {
+      id: contestId,
+      name: contestName,
+      type: type === "contest" ? "OFFICIAL" : "GYM",
+      problems,
+      tagsSyncedAt: tagsSynced ? Date.now() : null,
+      startTimeSeconds,
+      addedAt: Date.now(),
+    };
 
-    console.log(
-      `[Contest Manager] Distribution: ${distributionSize(distribution)} competitors read, ` +
-        `representing ~${Math.round(
-          distribution.strata.reduce(
-            (sum, s) => sum + s.ratings.length * s.scale,
-            0,
-          ),
-        )}.`,
+    // Codeforces' own ratings are the same quantity the estimator approximates,
+    // so take them where they exist. For a rated official contest this leaves
+    // nothing to estimate, and the scraped solve counts stop mattering.
+    await syncOfficialProblemData(cfService, [contestData], onProgress);
+
+    const needsEstimate = problems.filter(
+      (problem) => problem.rating === null,
     );
 
-    if (distributionSize(distribution) > 0) {
-      onProgress("Estimating problem ratings…");
-      problems.forEach((problem) => {
-        if (problem.rating === null) {
+    // Only now is it knowable whether the unreadable totals row actually
+    // matters. Estimating from counts we failed to parse would silently invent
+    // ratings, so refuse instead.
+    if (needsEstimate.length > 0 && !solveCountsRead) {
+      throw new Error(
+        `Couldn't read the solve counts for ${type} ${contestId}, and ${needsEstimate.length} ` +
+          `problem(s) have no published rating to fall back on. Codeforces may have changed ` +
+          `its standings layout.`,
+      );
+    }
+
+    if (needsEstimate.length > 0) {
+      onProgress("Measuring the field…");
+      let distribution = { strata: [] };
+      if (type === "contest") {
+        distribution = await getOfficialRatingDist(
+          cfService,
+          contestId,
+          onProgress,
+        );
+        if (distributionSize(distribution) === 0) {
+          distribution = await getGymRatingDist(cfService, contestId);
+        }
+      } else {
+        distribution = await getGymRatingDist(cfService, contestId);
+      }
+
+      console.log(
+        `[Contest Manager] Distribution: ${distributionSize(distribution)} competitors read, ` +
+          `representing ~${Math.round(
+            distribution.strata.reduce(
+              (sum, s) => sum + s.ratings.length * s.scale,
+              0,
+            ),
+          )}.`,
+      );
+
+      if (distributionSize(distribution) > 0) {
+        onProgress("Estimating problem ratings…");
+        needsEstimate.forEach((problem) => {
           problem.rating = estimateProblemRating(
             distribution,
             problem.officialSolves,
           );
-        }
-      });
+          if (problem.rating !== null) problem.ratingSource = "estimated";
+        });
+      }
     }
 
     // --- REMOVED THE 1500 FALLBACK COMPLETELY ---
@@ -95,32 +131,18 @@ export async function processNewContest(url, onProgress = () => {}) {
       );
     }
 
-    console.table(problems);
-
     // --- RESTORED YOUR STRICT VALIDATION ---
-    const allRated = problems.every((problem) => problem.rating !== null);
+    const missing = problems.filter((problem) => problem.rating === null);
 
-    const contestData = {
-      id: contestId,
-      name: contestName,
-      type: type === "contest" ? "OFFICIAL" : "GYM",
-      problems,
-      tagsSyncedAt: tagsSynced ? Date.now() : null,
-      startTimeSeconds,
-      addedAt: Date.now(),
-    };
-
-    await syncOfficialTags(cfService, [contestData], onProgress);
     await syncStartTimes(cfService, [contestData], onProgress);
 
-    if (allRated) {
+    if (missing.length === 0) {
       onProgress("Saving to your queue…");
       await LocalDB.addTrackedContest(contestData);
     } else {
       console.warn("[Contest Manager] Skipping storage. Missing ratings.");
-      const missing = problems.filter((problem) => problem.rating === null);
       throw new Error(
-        distributionSize(distribution) === 0
+        missing.length === problems.length
           ? `Couldn't rate this contest: Codeforces returned no participant ratings for ${contestId}. Private or unrated standings can't be measured.`
           : `Couldn't rate ${missing.length} of ${problems.length} problems (${missing.map((p) => p.index).join(", ")}), so the contest wasn't added.`,
       );

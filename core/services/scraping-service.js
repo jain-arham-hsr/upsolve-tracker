@@ -1,4 +1,13 @@
 import { HttpClient } from "./http-client.js";
+import {
+  extractHandles,
+  extractProblems,
+  extractSolveCounts,
+  findContestName,
+  findStandingsTable,
+  hasPageLink,
+  highestPageNumber,
+} from "./standings-dom.js";
 
 /**
  * Fetches and parses the standings page for a contest.
@@ -18,33 +27,58 @@ async function fetchStandingsPage(type, contestId, page = null) {
 
 /**
  * Extracts problem metadata and solve counts from a contest standings page.
+ *
  * @param {string} type - "contest" or "gym"
  * @param {string} contestId
- * @returns {{ contestName: string, problems: object[] }}
+ * @returns {{ contestName: string, problems: object[], solveCountsRead: boolean }}
+ *   solveCountsRead is false when the totals row couldn't be parsed. The
+ *   counts are left at 0, which is only safe if nothing goes on to estimate
+ *   ratings from them — so the caller has to check.
  */
 export async function scrapeContestProblems(type, contestId) {
   const doc = await fetchStandingsPage(type, contestId);
-  const standingsTable = doc.querySelector("table.standings");
-  if (!standingsTable) throw new Error("Could not find the standings table.");
 
-  const contestName =
-    doc.querySelector(".contest-name")?.innerText ?? `Contest ${contestId}`;
+  const standingsTable = findStandingsTable(doc);
+  if (!standingsTable) {
+    throw new Error(
+      `Couldn't read the standings for ${type} ${contestId} — the page didn't contain a standings table. ` +
+        `Codeforces may have changed its layout, or the contest may be private.`,
+    );
+  }
 
-  const problems = Array.from(
-    standingsTable.querySelector("tr").querySelectorAll('a[href*="/problem/"]'),
-  ).map((a) => ({
-    index: a.textContent.trim(),
-    name: parseProblemName(a.getAttribute("title")),
-    url: `https://codeforces.com${a.getAttribute("href")}`,
+  const parsed = extractProblems(standingsTable);
+  if (!parsed) {
+    throw new Error(
+      `Couldn't read the problem list for ${type} ${contestId} from the standings header. ` +
+        `Codeforces may have changed its layout.`,
+    );
+  }
+
+  const problems = parsed.map((problem) => ({
+    ...problem,
     rating: null,
+    ratingSource: null,
     officialSolves: 0,
     solved: false,
     tags: [], // Filled from the API; the standings page doesn't carry tags.
   }));
 
-  populateSolveCountsFromTable(standingsTable, problems);
+  const counts = extractSolveCounts(standingsTable, problems.length);
+  if (counts) {
+    counts.forEach((count, i) => {
+      problems[i].officialSolves = count;
+    });
+  } else {
+    console.warn(
+      `[Scraping Service] Solve counts unreadable for ${type} ${contestId}.`,
+    );
+  }
 
-  return { contestName, problems };
+  return {
+    contestName: findContestName(doc) ?? `Contest ${contestId}`,
+    problems,
+    solveCountsRead: counts !== null,
+  };
 }
 
 /**
@@ -159,8 +193,11 @@ async function walkAllPages(contestId, firstHandles, onProgress) {
 /**
  * Evenly spaced page numbers across [from, to], taken at interval midpoints so
  * the sample doesn't lean toward either end of the range.
+ *
+ * Exported for tests: the sampling accuracy this file relies on is only
+ * meaningful if the spread is genuinely even.
  */
-function spreadPages(from, to, count) {
+export function spreadPages(from, to, count) {
   const span = to - from + 1;
   if (span <= count) {
     return Array.from({ length: span }, (_, i) => from + i);
@@ -172,59 +209,4 @@ function spreadPages(from, to, count) {
     pages.add(from + Math.min(span - 1, Math.floor(i * step + step / 2)));
   }
   return [...pages].sort((a, b) => a - b);
-}
-
-function extractHandles(doc) {
-  const standingsTable = doc.querySelector("table.standings");
-  if (!standingsTable) return [];
-
-  const handles = [];
-  standingsTable.querySelectorAll('a[href*="/profile/"]').forEach((link) => {
-    const handle = link.textContent.trim();
-    if (handle) handles.push(handle);
-  });
-  return handles;
-}
-
-function highestPageNumber(doc) {
-  const pages = Array.from(doc.querySelectorAll('a[href*="standings/page/"]'))
-    .map((link) => Number(link.getAttribute("href").match(/page\/(\d+)/)?.[1]))
-    .filter((page) => Number.isFinite(page));
-  return pages.length > 0 ? Math.max(...pages) : 1;
-}
-
-function hasPageLink(doc, page) {
-  return !!doc.querySelector(`a[href*="standings/page/${page}"]`);
-}
-
-// --- Private helpers ---
-
-function parseProblemName(title) {
-  if (!title) return "Unknown Problem";
-  const parts = title.split(" - ");
-  return parts.length > 1 ? parts.slice(1).join(" - ") : title;
-}
-
-function populateSolveCountsFromTable(standingsTable, problems) {
-  const totalsRow = Array.from(standingsTable.querySelectorAll("tr")).find(
-    (row) => row.innerText.includes("Accepted"),
-  );
-  if (!totalsRow) return;
-
-  Array.from(totalsRow.querySelectorAll("td"))
-    .slice(-problems.length)
-    .forEach((cell, i) => {
-      problems[i].officialSolves = parseSolveCount(cell);
-    });
-}
-
-function parseSolveCount(cell) {
-  const firstTextNode = Array.from(cell.childNodes).find(
-    (node) => node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() !== "",
-  );
-  const raw =
-    firstTextNode?.nodeValue.trim() ??
-    cell.firstElementChild?.innerText ??
-    cell.innerText;
-  return parseInt(raw.split(/[\n\s]/)[0].replace(/\D/g, ""), 10) || 0;
 }

@@ -41,7 +41,7 @@ Your key and secret are stored in this browser only. They are used to sign reque
 
 ## Build from source
 
-Requires Node 18+.
+Requires Node 20.19+ or 22.12+ (Vite 8's requirement).
 
 ```bash
 npm install

@@ -10,12 +10,19 @@ import { scrapeContestProblems } from "./services/scraping-service";
  * @returns {{ contestName: string, problems: object[], tagsSynced: boolean }}
  */
 export async function getProblemStats(type, contestId, cfService = null) {
-  const { contestName, problems } = await scrapeContestProblems(type, contestId);
+  const { contestName, problems, solveCountsRead } =
+    await scrapeContestProblems(type, contestId);
 
   if (type !== "gym") {
-    // Official tags and start times come from bulk endpoints — see
-    // tag-service.js and start-time-service.js.
-    return { contestName, problems, tagsSynced: false, startTimeSeconds: null };
+    // Official tags, ratings and start times come from bulk endpoints — see
+    // problemset-sync.js and start-time-service.js.
+    return {
+      contestName,
+      problems,
+      tagsSynced: false,
+      startTimeSeconds: null,
+      solveCountsRead,
+    };
   }
 
   const standings = await cfService.getContestStandings(contestId);
@@ -28,7 +35,15 @@ export async function getProblemStats(type, contestId, cfService = null) {
   const tagsSynced = populateTagsFromStandings(standings, problems);
   const startTimeSeconds = standings?.contest?.startTimeSeconds ?? null;
 
-  return { contestName, problems, tagsSynced, startTimeSeconds };
+  // Gym solve counts come from the API rather than the totals row, so the
+  // scraped counts don't matter here.
+  return {
+    contestName,
+    problems,
+    tagsSynced,
+    startTimeSeconds,
+    solveCountsRead: true,
+  };
 }
 
 function populateTagsFromStandings(standings, problems) {

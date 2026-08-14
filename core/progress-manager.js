@@ -1,7 +1,7 @@
 import { CodeforcesService } from "./services/codeforces-service.js";
 import { LocalDB } from "./services/storage.js";
 import { loadCredentials } from "./services/secure-store.js";
-import { syncOfficialTags } from "./tag-service.js";
+import { syncOfficialProblemData } from "./problemset-sync.js";
 import { syncStartTimes } from "./start-time-service.js";
 
 /**
@@ -51,7 +51,7 @@ export async function updateSolvedStatus(onProgress = () => {}) {
 
   // Fill in metadata for contests still missing it. Both no-op once every
   // contest is resolved, so they usually cost nothing.
-  await syncOfficialTags(cfService, trackedContests, onProgress);
+  await syncOfficialProblemData(cfService, trackedContests, onProgress);
   await syncStartTimes(cfService, trackedContests, onProgress);
 
   onProgress("Updating your queue…");
