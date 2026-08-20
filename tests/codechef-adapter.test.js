@@ -159,6 +159,23 @@ test("a parent contest resolves to the division matching your rating", async () 
   assert.equal(contest.problems.length, 1);
 });
 
+test("a resolved parent records the id the user navigated from", async () => {
+  // Without this the add banner compares /START252 against a stored START252D
+  // and offers to add an already-tracked contest.
+  const viaParent = await fetchContestRecord({
+    contestId: "START252", subtype: "STARTERS", session: { rating: 1450 },
+  });
+  assert.equal(viaParent.id, "START252C");
+  assert.equal(viaParent.sourceId, "START252");
+});
+
+test("a contest added directly carries no sourceId", async () => {
+  const direct = await fetchContestRecord({
+    contestId: "START252D", subtype: "STARTERS", session: {},
+  });
+  assert.equal(direct.sourceId, undefined);
+});
+
 test("a parent contest with no known rating names the divisions instead of guessing", async () => {
   await assert.rejects(
     () => fetchContestRecord({ contestId: "START252", subtype: "STARTERS", session: {} }),

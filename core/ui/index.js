@@ -9,12 +9,9 @@ import {
 import { hasCompleteSetup } from "../services/secure-store.js";
 import { processNewContest } from "../contest-manager.js";
 import { LocalDB } from "../services/storage.js";
-import {
-  matchContestUrl,
-  contestKey,
-  makeContestKey,
-} from "../platforms/registry.js";
+import { matchContestUrl, findTrackedContest } from "../platforms/registry.js";
 import { escapeHtml } from "./escape-html.js";
+import { platformIcon } from "./platform-icons.js";
 
 // Inline so it inherits the header's colour and hover transition, which a
 // colour emoji would ignore. Knobs are filled with the header background so
@@ -91,11 +88,13 @@ export class CFApp extends HTMLElement {
         return;
       }
 
-      // Keyed on platform + id: a bare id would call a CodeChef contest
-      // "already tracked" because a Codeforces one shares its number.
-      const key = makeContestKey(match.platform.id, match.contestId);
-      const tracked = (await LocalDB.getTrackedContests()).some(
-        (contest) => contestKey(contest) === key,
+      // Matches the stored id or the one it was added from — a CodeChef
+      // parent resolves to a division, so /START252 is stored as START252D
+      // and a bare key comparison would offer to add it a second time.
+      const tracked = findTrackedContest(
+        await LocalDB.getTrackedContests(),
+        match.platform.id,
+        match.contestId,
       );
 
       this.pendingContest = { url: tab.url, match, tracked };
@@ -111,12 +110,19 @@ export class CFApp extends HTMLElement {
     if (!pending) return;
 
     const { match, tracked } = pending;
-    const name = escapeHtml(`${match.platform.shortLabel} ${match.contestId}`);
+
+    // Name the contest actually stored, not the URL: landing on a CodeChef
+    // parent should say which division is tracked.
+    const shownId = tracked?.id ?? match.contestId;
     const label = state.label ?? (tracked ? "\u2713 Added" : "Add");
     const disabled = state.busy || tracked ? " disabled" : "";
 
     this.addBanner.innerHTML = `
-      <span class="add-banner-text">${tracked ? "Tracking" : "Add"} <strong>${name}</strong></span>
+      <span class="add-banner-text">
+        <span class="add-banner-verb">${tracked ? "Tracking" : "Add"}</span>
+        ${platformIcon(match.platform.id, match.platform.shortLabel)}
+        <strong>${escapeHtml(String(shownId))}</strong>
+      </span>
       <button type="button" id="btn-add-contest" class="btn outline"${disabled}>${escapeHtml(label)}</button>`;
     this.addBanner.classList.remove("hidden");
   }
@@ -133,11 +139,13 @@ export class CFApp extends HTMLElement {
     this.renderAddBanner({ busy: true, label: "Adding\u2026" });
 
     try {
-      await processNewContest(pending.url, (message) =>
+      // The stored record comes back, which is what lets the banner name the
+      // resolved division rather than the parent code the URL carried.
+      const contest = await processNewContest(pending.url, (message) =>
         message === null ? this.clearSyncStatus() : this.setSyncStatus(message),
       );
 
-      pending.tracked = true;
+      pending.tracked = contest;
       this.renderAddBanner();
 
       if (dirHandle && !(await writeBackup(dirHandle))) {

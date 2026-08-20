@@ -58,6 +58,10 @@ export async function fetchContestRecord({
   return {
     id: payload.code,
     platform: codechef.id,
+    // A parent contest resolves to one of its divisions, so the id stored is
+    // not the id the user was looking at. Remember theirs, or the add banner
+    // can never tell that /START252 is already tracked as START252D.
+    ...(payload.code !== contestId ? { sourceId: contestId } : {}),
     name: payload.contest.name ?? `Contest ${payload.code}`,
     type: subtype,
     problems: built,

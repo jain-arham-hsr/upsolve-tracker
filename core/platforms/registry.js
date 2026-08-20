@@ -98,3 +98,27 @@ export function matchesFilter(contest, selected) {
   if (!selected || selected.length === 0) return true;
   return selected.includes(contestFilterKey(contest));
 }
+
+/**
+ * Finds a tracked contest by the id a URL carried.
+ *
+ * Matches the stored id **or** the `sourceId` it was added from: CodeChef
+ * parent contests resolve to a division, so `/START252` is stored as
+ * `START252D`, and a bare key comparison would report it as untracked.
+ *
+ * @returns {object|null}
+ */
+export function findTrackedContest(contests, platformId, contestId) {
+  const key = makeContestKey(platformId, contestId);
+
+  return (
+    (contests ?? []).find((contest) => {
+      if (!contest) return false;
+      if (contestKey(contest) === key) return true;
+      return (
+        contest.sourceId != null &&
+        makeContestKey(contest.platform, contest.sourceId) === key
+      );
+    }) ?? null
+  );
+}

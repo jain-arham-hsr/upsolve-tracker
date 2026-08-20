@@ -304,6 +304,19 @@ cf-stats-view {
   gap: 6px;
 }
 
+/* The rating, in its own platform's units. Tinted by that platform's band via
+   .tone-*, since an untinted "1500" beside an untinted "1757" reads as one
+   shared scale — the comparison the ordering model exists to avoid. */
+.rating {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.rating.is-unrated {
+  color: var(--text-muted);
+}
+
 /* How likely you are to solve it — the value the queue is actually sorted by,
    so it leads. An em dash here means a rating is missing, not a hard problem. */
 .solve-chance {
@@ -940,27 +953,65 @@ cf-stats-view,
   border-radius: 2px;
 }
 
-/* Codeforces rank colours, lightened for the dark panel */
+/* Rank colours, lightened for the dark panel. Defined once as variables so a
+   histogram bar (background) and a rating number (text) cannot drift apart.
+   These mean *rank on that platform* — each descriptor supplies its own
+   thresholds, since a Codeforces 1600 and an AtCoder 1600 are not the same
+   band. Deliberately not reused for the solve-chance chart, where the same
+   ramp would read as a verdict rather than as information. */
+:root {
+  --band-gray: #9e9e9e;
+  --band-green: #4caf50;
+  --band-cyan: #26c6da;
+  --band-blue: #5c85ff;
+  --band-violet: #c77dff;
+  --band-orange: #ffa726;
+  --band-red: #ef5350;
+}
+
 .band-gray {
-  background-color: #9e9e9e;
+  background-color: var(--band-gray);
 }
 .band-green {
-  background-color: #4caf50;
+  background-color: var(--band-green);
 }
 .band-cyan {
-  background-color: #26c6da;
+  background-color: var(--band-cyan);
 }
 .band-blue {
-  background-color: #5c85ff;
+  background-color: var(--band-blue);
 }
 .band-violet {
-  background-color: #c77dff;
+  background-color: var(--band-violet);
 }
 .band-orange {
-  background-color: #ffa726;
+  background-color: var(--band-orange);
 }
 .band-red {
-  background-color: #ef5350;
+  background-color: var(--band-red);
+}
+
+/* The same palette as text, for a rating number in the queue. */
+.tone-gray {
+  color: var(--band-gray);
+}
+.tone-green {
+  color: var(--band-green);
+}
+.tone-cyan {
+  color: var(--band-cyan);
+}
+.tone-blue {
+  color: var(--band-blue);
+}
+.tone-violet {
+  color: var(--band-violet);
+}
+.tone-orange {
+  color: var(--band-orange);
+}
+.tone-red {
+  color: var(--band-red);
 }
 
 /* --- First-run Setup Prompt --- */
@@ -1054,17 +1105,26 @@ cf-stats-view,
 }
 
 .add-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 0.8rem;
   color: var(--text-muted);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+}
+
+.add-banner-verb {
+  flex-shrink: 0;
 }
 
 .add-banner-text strong {
   font-family: "JetBrains Mono", "Courier New", monospace;
   color: var(--text-main);
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .add-banner .btn {

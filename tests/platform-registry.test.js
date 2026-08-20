@@ -12,6 +12,7 @@ import {
   platformOf,
   contestKey,
   makeContestKey,
+  findTrackedContest,
   listPlatforms,
   DEFAULT_PLATFORM_ID,
 } from "../core/platforms/registry.js";
@@ -77,4 +78,33 @@ test("every registered platform implements the descriptor contract", () => {
     assert.ok(platform.capabilities, `${platform.id}.capabilities`);
     assert.equal(typeof platform.capabilities.allowsPartialRatings, "boolean");
   }
+});
+
+test("a contest tracked under a resolved division is found by its parent id", () => {
+  // The add-banner bug: CodeChef /START252 stores as START252D, so a bare key
+  // comparison reported it untracked and offered to add it again.
+  const contests = [
+    { id: "START252D", platform: "codechef", sourceId: "START252", problems: [] },
+    { id: "1993", platform: "codeforces", problems: [] },
+  ];
+
+  assert.equal(findTrackedContest(contests, "codechef", "START252")?.id, "START252D");
+  assert.equal(findTrackedContest(contests, "codechef", "START252D")?.id, "START252D");
+  assert.equal(findTrackedContest(contests, "codeforces", "1993")?.id, "1993");
+});
+
+test("a sourceId does not match across platforms or for other contests", () => {
+  const contests = [
+    { id: "START252D", platform: "codechef", sourceId: "START252", problems: [] },
+  ];
+  assert.equal(findTrackedContest(contests, "codeforces", "START252"), null);
+  assert.equal(findTrackedContest(contests, "codechef", "START251"), null);
+  assert.equal(findTrackedContest([], "codechef", "START252"), null);
+  assert.equal(findTrackedContest(undefined, "codechef", "START252"), null);
+});
+
+test("a null entry in storage doesn't break the lookup", () => {
+  // Backups have been seen carrying these; describeBackupProblem refuses them,
+  // but the lookup runs against whatever is already stored.
+  assert.equal(findTrackedContest([null, { id: "1", platform: "codeforces" }], "codeforces", "1")?.id, "1");
 });

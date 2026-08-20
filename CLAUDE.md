@@ -48,6 +48,7 @@ This replaced two copies of the same Codeforces URL regex (`contest-manager.js` 
 Two conventions the registry depends on:
 
 - **Records written before platforms existed carry no `platform` field and read as Codeforces.** That fallback *is* the migration — `platformOf()` and `contestKey()` both default, so nothing has to be rewritten on disk. A `platform` that is present but unrecognised throws instead of defaulting, because that means data from a newer build.
+- **A contest may also carry `sourceId`** — the id the user navigated from, when it differs from the one stored. CodeChef parent contests resolve to a division, so `/START252` is stored as `START252D`; `findTrackedContest()` matches either, without which the add banner offers to add an already-tracked contest.
 - **Contest identity is `platform:id`, never the bare id** (`contestKey`). Codeforces contest 1000 and a CodeChef contest "1000" are different contests; keying on the number alone would have one silently overwrite the other in `LocalDB.addTrackedContest`. `LocalDB.removeTrackedContest` takes `(platformId, contestId)` for the same reason.
 
 `capabilities.allowsPartialRatings` decides whether a contest may be stored with some problems still unrated. Codeforces sets it **false** — the estimator fills every gap there, so a hole means something broke and `contest-manager.js` refuses loudly. Platforms that publish their own difficulty set it true and let unrated problems converge on a later refresh. This is *not* the default-1500 fallback the comments elsewhere warn about: those problems store `rating: null` and render as "???" rather than getting a fabricated number.
@@ -218,7 +219,9 @@ P(solve) = 1 / (1 + 10^((difficulty − your_rating_on_that_platform) / 400))
 
 All three sites define difficulty as roughly the rating at which a contestant has a 50% chance in-contest — the same quantity `rating-estimator.js` searches for — so feeding a problem's difficulty and your rating *on the same platform* cancels the scale. It is common-person equating with one anchor, you: a poor way to build a general conversion table, a good way to order one person's practice.
 
-The queue displays **native ratings with a platform chip**, never a converted number, and shows the probability coarsely (`~72%`) because it is modelled.
+The queue displays **native ratings with the platform's mark beside them**, never a converted number, and shows the probability coarsely (`~72%`) because it is modelled. There is deliberately no "Rating:" label — the word implied one shared scale, which is the single claim this design denies. The number is tinted by its own platform's rank band (`.tone-*`, sharing the `--band-*` variables with the histogram bars), so adjacent rows from different sites cannot read as one axis.
+
+`ui/problem-row.js` owns that markup for both the queue and the contest list — `toProblemRow()` builds the view model, `renderProblemRow()` renders it, and `position` is optional so a contest's expansion can omit the queue's global numbering. Duplicating it would let the two views drift.
 
 Rows fall into three bands, and the two reasons a row can lack a probability must not be conflated:
 

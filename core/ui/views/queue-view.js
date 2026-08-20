@@ -1,21 +1,16 @@
 import templateHtml from "./queue-view.html?raw";
 import { LocalDB } from "../../services/storage.js";
-import { escapeHtml } from "../escape-html.js";
 import { hasCompleteSetup } from "../../services/secure-store.js";
 import { matchesFilter } from "../../platforms/registry.js";
 import { collectPendingProblems } from "../../pending-problems.js";
-import { platformIcon } from "../platform-icons.js";
 import {
   loadFilter,
   renderFilterChips,
   bindFilterChips,
 } from "../platform-filter.js";
 import { getEffectiveRatings } from "../../services/user-ratings.js";
-import {
-  solveProbability,
-  compareQueueItems,
-  formatSolveProbability,
-} from "../../queue-order.js";
+import { compareQueueItems } from "../../queue-order.js";
+import { toProblemRow, renderProblemRow } from "../problem-row.js";
 
 export class QueueView extends HTMLElement {
   constructor() {
@@ -99,35 +94,17 @@ export class QueueView extends HTMLElement {
     const contests = allContests.filter((contest) =>
       matchesFilter(contest, this.filter ?? []),
     );
+
     // Deduplicated: the same problem belongs to several contests on AtCoder
     // and CodeChef, so a flat walk would list it more than once.
-    const upsolveList = collectPendingProblems(contests).map(
-      ({ contest, platform, problem }) => ({
-        ...problem,
-        contestId: contest.id,
-        platform: platform.id,
-        platformLabel: platform.shortLabel,
-        startTimeSeconds: contest.startTimeSeconds ?? null,
-        url: platform.problemUrl(contest, problem),
-        sourceLabel: platform.sourceLabel(contest, problem),
-        // Ratings from different sites aren't comparable, so the queue orders
-        // by how likely you are to solve each one instead. Null whenever
-        // either input is unknown — never a stand-in.
-        solveProbability: solveProbability(
-          problem.rating,
-          userRatings[platform.id] ?? null,
-        ),
-      }),
-    );
+    const upsolveList = collectPendingProblems(contests)
+      .map((pending) => toProblemRow(pending, userRatings))
+      // Easiest first, by solve probability. See queue-order.js for why the
+      // rows without one split into two bands rather than one.
+      .sort(compareQueueItems);
 
-    // 2. Easiest first, by solve probability. See queue-order.js for why the
-    //    rows without one split into two bands rather than one.
-    upsolveList.sort(compareQueueItems);
-
-    // 3. Update the pending count
     this.countLabel.textContent = upsolveList.length;
 
-    // 4. Handle the Empty State
     if (upsolveList.length === 0) {
       this.container.innerHTML = `
         <div class="muted" style="margin-top: 40px;">
@@ -137,49 +114,8 @@ export class QueueView extends HTMLElement {
       return;
     }
 
-    // 5. Render the sorted list
     this.container.innerHTML = upsolveList
-      .map((prob, i) => {
-        const displayIndex = (i + 1).toString().padStart(2, "0");
-
-        // `!= null`, not truthiness: AtCoder difficulties reach 0 and go
-        // negative, and a truthy test would show a real 0 as unrated.
-        const rating = prob.rating != null ? `Rating: ${prob.rating}` : "Rating: ???";
-        const chance = formatSolveProbability(prob.solveProbability);
-
-        // Names and problem indices are scraped or API-supplied, and the index
-        // also feeds the href and the source label.
-        const name = escapeHtml(
-          prob.name?.replace(/\s+/g, " ").trim() || "Unknown Problem",
-        );
-        const url = escapeHtml(prob.url);
-        const sourceLabel = escapeHtml(prob.sourceLabel);
-        // Static markup, not user data — no escaping needed.
-        const platformMark = platformIcon(prob.platform, prob.platformLabel ?? "");
-        const experimental =
-          prob.ratingConfidence === "experimental"
-            ? ' <span class="rating-flag" title="Low-confidence estimate">~</span>'
-            : "";
-
-        return `
-        <a href="${url}" target="_blank" class="problem-row">
-          <div class="problem-index">${displayIndex}.</div>
-          <div class="problem-content">
-            <div class="problem-title">${name}</div>
-            <div class="problem-meta">
-              <span class="meta-line">
-                <span class="solve-chance" title="Estimated chance you solve this">${chance}</span>
-                <span class="rating">${rating}${experimental}</span>
-              </span>
-              <span class="meta-line">
-                ${platformMark}
-                <span class="source">${sourceLabel}</span>
-              </span>
-            </div>
-          </div>
-        </a>
-      `;
-      })
+      .map((row, i) => renderProblemRow(row, { position: i + 1 }))
       .join("");
   }
 }
