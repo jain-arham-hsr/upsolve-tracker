@@ -10,6 +10,23 @@
 
   <div id="contest-items"></div>
 
+  <div id="remove-modal" class="modal-backdrop hidden">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="remove-modal-title">
+      <div class="modal-title" id="remove-modal-title">Remove from queue?</div>
+      <div class="modal-body">
+        <strong id="remove-modal-name"></strong>
+        <p class="help-text">
+          Its unsolved problems leave the queue. Nothing is deleted on the
+          contest site, and you can add it again later.
+        </p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="remove-cancel" class="btn secondary">Cancel</button>
+        <button type="button" id="remove-confirm" class="btn danger">Remove</button>
+      </div>
+    </div>
+  </div>
+
   <div class="list-actions-footer">
     <input type="file" id="import-file-input" accept=".json" style="display: none;" />
     <button id="btn-import" class="btn-footer">⬇ Import</button>

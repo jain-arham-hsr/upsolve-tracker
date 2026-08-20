@@ -365,7 +365,15 @@ cf-stats-view {
    which matters, because the row is about to be rebuilt. Values here are the
    computed result of that cascade, unchanged. */
 .contest-row {
+  /* A button rather than an anchor: clicking a row expands it in place now,
+     and opening the contest site moved into the row's menu. */
   display: flex;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+  text-align: left;
   flex-direction: column;
   align-items: flex-start;
   justify-content: space-between;
@@ -627,12 +635,6 @@ cf-stats-view,
 
 /* Registered so the conic-gradient below is animatable at all; a plain
    custom property would jump from 0% to 100% instead of sweeping. */
-@property --hold-progress {
-  syntax: "<percentage>";
-  initial-value: 0%;
-  inherits: false;
-}
-
 .contest-item {
   position: relative;
 }
@@ -641,54 +643,6 @@ cf-stats-view,
    keying off .contest-row:hover would drop the highlight under the cursor. */
 .contest-item:hover .contest-row {
   background-color: #222;
-}
-
-.contest-delete {
-  --hold-progress: 0%;
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  font-family: inherit;
-  font-size: 11px;
-  line-height: 1;
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease, color 0.15s ease;
-  background: conic-gradient(
-    rgba(239, 83, 80, 0.85) var(--hold-progress),
-    rgba(255, 255, 255, 0.07) 0
-  );
-}
-
-.contest-item:hover .contest-delete,
-.contest-delete:focus-visible {
-  opacity: 1;
-}
-
-.contest-delete:hover {
-  color: var(--text-main);
-}
-
-.contest-delete.holding {
-  color: #fff;
-  /* Duration is set from JS so it always matches the hold timer. */
-  animation: holdFill linear forwards;
-}
-
-@keyframes holdFill {
-  from {
-    --hold-progress: 0%;
-  }
-  to {
-    --hold-progress: 100%;
-  }
 }
 
 /* Keep the name and pills clear of the button */
@@ -1302,4 +1256,149 @@ cf-stats-view,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* --- Contest row: menu, expansion, removal dialog --- */
+
+.contest-head {
+  position: relative;
+}
+
+/* Replaces the hold-to-delete ✕. One button, and the destructive action sits
+   behind it rather than one press from every row. */
+.contest-menu-btn {
+  position: absolute;
+  top: 10px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.contest-item:hover .contest-menu-btn,
+.contest-menu-btn:focus-visible,
+.contest-menu-btn[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.contest-menu-btn:hover,
+.contest-menu-btn[aria-expanded="true"] {
+  color: var(--text-main);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.row-menu {
+  position: absolute;
+  top: 32px;
+  right: 6px;
+  z-index: 30;
+  min-width: 168px;
+  padding: 5px;
+  border-radius: 8px;
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
+.row-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: "Inter", sans-serif;
+  font-size: 12px;
+  text-align: left;
+}
+
+.row-menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+}
+
+.row-menu-item.is-danger:hover {
+  background-color: rgba(239, 83, 80, 0.14);
+  color: #ef5350;
+}
+
+/* The expansion. No chevron — this appearing is the indicator. */
+.contest-problems {
+  border-bottom: 1px solid #2a2a2a;
+  padding: 2px 0 8px;
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+.contest-problems .problem-row {
+  padding-left: 22px;
+}
+
+.contest-problems-empty {
+  padding: 10px 22px;
+  font-size: 0.78rem;
+}
+
+/* --- Removal confirmation --- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 300px;
+  padding: 16px;
+  border-radius: 10px;
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.6);
+}
+
+.modal-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+
+.modal-body strong {
+  display: block;
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 0.82rem;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btn.danger {
+  background-color: #ef5350;
+  color: #1a1a1a;
+}
+
+.btn.danger:hover {
+  background-color: #f4706d;
 }

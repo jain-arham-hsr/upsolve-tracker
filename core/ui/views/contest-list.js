@@ -8,7 +8,12 @@ import {
 import { byStartTimeDesc } from "../../start-time-service.js";
 import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
-import { platformOf, matchesFilter } from "../../platforms/registry.js";
+import { platformOf, matchesFilter, contestKey } from "../../platforms/registry.js";
+import { collectPendingProblems } from "../../pending-problems.js";
+import { getEffectiveRatings } from "../../services/user-ratings.js";
+import { toProblemRow, renderProblemRow } from "../problem-row.js";
+import { compareQueueItems } from "../../queue-order.js";
+import { bindDismiss } from "../dismissable.js";
 import { platformIcon } from "../platform-icons.js";
 import {
   loadFilter,
@@ -16,16 +21,19 @@ import {
   bindFilterControl,
 } from "../platform-filter.js";
 
-/** How long the remove button must be held. Drives the fill animation too. */
-const HOLD_MS = 700;
+/** Which contests are expanded, persisted because the view is rebuilt on
+ *  every tab switch — in-memory state would collapse each time you glanced at
+ *  the Queue. */
+const EXPANDED_KEY = "cf_trainer.expanded_contests";
 
 
 export class ContestList extends HTMLElement {
   constructor() {
     super();
     this.filter = [];
-    this.hold = null;
-    this.boundCancelHold = () => this.cancelHold();
+    this.expanded = new Set();
+    this.openMenuKey = null;
+    this.dismissMenu = null;
   }
 
   async connectedCallback() {
@@ -38,6 +46,23 @@ export class ContestList extends HTMLElement {
     this.fileInput = this.querySelector("#import-file-input");
     this.alertDiv = this.querySelector("#contest-alert");
     this.countLabel = this.querySelector("#contest-count");
+    this.modal = this.querySelector("#remove-modal");
+    this.modalName = this.querySelector("#remove-modal-name");
+    this.modalCancel = this.querySelector("#remove-cancel");
+
+    this.modalCancel.addEventListener("click", () => this.closeModal());
+    this.querySelector("#remove-confirm").addEventListener("click", () =>
+      this.confirmRemove(),
+    );
+    // Backdrop click and Escape both dismiss, like any other dialog.
+    this.modal.addEventListener("click", (event) => {
+      if (event.target === this.modal) this.closeModal();
+    });
+    this.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !this.modal.classList.contains("hidden")) {
+        this.closeModal();
+      }
+    });
 
     // The view is destroyed on every navigation, so the choice is persisted
     // rather than kept on the instance.
@@ -96,64 +121,121 @@ export class ContestList extends HTMLElement {
     });
 
     // Delegated so the handlers outlive each renderQueue() rewrite.
-    this.container.addEventListener("pointerdown", (e) => this.startHold(e));
-    // pointerleave doesn't bubble, so catch it on the way down.
-    this.container.addEventListener(
-      "pointerleave",
-      (e) => {
-        if (this.hold && e.target === this.hold.button) this.cancelHold();
-      },
-      true,
-    );
-    // Releasing anywhere aborts, including outside the panel.
-    document.addEventListener("pointerup", this.boundCancelHold);
-    document.addEventListener("pointercancel", this.boundCancelHold);
+    // Expansion is persisted for the same reason the filter is: this view is
+    // destroyed and rebuilt on every tab switch.
+    const stored = await chrome.storage.local.get({ [EXPANDED_KEY]: [] });
+    this.expanded = new Set(stored[EXPANDED_KEY]);
+
+    this.container.addEventListener("click", (event) => this.onListClick(event));
+
+    await this.renderQueue();
   }
 
   /**
-   * Deleting is a hold rather than a click, so a stray press does nothing at
-   * all — no dialog to dismiss, no state changed.
+   * One delegated handler, because the list is re-rendered wholesale and
+   * per-row listeners would have to be rebound every time.
    */
-  startHold(event) {
-    if (event.button !== 0) return; // Left button / primary touch only
-    const button = event.target.closest(".contest-delete");
-    if (!button) return;
+  async onListClick(event) {
+    const menuBtn = event.target.closest("[data-menu-key]");
+    if (menuBtn) {
+      // Must not also toggle the accordion underneath it.
+      event.stopPropagation();
+      await this.toggleMenu(menuBtn.dataset.menuKey);
+      return;
+    }
 
-    event.preventDefault(); // Suppress focus ring, text selection and drag
-    this.cancelHold();
+    const openLink = event.target.closest("[data-open-url]");
+    if (openLink) {
+      window.open(openLink.dataset.openUrl, "_blank", "noopener");
+      await this.closeMenu();
+      return;
+    }
 
-    button.style.animationDuration = `${HOLD_MS}ms`;
-    button.classList.add("holding");
+    const removeBtn = event.target.closest("[data-remove-key]");
+    if (removeBtn) {
+      const key = removeBtn.dataset.removeKey;
+      await this.closeMenu();
+      this.askToRemove(key);
+      return;
+    }
 
-    this.hold = {
-      button,
-      contestId: button.dataset.id,
-      platformId: button.dataset.platform,
-      timer: setTimeout(() => this.completeHold(), HOLD_MS),
-    };
+    const row = event.target.closest("[data-toggle-key]");
+    if (row) await this.toggleExpanded(row.dataset.toggleKey);
   }
 
-  cancelHold() {
-    if (!this.hold) return;
-    clearTimeout(this.hold.timer);
-    this.hold.button.classList.remove("holding");
-    this.hold = null;
+  async toggleExpanded(key) {
+    if (this.expanded.has(key)) {
+      this.expanded.delete(key);
+    } else {
+      this.expanded.add(key);
+    }
+
+    await chrome.storage.local.set({ [EXPANDED_KEY]: [...this.expanded] });
+    await this.renderQueue();
   }
 
-  async completeHold() {
-    if (!this.hold) return;
-    const { contestId, platformId } = this.hold;
-    this.cancelHold();
+  async toggleMenu(key) {
+    const next = this.openMenuKey === key ? null : key;
+    await this.closeMenu();
 
-    await LocalDB.removeTrackedContest(platformId, contestId);
+    if (!next) return;
+    this.openMenuKey = next;
     await this.renderQueue();
 
-    // Storage changed, so the backup has to follow. Still inside the
-    // activation window opened by the pointerdown that began the hold.
+    // Same dismiss behaviour as the filter dropdown, rather than a second
+    // implementation that differs in one of the three cases.
+    const item = this.container.querySelector(`[data-key="${CSS.escape(next)}"]`);
+    if (item) this.dismissMenu = bindDismiss(item, () => this.closeMenu());
+  }
+
+  async closeMenu() {
+    this.dismissMenu?.();
+    this.dismissMenu = null;
+
+    if (this.openMenuKey === null) return;
+    this.openMenuKey = null;
+    await this.renderQueue();
+  }
+
+  /**
+   * Removal asks first. That replaces the 700 ms hold as the thing standing
+   * between a stray press and a deleted contest — and it is a better guard,
+   * because it says what is about to happen instead of relying on a timer.
+   */
+  askToRemove(key) {
+    const contest = this.contestsByKey?.get(key);
+    if (!contest) return;
+
+    const name = contest.name?.replace(/\s+/g, " ").trim() || `Contest ${contest.id}`;
+    this.modalName.textContent = name;
+    this.modal.classList.remove("hidden");
+    this.pendingRemoval = { key, contest };
+    this.modalCancel.focus();
+  }
+
+  closeModal() {
+    this.modal.classList.add("hidden");
+    this.pendingRemoval = null;
+  }
+
+  async confirmRemove() {
+    const pending = this.pendingRemoval;
+    this.closeModal();
+    if (!pending) return;
+
+    const { contest } = pending;
+    await LocalDB.removeTrackedContest(
+      contest.platform ?? "codeforces",
+      contest.id,
+    );
+    this.expanded.delete(pending.key);
+    await chrome.storage.local.set({ [EXPANDED_KEY]: [...this.expanded] });
+    await this.renderQueue();
+
+    // Storage changed, so the backup has to follow it or the exported JSON
+    // drifts from what the panel shows.
     const dirHandle = await verifyExportPermission();
     if (dirHandle) await writeBackup(dirHandle);
-
-    // Re-enables "+ Add Contest" if the removed contest is the open tab.
   }
 
   /**
@@ -224,7 +306,10 @@ export class ContestList extends HTMLElement {
   }
 
   async renderQueue() {
-    const allContests = await LocalDB.getTrackedContests();
+    const [allContests, userRatings] = await Promise.all([
+      LocalDB.getTrackedContests(),
+      getEffectiveRatings(),
+    ]);
 
     if (allContests.length === 0) {
       this.countLabel.textContent = "Nothing queued";
@@ -247,43 +332,92 @@ export class ContestList extends HTMLElement {
       return;
     }
 
+    // The removal dialog needs the record behind a row, and the row only
+    // carries its key.
+    this.contestsByKey = new Map(contests.map((c) => [contestKey(c), c]));
+
     this.container.innerHTML = contests
-      .map((contest) => {
-        const platform = platformOf(contest);
-        const label = platform.subtypeLabel(contest);
-        const typeClass = platform.badgeClass(contest);
-        const url = platform.contestUrl(contest);
+      .map((contest) => this.renderContest(contest, userRatings))
+      .join("");
+  }
 
-        // Scraped names carry stray newlines/indentation from the CF page.
-        const rawName = contest.name?.replace(/\s+/g, " ").trim();
-        const name = escapeHtml(rawName || `Contest ${contest.id}`);
+  renderContest(contest, userRatings) {
+    const platform = platformOf(contest);
+    const key = contestKey(contest);
+    const isOpen = this.expanded.has(key);
 
-        // The button has to sit outside the anchor: nesting it would make
-        // every press navigate to Codeforces.
-        return `
-        <div class="contest-item">
-          <a href="${url}" target="_blank" class="contest-row">
+    // Scraped names carry stray newlines/indentation from the CF page.
+    const rawName = contest.name?.replace(/\s+/g, " ").trim();
+    const name = escapeHtml(rawName || `Contest ${contest.id}`);
+    const safeKey = escapeHtml(key);
+
+    // No chevron: the expansion itself is the indicator. aria-expanded carries
+    // it for anything that can't see the difference.
+    return `
+      <div class="contest-item" data-key="${safeKey}">
+        <div class="contest-head">
+          <button type="button" class="contest-row" data-toggle-key="${safeKey}"
+                  aria-expanded="${isOpen}">
             <span class="contest-name">${name}</span>
             <span class="contest-tags">
               ${platformIcon(platform.id, platform.shortLabel)}
               <span class="contest-id">#${escapeHtml(String(contest.id))}</span>
-              <span class="contest-type ${typeClass}">${label}</span>
+              <span class="contest-type ${platform.badgeClass(contest)}">${platform.subtypeLabel(contest)}</span>
             </span>
-          </a>
-          <button type="button" class="contest-delete"
-                  data-id="${escapeHtml(contest.id)}"
-                  data-platform="${escapeHtml(platform.id)}"
-                  title="Hold to remove from queue">✕</button>
+          </button>
+          <button type="button" class="contest-menu-btn" data-menu-key="${safeKey}"
+                  aria-haspopup="menu" aria-expanded="${this.openMenuKey === key}"
+                  title="More">⋮</button>
+          ${this.openMenuKey === key ? this.renderMenu(platform, contest, safeKey) : ""}
         </div>
-      `;
-      })
+        ${isOpen ? this.renderProblems(contest, platform, userRatings) : ""}
+      </div>`;
+  }
+
+  renderMenu(platform, contest, safeKey) {
+    return `
+      <div class="row-menu" role="menu">
+        <button type="button" class="row-menu-item" role="menuitem"
+                data-open-url="${escapeHtml(platform.contestUrl(contest))}">
+          Open contest ↗
+        </button>
+        <button type="button" class="row-menu-item is-danger" role="menuitem"
+                data-remove-key="${safeKey}">
+          Remove from queue
+        </button>
+      </div>`;
+  }
+
+  /**
+   * What this contest still owes the queue.
+   *
+   * Rendered with the queue's own row renderer, so the two cannot disagree
+   * about ordering or about what a row says. Positions are omitted — the
+   * queue's numbering is global and would be misleading here.
+   *
+   * Deliberately scoped to this contest rather than deduplicated against the
+   * others: a problem shared with another division really is in both, and
+   * hiding it here would make the contest look shorter than it is.
+   */
+  renderProblems(contest, platform, userRatings) {
+    const rows = collectPendingProblems([contest])
+      .map((pending) => toProblemRow(pending, userRatings))
+      .sort(compareQueueItems)
+      .map((row) => renderProblemRow(row))
       .join("");
+
+    // A fully solved contest is dropped from storage by the refresh, so this
+    // should not happen — but an empty box would read as a broken expansion.
+    return `<div class="contest-problems">${
+      rows || `<div class="muted contest-problems-empty">Nothing pending here.</div>`
+    }</div>`;
   }
 
   disconnectedCallback() {
-    this.cancelHold();
-    document.removeEventListener("pointerup", this.boundCancelHold);
-    document.removeEventListener("pointercancel", this.boundCancelHold);
+    // The dismiss listeners are on document, so they outlive this view unless
+    // torn down here.
+    this.dismissMenu?.();
+    this.dismissMenu = null;
   }
 
 }
