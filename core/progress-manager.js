@@ -3,6 +3,7 @@ import { LocalDB } from "./services/storage.js";
 import { loadCredentials } from "./services/secure-store.js";
 import { syncOfficialProblemData } from "./problemset-sync.js";
 import { syncStartTimes } from "./start-time-service.js";
+import { platformOf } from "./platforms/registry.js";
 
 /**
  * Fetches all accepted submissions for a user and returns them as a Set
@@ -60,11 +61,12 @@ export async function updateSolvedStatus(onProgress = () => {}) {
 
   for (const contest of trackedContests) {
     let allSolved = true;
+    const platform = platformOf(contest);
 
     // Update the 'solved' boolean for every problem in the contest
     contest.problems.forEach((prob) => {
       // Check if problem is in the latest "OK" submissions
-      if (solvedKeys.has(`${contest.id}-${prob.index}`)) {
+      if (solvedKeys.has(platform.solvedKey(contest.id, prob.index))) {
         prob.solved = true;
       }
 
@@ -77,7 +79,7 @@ export async function updateSolvedStatus(onProgress = () => {}) {
     if (allSolved) {
       // Contest is finished: Capture details for the UI alert and exclude from update
       removedDetails.push({
-        type: contest.type === "OFFICIAL" ? "Official contest" : "Gym contest",
+        type: platform.contestLabel(contest),
         id: contest.id,
       });
     } else {

@@ -2,6 +2,7 @@ import templateHtml from "./queue-view.html?raw";
 import { LocalDB } from "../../services/storage.js";
 import { escapeHtml } from "../escape-html.js";
 import { hasCompleteSetup } from "../../services/secure-store.js";
+import { platformOf } from "../../platforms/registry.js";
 
 export class QueueView extends HTMLElement {
   constructor() {
@@ -59,17 +60,16 @@ export class QueueView extends HTMLElement {
 
     // 1. Collect all unsolved problems
     contests.forEach((contest) => {
-      const isOfficial =
-        contest.type && contest.type.toUpperCase() === "OFFICIAL";
-      const path = isOfficial ? "contest" : "gym";
+      const platform = platformOf(contest);
 
       contest.problems.forEach((prob) => {
         if (!prob.solved) {
           upsolveList.push({
             ...prob,
             contestId: contest.id,
-            url: `https://codeforces.com/${path}/${contest.id}/problem/${prob.index}`,
-            sourceLabel: `${isOfficial ? "Contest" : "Gym"} ${contest.id}${prob.index}`,
+            platform: platform.id,
+            url: platform.problemUrl(contest, prob),
+            sourceLabel: platform.sourceLabel(contest, prob),
           });
         }
       });

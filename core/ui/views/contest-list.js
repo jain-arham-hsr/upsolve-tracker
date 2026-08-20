@@ -9,6 +9,7 @@ import {
 import { byStartTimeDesc } from "../../start-time-service.js";
 import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
+import { platformOf, matchContestUrl, contestKey, makeContestKey } from "../../platforms/registry.js";
 
 const FILTER_KEY = "cf_trainer.contest_filter";
 
@@ -177,6 +178,7 @@ export class ContestList extends HTMLElement {
     this.hold = {
       button,
       contestId: button.dataset.id,
+      platformId: button.dataset.platform,
       timer: setTimeout(() => this.completeHold(), HOLD_MS),
     };
   }
@@ -190,10 +192,10 @@ export class ContestList extends HTMLElement {
 
   async completeHold() {
     if (!this.hold) return;
-    const { contestId } = this.hold;
+    const { contestId, platformId } = this.hold;
     this.cancelHold();
 
-    await LocalDB.removeTrackedContest(contestId);
+    await LocalDB.removeTrackedContest(platformId, contestId);
     await this.renderQueue();
 
     // Storage changed, so the backup has to follow. Still inside the
@@ -297,11 +299,11 @@ export class ContestList extends HTMLElement {
 
     this.container.innerHTML = contests
       .map((contest) => {
+        const platform = platformOf(contest);
         const isOfficial = contest.type === "OFFICIAL";
-        const path = isOfficial ? "contest" : "gym";
         const label = isOfficial ? "Official" : "Gym";
         const typeClass = isOfficial ? "type-official" : "type-gym";
-        const url = `https://codeforces.com/${path}/${contest.id}`;
+        const url = platform.contestUrl(contest);
 
         // Scraped names carry stray newlines/indentation from the CF page.
         const rawName = contest.name?.replace(/\s+/g, " ").trim();
@@ -320,6 +322,7 @@ export class ContestList extends HTMLElement {
           </a>
           <button type="button" class="contest-delete"
                   data-id="${escapeHtml(contest.id)}"
+                  data-platform="${escapeHtml(platform.id)}"
                   title="Hold to remove from queue">✕</button>
         </div>
       `;
@@ -348,17 +351,17 @@ export class ContestList extends HTMLElement {
       });
 
       if (tab && tab.url) {
-        const cfRegex =
-          /^https?:\/\/(www\.)?codeforces\.com\/(contest|gym)\/(\d+)/i;
-        const match = tab.url.match(cfRegex);
+        const match = matchContestUrl(tab.url);
 
         if (match) {
-          const contestId = match[3];
           this.currentValidUrl = tab.url;
 
+          // Keyed on platform + id: a bare id would call a CodeChef contest
+          // "already tracked" because a Codeforces one shares its number.
+          const key = makeContestKey(match.platform.id, match.contestId);
           const contests = await LocalDB.getTrackedContests();
           const isAlreadyTracked = contests.some(
-            (c) => c.id.toString() === contestId,
+            (contest) => contestKey(contest) === key,
           );
 
           if (isAlreadyTracked) {
@@ -378,13 +381,13 @@ export class ContestList extends HTMLElement {
         } else {
           this.btnAddContest.setAttribute(
             "data-tooltip",
-            "Must be on a CF contest or gym page.",
+            "Must be on a supported contest page.",
           );
         }
       } else {
         this.btnAddContest.setAttribute(
           "data-tooltip",
-          "Navigate to a CF page first.",
+          "Navigate to a contest page first.",
         );
       }
     } catch (error) {

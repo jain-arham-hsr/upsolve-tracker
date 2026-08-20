@@ -101,3 +101,23 @@ test("all-unknown dates compare equal rather than throwing", () => {
     ["a", "b"],
   );
 });
+
+test("backups without a platform field are still accepted", () => {
+  // Every backup written before platforms existed looks like this.
+  assert.equal(describeBackupProblem({ trackedContests: [contest()] }), null);
+});
+
+test("a backup from a newer version is refused, not imported and crashed later", () => {
+  const problem = describeBackupProblem({
+    trackedContests: [contest({ platform: "atcoder" })],
+  });
+  assert.ok(problem);
+  assert.match(problem, /atcoder/);
+});
+
+test("an explicit codeforces platform is accepted", () => {
+  assert.equal(
+    describeBackupProblem({ trackedContests: [contest({ platform: "codeforces" })] }),
+    null,
+  );
+});

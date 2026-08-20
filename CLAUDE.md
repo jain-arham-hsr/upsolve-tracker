@@ -37,6 +37,21 @@ Pushing to `main` triggers `.github/workflows/release.yaml`: it builds Chrome, r
 
 Vanilla ES modules and custom elements — no framework, no bundled UI library.
 
+### Platform registry
+
+`core/platforms/registry.js` owns which sites exist; `core/platforms/codeforces.js` is the only descriptor so far. A descriptor answers everything that depends on *where a contest came from*: `matchUrl`, `contestUrl`, `problemUrl`, `sourceLabel`, `contestLabel`, `solvedKey`, `problemKey`, and a `capabilities` block. Nothing outside `core/platforms/` should branch on the platform.
+
+This replaced two copies of the same Codeforces URL regex (`contest-manager.js` and `contest-list.js`) and three hardcoded `https://codeforces.com` origins, so a URL change is now one edit.
+
+Two conventions the registry depends on:
+
+- **Records written before platforms existed carry no `platform` field and read as Codeforces.** That fallback *is* the migration — `platformOf()` and `contestKey()` both default, so nothing has to be rewritten on disk. A `platform` that is present but unrecognised throws instead of defaulting, because that means data from a newer build.
+- **Contest identity is `platform:id`, never the bare id** (`contestKey`). Codeforces contest 1000 and a CodeChef contest "1000" are different contests; keying on the number alone would have one silently overwrite the other in `LocalDB.addTrackedContest`. `LocalDB.removeTrackedContest` takes `(platformId, contestId)` for the same reason.
+
+`capabilities.allowsPartialRatings` decides whether a contest may be stored with some problems still unrated. Codeforces sets it **false** — the estimator fills every gap there, so a hole means something broke and `contest-manager.js` refuses loudly. Platforms that publish their own difficulty set it true and let unrated problems converge on a later refresh. This is *not* the default-1500 fallback the comments elsewhere warn about: those problems store `rating: null` and render as "???" rather than getting a fabricated number.
+
+`backup-validation.js` deliberately does **not** require `platform` — every backup written before this change lacks it — but does refuse a backup naming a platform this build doesn't know, since that would otherwise throw later while rendering the list.
+
 ### Data acquisition: two channels, both required
 
 1. **Signed API** (`core/services/codeforces-service.js`) — builds the `apiSig` (SHA-512 over `rand/method?sortedParams#secret`) via `crypto.subtle`. Used for `user.status`, `contest.ratingChanges`, `contest.standings`, `user.info`.
@@ -105,7 +120,7 @@ CF tags are editable after publication, so a problem can gain tags days later �
 
 ### Storage split — this is deliberate
 
-- **`chrome.storage.local`** (`services/storage.js`, `LocalDB`) — `trackedContests` array, plus settings under dotted keys `cf_trainer.handle` and `cf_trainer.auto_export`. This is what the Export/Import JSON backup dumps wholesale.
+- **`chrome.storage.local`** (`services/storage.js`, `LocalDB`) — `trackedContests` array, keyed by `platform:id` (see the platform registry above), plus settings under dotted keys `cf_trainer.handle` and `cf_trainer.auto_export`. This is what the Export/Import JSON backup dumps wholesale.
 - **IndexedDB** (`services/secure-store.js`) — API key/secret and the `FileSystemDirectoryHandle`. Credentials live here specifically so they never land in an exported backup; the directory handle lives here because handles aren't serializable into `chrome.storage`.
 
 `LocalDB` deliberately holds only the tracked-contest methods. Settings are read directly from their dotted keys (`cf_trainer.handle`, `cf_trainer.auto_export`, `cf_trainer.contest_filter`, `cf_trainer.tag_rating_range`), and solved state is derived fresh from `user.status` on every sync rather than cached. Earlier accessors for a `cfHandle` key and a `solvedCache` were removed — nothing wrote them.

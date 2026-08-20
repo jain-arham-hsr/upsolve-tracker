@@ -11,14 +11,22 @@ import { buildSolvedKeys } from "./progress-manager.js";
 import { loadCredentials } from "./services/secure-store.js";
 import { syncOfficialProblemData } from "./problemset-sync.js";
 import { syncStartTimes } from "./start-time-service.js";
+import { matchContestUrl } from "./platforms/registry.js";
 
 export async function processNewContest(url, onProgress = () => {}) {
   try {
-    const match = url.match(/(contest|gym)\/(\d+)/i);
-    if (!match) throw new Error("Invalid Codeforces URL");
+    const parsed = matchContestUrl(url);
+    if (!parsed) throw new Error("Not a supported contest URL.");
 
-    const type = match[1].toLowerCase();
-    const contestId = match[2];
+    const { platform, contestId, subtype } = parsed;
+
+    // The acquisition pipeline below is still Codeforces-specific: signed API
+    // plus standings scrape. A second platform slots in as its own branch
+    // here rather than by teaching these helpers about other sites.
+    if (platform.id !== "codeforces") {
+      throw new Error(`${platform.label} contests aren't supported yet.`);
+    }
+    const type = subtype === "OFFICIAL" ? "contest" : "gym";
 
     const [storageSettings, { apiKey, apiSecret }] = await Promise.all([
       chrome.storage.local.get("cf_trainer.handle"),
@@ -46,8 +54,9 @@ export async function processNewContest(url, onProgress = () => {}) {
 
     const contestData = {
       id: contestId,
+      platform: platform.id,
       name: contestName,
-      type: type === "contest" ? "OFFICIAL" : "GYM",
+      type: subtype,
       problems,
       tagsSyncedAt: tagsSynced ? Date.now() : null,
       startTimeSeconds,
@@ -119,7 +128,7 @@ export async function processNewContest(url, onProgress = () => {}) {
 
     let solvedCount = 0;
     problems.forEach((prob) => {
-      if (solvedKeys.has(`${contestId}-${prob.index}`)) {
+      if (solvedKeys.has(platform.solvedKey(contestId, prob.index))) {
         prob.solved = true;
         solvedCount++;
       }
@@ -127,16 +136,20 @@ export async function processNewContest(url, onProgress = () => {}) {
 
     if (solvedCount === problems.length && problems.length > 0) {
       throw new Error(
-        `All problems in ${type === "contest" ? "Official" : "Gym"} contest ${contestId} are already solved!`,
+        `All problems in ${subtype === "OFFICIAL" ? "Official" : "Gym"} contest ${contestId} are already solved!`,
       );
     }
 
-    // --- RESTORED YOUR STRICT VALIDATION ---
     const missing = problems.filter((problem) => problem.rating === null);
 
     await syncStartTimes(cfService, [contestData], onProgress);
 
-    if (missing.length === 0) {
+    // Platforms that publish their own difficulty may store a contest with
+    // some problems still unrated — those converge on a later refresh, and the
+    // queue shows them as "???" rather than inventing a number. Codeforces
+    // sets this false: the estimator fills every gap there, so a hole is a bug
+    // worth refusing on.
+    if (missing.length === 0 || platform.capabilities.allowsPartialRatings) {
       onProgress("Saving to your queue…");
       await LocalDB.addTrackedContest(contestData);
     } else {
