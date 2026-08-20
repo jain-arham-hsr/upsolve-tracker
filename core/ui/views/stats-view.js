@@ -86,7 +86,7 @@ export class StatsView extends HTMLElement {
    */
   renderScopeChips() {
     const present = this.presentPlatforms ?? [];
-    if (present.length < 2) {
+    if (present.length === 0) {
       this.scopeChips.innerHTML = "";
       return;
     }
@@ -146,7 +146,7 @@ export class StatsView extends HTMLElement {
     if (scoped) {
       this.spreadTitle.textContent = "RATING SPREAD";
       this.renderHistogram(ratings, getPlatform(this.scope));
-      this.renderCoverage(allContests);
+      this.renderCoverage();
       this.syncRangeControls(ratings);
       this.renderTags();
     } else {
@@ -169,8 +169,10 @@ export class StatsView extends HTMLElement {
    * when the truth is that half the queue is untagged — AtCoder publishes no
    * tags at all, and Codeforces gyms sit outside its taxonomy.
    */
-  renderCoverage(allContests) {
-    const scoped = collectPendingProblems(this.scope ? this.contests : allContests);
+  renderCoverage() {
+    // Only ever called from a platform panel — the overview has no tag chart
+    // for a coverage line to caveat.
+    const scoped = collectPendingProblems(this.contests);
     const totals = new Map();
 
     scoped.forEach(({ platform, problem }) => {

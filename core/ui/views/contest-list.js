@@ -8,7 +8,12 @@ import {
 import { byStartTimeDesc } from "../../start-time-service.js";
 import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
-import { platformOf, matchesFilter, contestKey } from "../../platforms/registry.js";
+import {
+  platformOf,
+  matchesFilter,
+  contestKey,
+  DEFAULT_PLATFORM_ID,
+} from "../../platforms/registry.js";
 import { collectPendingProblems } from "../../pending-problems.js";
 import { getEffectiveRatings } from "../../services/user-ratings.js";
 import { toProblemRow, renderProblemRow } from "../problem-row.js";
@@ -50,19 +55,11 @@ export class ContestList extends HTMLElement {
     this.modalName = this.querySelector("#remove-modal-name");
     this.modalCancel = this.querySelector("#remove-cancel");
 
+    this.modalCard = this.querySelector(".modal-card");
     this.modalCancel.addEventListener("click", () => this.closeModal());
     this.querySelector("#remove-confirm").addEventListener("click", () =>
       this.confirmRemove(),
     );
-    // Backdrop click and Escape both dismiss, like any other dialog.
-    this.modal.addEventListener("click", (event) => {
-      if (event.target === this.modal) this.closeModal();
-    });
-    this.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && !this.modal.classList.contains("hidden")) {
-        this.closeModal();
-      }
-    });
 
     // The view is destroyed on every navigation, so the choice is persisted
     // rather than kept on the instance.
@@ -79,8 +76,6 @@ export class ContestList extends HTMLElement {
         await this.renderQueue();
       },
     );
-
-    await this.renderQueue();
 
     // Management Actions
     this.btnExport.addEventListener("click", async () => {
@@ -210,10 +205,17 @@ export class ContestList extends HTMLElement {
     this.modalName.textContent = name;
     this.modal.classList.remove("hidden");
     this.pendingRemoval = { key, contest };
+
+    // Backdrop click and Escape both dismiss. Reusing the popover helper means
+    // Escape works wherever focus happens to be, which a listener on this view
+    // did not.
+    this.dismissModal = bindDismiss(this.modalCard, () => this.closeModal());
     this.modalCancel.focus();
   }
 
   closeModal() {
+    this.dismissModal?.();
+    this.dismissModal = null;
     this.modal.classList.add("hidden");
     this.pendingRemoval = null;
   }
@@ -225,7 +227,7 @@ export class ContestList extends HTMLElement {
 
     const { contest } = pending;
     await LocalDB.removeTrackedContest(
-      contest.platform ?? "codeforces",
+      contest.platform ?? DEFAULT_PLATFORM_ID,
       contest.id,
     );
     this.expanded.delete(pending.key);
@@ -418,6 +420,8 @@ export class ContestList extends HTMLElement {
     // torn down here.
     this.dismissMenu?.();
     this.dismissMenu = null;
+    this.dismissModal?.();
+    this.dismissModal = null;
   }
 
 }

@@ -66,7 +66,9 @@ A mismatch means different things depending on where the identity comes from, wh
 
 Verification also catches a handle that simply doesn't exist — which otherwise yields no solved problems and looks exactly like a slow sync — and a valid handle belonging to someone else, which yields *their* history (`user.status?handle=X` returns X's submissions regardless of whose key signs the request).
 
-`updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption.
+`updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption. The shell reports them **last**, after the backup write and the view refresh — reporting earlier let `"Writing backup…"` overwrite the message for exactly the users whose backup was at risk.
+
+Two failure kinds must not be conflated, which is why the mismatch error carries `isIdentityMismatch`. **Someone else being signed in always stops the operation.** A platform merely being unconfigured — no AtCoder handle — does not: you can still add and track its contests, you just get no solved status until it is set up.
 
 Note the Codeforces scrape sends cookies (`http-client.js:32`), but `standings-dom.js` reads only the contest name, problems, *competitors'* handles, solve counts and pagination — nothing about the viewer. So it needs no identity, and neither do the public bulk endpoints or kenkoooo's static files.
 

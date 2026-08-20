@@ -220,12 +220,6 @@ export class CFApp extends HTMLElement {
         (message) => this.setSyncStatus(message),
       );
 
-      // A platform refusing — someone else signed into CodeChef, say — has to
-      // be seen. Silently skipping it looks exactly like a successful sync.
-      if (failures.length > 0) {
-        this.setSyncStatus(failures[0].message, { sticky: true });
-      }
-
       // 4. The sync rewrites stored contests, so the backup has to follow it
       // or the file drifts from what the extension shows.
       if (dirHandle) {
@@ -237,6 +231,18 @@ export class CFApp extends HTMLElement {
       const currentView = this.routerOutlet.firstElementChild;
       if (currentView && typeof currentView.refreshData === "function") {
         await currentView.refreshData(removedContests);
+      }
+
+      // 6. Report a refusal *last*, so nothing overwrites it. A platform
+      // declining to sync — someone else signed into CodeChef, say — has to be
+      // seen: skipping it silently looks exactly like a successful sync, which
+      // was half the problem the identity check exists to fix. Reporting it
+      // earlier let "Writing backup…" clear it for precisely the users whose
+      // backup is at risk.
+      if (failures.length > 0) {
+        const [first] = failures;
+        const more = failures.length > 1 ? ` (+${failures.length - 1} more)` : "";
+        this.setSyncStatus(`${first.message}${more}`, { sticky: true });
       }
     } catch (error) {
       console.error("Refresh failed:", error);

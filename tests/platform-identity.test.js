@@ -76,6 +76,19 @@ test("an intruder is refused, and the pin is left alone", async () => {
   assert.equal(await getStoredIdentity("codechef"), "me");
 });
 
+test("the intruder error is flagged, so callers can tell it from being unconfigured", async () => {
+  // Adding a contest tolerates an unconfigured platform, but must never
+  // tolerate someone else being signed in.
+  stubChrome({ [IDENTITY_STORAGE_KEY]: { codechef: "me" } });
+
+  const error = await settleIdentity(
+    platform("codechef", "CodeChef"), ambient, { username: "them" },
+  ).then(() => null, (e) => e);
+
+  assert.ok(error, "should have thrown");
+  assert.equal(error.isIdentityMismatch, true);
+});
+
 test("a deliberately changed handle is adopted", async () => {
   stubChrome({ [IDENTITY_STORAGE_KEY]: { codeforces: "old" } });
 

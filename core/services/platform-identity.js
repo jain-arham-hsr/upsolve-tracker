@@ -110,10 +110,15 @@ export async function settleIdentity(platform, adapter, identity) {
   if (verdict === "match") return verdict;
 
   if (verdict === "intruder") {
-    throw new Error(
+    const error = new Error(
       `Signed in to ${platform.label} as ${identity.username}, but this queue belongs to ` +
         `${stored}. Sign back in as ${stored}, or switch the account in Settings.`,
     );
+    // Flagged so callers can tell "someone else is signed in" — which must
+    // always stop the operation — from "this platform isn't set up", which
+    // merely means solved status can't be read.
+    error.isIdentityMismatch = true;
+    throw error;
   }
 
   await setStoredIdentity(platform.id, identity.username);
