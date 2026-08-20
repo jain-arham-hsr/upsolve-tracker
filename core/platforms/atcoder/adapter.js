@@ -8,6 +8,7 @@
  */
 import { getResources, getAcceptedProblemIds } from "./problems-api.js";
 import { atcoder } from "./descriptor.js";
+import { extractRating } from "./profile.js";
 
 export const HANDLE_KEY = "cf_trainer.atcoder_handle";
 
@@ -149,4 +150,28 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
     console.log(`[AtCoder] ${resolved} problem(s) gained a published difficulty.`);
   }
   return resolved;
+}
+
+/**
+ * Your current AtCoder rating, read from your profile page.
+ *
+ * The profile is server-rendered, unlike CodeChef's SPA, so the rating is in
+ * the HTML. `robots.txt` disallows `/users/*​/history/` but not the profile
+ * itself, so this uses the permitted path.
+ *
+ * Worth knowing when reading a low number here: AtCoder suppresses ratings
+ * heavily for the first ~10-15 rated contests, which is why Settings offers a
+ * manual override.
+ */
+export async function fetchUserRating(session) {
+  if (!session?.handle) return null;
+
+  const response = await fetch(
+    `https://atcoder.jp/users/${encodeURIComponent(session.handle)}`,
+    { credentials: "omit" },
+  );
+  if (!response.ok) return null;
+
+  const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+  return extractRating(doc);
 }

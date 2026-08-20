@@ -5,11 +5,16 @@ import {
   saveCredentials,
   loadCredentials,
 } from "../../services/secure-store.js";
+import {
+  getRatingOverrides,
+  setRatingOverride,
+} from "../../services/user-ratings.js";
 import { CodeforcesService } from "../../services/codeforces-service.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const handleInput = document.getElementById("cf-handle");
   const atcoderHandleInput = document.getElementById("atcoder-handle");
+  const atcoderRatingInput = document.getElementById("atcoder-rating");
   const apiKeyInput = document.getElementById("api-key");
   const apiSecretInput = document.getElementById("api-secret");
 
@@ -29,7 +34,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ==========================================
   // JOB 1: LOAD EXISTING SETTINGS
   // ==========================================
-  const [storageResult, credentials, dirHandle] = await Promise.all([
+  const [storageResult, credentials, dirHandle, overrides] = await Promise.all([
     chrome.storage.local.get([
       "cf_trainer.handle",
       "cf_trainer.atcoder_handle",
@@ -37,12 +42,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     ]),
     loadCredentials(),
     loadDirHandle(),
+    getRatingOverrides(),
   ]);
 
   if (storageResult["cf_trainer.handle"])
     handleInput.value = storageResult["cf_trainer.handle"];
   if (storageResult["cf_trainer.atcoder_handle"])
     atcoderHandleInput.value = storageResult["cf_trainer.atcoder_handle"];
+  if (typeof overrides.atcoder === "number")
+    atcoderRatingInput.value = overrides.atcoder;
   if (credentials.apiKey) apiKeyInput.value = credentials.apiKey;
   if (credentials.apiSecret) apiSecretInput.value = credentials.apiSecret;
 
@@ -137,6 +145,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         "cf_trainer.auto_export": autoExportCheckbox.checked,
       }),
       saveCredentials(apiKeyInput.value.trim(), apiSecretInput.value.trim()),
+      // Blank clears the override, falling back to the fetched rating.
+      setRatingOverride("atcoder", Number.parseInt(atcoderRatingInput.value, 10)),
     ]);
 
     saveMsg.classList.remove("hidden");

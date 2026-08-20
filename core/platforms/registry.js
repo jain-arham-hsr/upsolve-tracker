@@ -78,3 +78,23 @@ export function contestsOnPlatform(contests, platformId) {
     (contest) => (contest?.platform ?? DEFAULT_PLATFORM_ID) === platformId,
   );
 }
+
+/** Every filter chip, in platform order. */
+export function listFilterGroups() {
+  return PLATFORMS.flatMap((platform) => platform.filterGroups ?? []);
+}
+
+/** Which chip a contest belongs to. */
+export function contestFilterKey(contest) {
+  return platformOf(contest).filterKey(contest);
+}
+
+/**
+ * @param {object} contest
+ * @param {string[]|null} selected - null or empty means no filter at all,
+ *   which is deliberately different from "nothing selected shows nothing".
+ */
+export function matchesFilter(contest, selected) {
+  if (!selected || selected.length === 0) return true;
+  return selected.includes(contestFilterKey(contest));
+}

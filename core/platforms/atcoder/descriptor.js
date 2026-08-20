@@ -69,6 +69,12 @@ export const atcoder = {
     return `${String(contest.id).toUpperCase()} ${problem.index}`;
   },
 
+  filterGroups: [{ key: "atcoder", label: "AtCoder" }],
+
+  filterKey() {
+    return "atcoder";
+  },
+
   subtypeLabel(contest) {
     const subtype = String(contest?.type ?? "OTHER").toUpperCase();
     return subtype === "OTHER" ? "Other" : subtype;

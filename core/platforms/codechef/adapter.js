@@ -236,3 +236,11 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
 
   return resolved;
 }
+
+/**
+ * CodeChef puts the signed-in user's rating in the page bootstrap, so
+ * createSession already has it — no extra request.
+ */
+export async function fetchUserRating(session) {
+  return typeof session?.rating === "number" ? session.rating : null;
+}

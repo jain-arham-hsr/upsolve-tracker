@@ -71,7 +71,7 @@ export class CFApp extends HTMLElement {
     // button. Say so instead.
     if (!(await hasCompleteSetup())) {
       this.setSyncStatus(
-        "Add your handle and API key in Settings to sync.",
+        "Add a handle in Settings to sync.",
         { sticky: true },
       );
       this.clearSyncStatus();

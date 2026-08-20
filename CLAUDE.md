@@ -181,6 +181,31 @@ CF tags are editable after publication, so a problem can gain tags days later �
 
 `LocalDB` deliberately holds only the tracked-contest methods. Settings are read directly from their dotted keys (`cf_trainer.handle`, `cf_trainer.auto_export`, `cf_trainer.contest_filter`, `cf_trainer.tag_rating_range`), and solved state is derived fresh from `user.status` on every sync rather than cached. Earlier accessors for a `cfHandle` key and a `solvedCache` were removed — nothing wrote them.
 
+### Ordering a merged queue
+
+`core/queue-order.js`. Raw ratings are **not** comparable across platforms — a Codeforces 1600 and an AtCoder 1600 are different difficulties in different populations' units. What is comparable is how likely you are to solve the thing:
+
+```
+P(solve) = 1 / (1 + 10^((difficulty − your_rating_on_that_platform) / 400))
+```
+
+All three sites define difficulty as roughly the rating at which a contestant has a 50% chance in-contest — the same quantity `rating-estimator.js` searches for — so feeding a problem's difficulty and your rating *on the same platform* cancels the scale. It is common-person equating with one anchor, you: a poor way to build a general conversion table, a good way to order one person's practice.
+
+The queue displays **native ratings with a platform chip**, never a converted number, and shows the probability coarsely (`~72%`) because it is modelled.
+
+Rows fall into three bands, and the two reasons a row can lack a probability must not be conflated:
+
+| Cause | Rating column | Chance column |
+|---|---|---|
+| no published difficulty | `???` | `—` |
+| your rating on that platform is unknown | the native rating | `—` |
+
+Collapsing those would hide a missing *user* rating — which mis-sorts a whole platform at once — behind what looks like ordinary missing problem data. Ties break deterministically (platform, then contest date, then index) or the list reshuffles between renders.
+
+`services/user-ratings.js` holds your rating per platform, and is deliberately conservative because **one rating moves an entire platform's block**: a failed lookup keeps the previous value rather than clearing it, a manual override always wins, and nothing is ever defaulted. The override exists mainly for AtCoder, which suppresses ratings heavily for the first 10–15 rated contests — a strong newcomer's fetched rating is genuinely wrong.
+
+Ratings come from `fetchUserRating` on each adapter: `user.info` for Codeforces, the server-rendered profile page for AtCoder (`platforms/atcoder/profile.js`, quarantined and null-on-failure), and the page bootstrap for CodeChef, which costs no extra request.
+
 ### UI shell
 
 `core/ui/index.js` defines `<cf-app>`, which clones the `#tpl-app` template from `index.html` and hand-rolls a router over three views in `#router-outlet`: `<cf-queue-view>`, `<cf-contest-list>` and `<cf-stats-view>`. Navigation is the tab bar; the header holds only refresh and settings, which act on the app rather than on a view. Views import their markup with Vite `?raw` imports and set `innerHTML`, and are **destroyed and rebuilt on every tab switch** — which is why selections that should survive (the contest type filter, the tag rating range) are persisted to `chrome.storage.local` rather than held on the instance.
@@ -190,7 +215,9 @@ Two conventions the shell depends on:
 - **`refreshData()`** — called on the current view after a global refresh. A view that needs post-sync updates must expose it; `queue-view` also takes the removed-contest list to announce.
 - **`cf-status` event** — views report long operations by dispatching a bubbling `CustomEvent` that the shell renders in its status strip (`null` clears it). That's how adding a contest narrates its stages without each view growing its own progress UI. The same `onProgress` callback is threaded through `processNewContest` and `updateSolvedStatus`; stages that no-op stay silent rather than claiming work they skipped.
 
-`queue-view` flattens all unsolved problems across contests and sorts ascending by rating (null → 9999), and shows a setup prompt when `hasCompleteSetup()` is false — without it, a missing handle or API key made refresh look like a dead button. `contest-list` watches `chrome.tabs` events to enable "+ Add Contest" only on a Codeforces contest/gym page, sorts by `startTimeSeconds` (newest first, unknown last), and deletes on a 700 ms hold rather than a click so a stray press does nothing at all.
+`queue-view` flattens all unsolved problems across contests and sorts by solve probability (see above), and shows a setup prompt when `hasCompleteSetup()` is false — which now means *any* platform is usable, not specifically Codeforces, since AtCoder needs only a handle and CodeChef needs nothing at all — without it, a missing handle or API key made refresh look like a dead button. The platform filter (`ui/platform-filter.js`) is shared by both list views and rendered as toggle chips, since it is multi-select and a narrow panel has no room for a multiple-choice dropdown. Its groups come from the registry, so a new platform appears without touching either view; Codeforces contributes two (Official and Gym) because that distinction is worth practising against, while platforms with many subtypes contribute one. An empty selection means **no filter**, not "show nothing".
+
+`contest-list` watches `chrome.tabs` events to enable "+ Add Contest" only on a supported contest page, sorts by `startTimeSeconds` (newest first, unknown last), and deletes on a 700 ms hold rather than a click so a stray press does nothing at all.
 
 ### Untrusted input
 

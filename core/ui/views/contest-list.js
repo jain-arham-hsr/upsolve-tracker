@@ -9,9 +9,18 @@ import {
 import { byStartTimeDesc } from "../../start-time-service.js";
 import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
-import { platformOf, matchContestUrl, contestKey, makeContestKey } from "../../platforms/registry.js";
-
-const FILTER_KEY = "cf_trainer.contest_filter";
+import {
+  platformOf,
+  matchContestUrl,
+  contestKey,
+  makeContestKey,
+  matchesFilter,
+} from "../../platforms/registry.js";
+import {
+  loadFilter,
+  renderFilterChips,
+  bindFilterChips,
+} from "../platform-filter.js";
 
 /** How long the remove button must be held. Drives the fill animation too. */
 const HOLD_MS = 700;
@@ -42,7 +51,6 @@ export class ContestList extends HTMLElement {
     this.btnImport = this.querySelector("#btn-import");
     this.fileInput = this.querySelector("#import-file-input");
     this.alertDiv = this.querySelector("#contest-alert");
-    this.filterSelect = this.querySelector("#contest-filter");
     this.countLabel = this.querySelector("#contest-count");
 
     this.btnAddContest.disabled = true;
@@ -50,17 +58,19 @@ export class ContestList extends HTMLElement {
 
     // The view is destroyed on every navigation, so the choice is persisted
     // rather than kept on the instance.
-    const filterSetting = await chrome.storage.local.get({
-      [FILTER_KEY]: "ALL",
-    });
-    this.filter = filterSetting[FILTER_KEY];
-    this.filterSelect.value = this.filter;
+    this.filter = await loadFilter();
+    this.filterChips = this.querySelector("#contest-filter-chips");
+    this.renderFilter();
 
-    this.filterSelect.addEventListener("change", async () => {
-      this.filter = this.filterSelect.value;
-      await chrome.storage.local.set({ [FILTER_KEY]: this.filter });
-      await this.renderQueue();
-    });
+    bindFilterChips(
+      this.filterChips,
+      () => this.filter,
+      async (next) => {
+        this.filter = next;
+        this.renderFilter();
+        await this.renderQueue();
+      },
+    );
 
     await this.renderQueue();
 
@@ -268,6 +278,12 @@ export class ContestList extends HTMLElement {
     }, 6000);
   }
 
+  renderFilter() {
+    if (this.filterChips) {
+      this.filterChips.innerHTML = renderFilterChips(this.filter);
+    }
+  }
+
   async renderQueue() {
     const allContests = await LocalDB.getTrackedContests();
 
@@ -277,13 +293,9 @@ export class ContestList extends HTMLElement {
       return;
     }
 
-    const contests = (
-      this.filter === "ALL"
-        ? [...allContests]
-        : allContests.filter(
-            (contest) => (contest.type ?? "").toUpperCase() === this.filter,
-          )
-    ).sort(byStartTimeDesc);
+    const contests = allContests
+      .filter((contest) => matchesFilter(contest, this.filter))
+      .sort(byStartTimeDesc);
 
     // Says "8 of 14" only when a filter is actually hiding something.
     this.countLabel.textContent =
@@ -292,8 +304,7 @@ export class ContestList extends HTMLElement {
         : `${contests.length} of ${allContests.length} contests`;
 
     if (contests.length === 0) {
-      const label = this.filter === "OFFICIAL" ? "official" : "gym";
-      this.container.innerHTML = `<div class="muted">No ${label} contests in queue.</div>`;
+      this.container.innerHTML = `<div class="muted">Nothing matches that filter.</div>`;
       return;
     }
 

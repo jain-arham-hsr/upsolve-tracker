@@ -183,3 +183,18 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
   await syncOfficialProblemData(session.service, contests, onProgress);
   await syncStartTimes(session.service, contests, onProgress);
 }
+
+/**
+ * Your current Codeforces rating, for the queue's solve-probability ordering.
+ *
+ * Returns null rather than a fallback when it can't be read — an unrated
+ * account has no `rating` field at all, and substituting one would silently
+ * shift every Codeforces problem's place in the merged queue.
+ */
+export async function fetchUserRating(session) {
+  if (!session?.handle) return null;
+
+  const users = await session.service.getUsersInfo([session.handle]);
+  const rating = users?.[0]?.rating;
+  return typeof rating === "number" ? rating : null;
+}

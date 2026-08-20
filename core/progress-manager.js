@@ -8,6 +8,7 @@ import {
   contestsOnPlatform,
 } from "./platforms/registry.js";
 import { getAdapter } from "./platforms/adapters.js";
+import { storeFetchedRatings } from "./services/user-ratings.js";
 
 /**
  * Reconciles local contest data with each platform's submission history.
@@ -19,10 +20,14 @@ import { getAdapter } from "./platforms/adapters.js";
 export async function updateSolvedStatus(onProgress = () => {}) {
   const trackedContests = await LocalDB.getTrackedContests();
 
-  const { solvedKeys, anySucceeded } = await collectSolvedKeys(
+  const { solvedKeys, ratings, anySucceeded } = await syncPlatforms(
     trackedContests,
     onProgress,
   );
+
+  // Only platforms that actually answered. A failed lookup must leave the
+  // previous rating in place, not blank it and re-sort the queue.
+  await storeFetchedRatings(ratings);
 
   // Every platform failed — usually an unconfigured extension or an outage.
   // Returning before the write keeps a bad sync from touching storage at all.
@@ -76,14 +81,15 @@ export function applySolvedStatus(contests, solvedKeys) {
 }
 
 /**
- * Asks every platform that has contests tracked for its solved history, and
- * lets it fill in any metadata it owes.
+ * Asks every platform that has contests tracked for its solved history, your
+ * rating there, and any metadata it owes.
  *
  * Failures are isolated per platform: one site being down or unconfigured
  * must not stop the others syncing, and must never clear anything.
  */
-async function collectSolvedKeys(trackedContests, onProgress) {
+async function syncPlatforms(trackedContests, onProgress) {
   const solvedKeys = new Set();
+  const ratings = {};
   let anySucceeded = false;
 
   for (const platform of listPlatforms()) {
@@ -103,6 +109,14 @@ async function collectSolvedKeys(trackedContests, onProgress) {
       const keys = await adapter.fetchSolvedKeys(session, mine, onProgress);
       keys.forEach((key) => solvedKeys.add(key));
 
+      // Your rating on this platform, for the queue's ordering. Recorded only
+      // when the lookup itself succeeded.
+      try {
+        ratings[platform.id] = (await adapter.fetchUserRating?.(session)) ?? null;
+      } catch (error) {
+        console.warn(`[Progress Manager] ${platform.label} rating failed:`, error.message);
+      }
+
       // Fill in metadata for contests still missing it. Handed only this
       // platform's contests, since these match on bare contest ids.
       await adapter.syncMetadata?.(session, mine, onProgress);
@@ -113,5 +127,5 @@ async function collectSolvedKeys(trackedContests, onProgress) {
     }
   }
 
-  return { solvedKeys, anySucceeded };
+  return { solvedKeys, ratings, anySucceeded };
 }

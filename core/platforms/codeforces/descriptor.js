@@ -54,6 +54,20 @@ export const codeforces = {
     return `${noun} ${contest.id}${problem.index}`;
   },
 
+  /**
+   * Codeforces splits into two, because official and gym are genuinely
+   * different things to practise. Platforms with many subtypes offer one
+   * group instead — nobody wants five AtCoder chips.
+   */
+  filterGroups: [
+    { key: "codeforces:OFFICIAL", label: "CF Official" },
+    { key: "codeforces:GYM", label: "CF Gym" },
+  ],
+
+  filterKey(contest) {
+    return `codeforces:${subtypeOf(contest)}`;
+  },
+
   /** Badge text in the contest list. */
   subtypeLabel(contest) {
     return subtypeOf(contest) === "OFFICIAL" ? "Official" : "Gym";

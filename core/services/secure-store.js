@@ -73,10 +73,33 @@ export const loadCredentials = async () => ({
  * Credentials live in IndexedDB and the handle in chrome.storage, so this is
  * the one place that knows to check both.
  */
-export async function hasCompleteSetup() {
+/**
+ * Which platforms are configured well enough to read solved history.
+ *
+ * Requirements differ: Codeforces needs a handle plus a signed key pair,
+ * AtCoder needs only a handle, and CodeChef needs nothing at all — it reads
+ * the signed-in user straight from the page. CodeChef is therefore left out
+ * here, since whether it works depends on a live session rather than on
+ * anything that was configured.
+ */
+export async function getPlatformSetup() {
   const [settings, { apiKey, apiSecret }] = await Promise.all([
-    chrome.storage.local.get("cf_trainer.handle"),
+    chrome.storage.local.get(["cf_trainer.handle", "cf_trainer.atcoder_handle"]),
     loadCredentials(),
   ]);
-  return Boolean(settings["cf_trainer.handle"] && apiKey && apiSecret);
+
+  return {
+    codeforces: Boolean(settings["cf_trainer.handle"] && apiKey && apiSecret),
+    atcoder: Boolean(settings["cf_trainer.atcoder_handle"]),
+  };
+}
+
+/**
+ * True once *any* platform can sync. Previously this demanded Codeforces
+ * credentials, so someone using only AtCoder — which needs none — was shown a
+ * setup prompt and a refresh button that looked broken.
+ */
+export async function hasCompleteSetup() {
+  const setup = await getPlatformSetup();
+  return Object.values(setup).some(Boolean);
 }

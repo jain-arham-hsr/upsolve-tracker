@@ -296,6 +296,43 @@ cf-stats-view {
   font-weight: 500;
 }
 
+/* Each meta row pairs two values so the block stays two lines tall. */
+.meta-line {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* How likely you are to solve it — the value the queue is actually sorted by,
+   so it leads. An em dash here means a rating is missing, not a hard problem. */
+.solve-chance {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* Which site, so a merged queue stays readable at a glance. */
+.platform-chip {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
+}
+
+/* Marks a low-confidence published difficulty rather than passing it off as
+   measured. AtCoder flags about 11% of its models this way. */
+.rating-flag {
+  color: var(--text-muted);
+  font-weight: 700;
+  cursor: help;
+}
+
 /* --- Contest List Items --- */
 .contest-row {
   display: flex;
@@ -949,4 +986,38 @@ cf-stats-view,
   text-align: center;
   font-weight: 500;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* --- Platform filter chips (Queue and Contests) --- */
+
+.list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.filter-chip {
+  font-family: "Inter", sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  background-color: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.filter-chip:hover {
+  color: var(--text-main);
+  border-color: var(--text-muted);
+}
+
+.filter-chip.is-on {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--bg-color);
 }

@@ -77,6 +77,12 @@ export const codechef = {
     return this.solvedKey(contest, problem);
   },
 
+  filterGroups: [{ key: "codechef", label: "CodeChef" }],
+
+  filterKey() {
+    return "codechef";
+  },
+
   subtypeLabel(contest) {
     return SUBTYPE_LABELS[String(contest?.type ?? "OTHER").toUpperCase()] ?? "Other";
   },
