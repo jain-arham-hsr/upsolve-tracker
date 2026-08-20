@@ -8,8 +8,9 @@
  * need this module.
  */
 import * as codeforces from "./codeforces/adapter.js";
+import * as atcoder from "./atcoder/adapter.js";
 
-const ADAPTERS = { codeforces };
+const ADAPTERS = { codeforces, atcoder };
 
 export function getAdapter(platformId) {
   return ADAPTERS[platformId] ?? null;

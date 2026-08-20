@@ -13,10 +13,11 @@
     <h2>CF Trainer Settings</h2>
 
     <p class="intro">
-      CF Trainer needs read-only access to your Codeforces account to see which problems
-      you've solved. Your key and secret are stored in this browser only — they're used to
-      sign requests to codeforces.com and are never sent anywhere else. They're also kept
-      out of the JSON backup on purpose.
+      CF Trainer needs read-only access to your accounts to see which problems you've
+      solved. Codeforces requires an API key pair; AtCoder needs only a handle. Your key
+      and secret are stored in this browser only — they're used to sign requests to
+      codeforces.com and are never sent anywhere else. They're also kept out of the JSON
+      backup on purpose.
     </p>
 
     <div class="form-group">
@@ -39,6 +40,15 @@
       <label for="api-secret">API Secret</label>
       <p class="help-text">The secret half of the same key pair.</p>
       <input type="password" id="api-secret" placeholder="••••••••" spellcheck="false" />
+    </div>
+
+    <div class="form-group">
+      <label for="atcoder-handle">AtCoder Handle</label>
+      <p class="help-text">
+        Optional. AtCoder needs no key — the handle alone is enough to read which
+        problems you've solved. Leave blank if you don't use AtCoder.
+      </p>
+      <input type="text" id="atcoder-handle" placeholder="e.g., tourist" spellcheck="false" />
     </div>
 
     <div class="form-group">

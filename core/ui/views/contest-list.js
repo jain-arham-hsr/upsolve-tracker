@@ -300,9 +300,8 @@ export class ContestList extends HTMLElement {
     this.container.innerHTML = contests
       .map((contest) => {
         const platform = platformOf(contest);
-        const isOfficial = contest.type === "OFFICIAL";
-        const label = isOfficial ? "Official" : "Gym";
-        const typeClass = isOfficial ? "type-official" : "type-gym";
+        const label = platform.subtypeLabel(contest);
+        const typeClass = platform.badgeClass(contest);
         const url = platform.contestUrl(contest);
 
         // Scraped names carry stray newlines/indentation from the CF page.
@@ -316,7 +315,8 @@ export class ContestList extends HTMLElement {
           <a href="${url}" target="_blank" class="contest-row">
             <span class="contest-name">${name}</span>
             <span class="contest-tags">
-              <span class="contest-id">#${contest.id}</span>
+              <span class="contest-platform">${escapeHtml(platform.shortLabel)}</span>
+              <span class="contest-id">#${escapeHtml(String(contest.id))}</span>
               <span class="contest-type ${typeClass}">${label}</span>
             </span>
           </a>

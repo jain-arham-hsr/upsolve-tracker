@@ -65,7 +65,10 @@ export async function fetchSolvedKeys(session, onProgress = () => {}) {
     submissions
       .filter((submission) => submission.verdict === "OK")
       .map((submission) =>
-        codeforces.solvedKey(submission.problem.contestId, submission.problem.index),
+        codeforces.solvedKey(
+          { id: submission.problem.contestId },
+          { index: submission.problem.index },
+        ),
       ),
   );
 }

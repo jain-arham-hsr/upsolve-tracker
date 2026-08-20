@@ -9,6 +9,7 @@ import { CodeforcesService } from "../../services/codeforces-service.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const handleInput = document.getElementById("cf-handle");
+  const atcoderHandleInput = document.getElementById("atcoder-handle");
   const apiKeyInput = document.getElementById("api-key");
   const apiSecretInput = document.getElementById("api-secret");
 
@@ -29,13 +30,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   // JOB 1: LOAD EXISTING SETTINGS
   // ==========================================
   const [storageResult, credentials, dirHandle] = await Promise.all([
-    chrome.storage.local.get(["cf_trainer.handle", "cf_trainer.auto_export"]),
+    chrome.storage.local.get([
+      "cf_trainer.handle",
+      "cf_trainer.atcoder_handle",
+      "cf_trainer.auto_export",
+    ]),
     loadCredentials(),
     loadDirHandle(),
   ]);
 
   if (storageResult["cf_trainer.handle"])
     handleInput.value = storageResult["cf_trainer.handle"];
+  if (storageResult["cf_trainer.atcoder_handle"])
+    atcoderHandleInput.value = storageResult["cf_trainer.atcoder_handle"];
   if (credentials.apiKey) apiKeyInput.value = credentials.apiKey;
   if (credentials.apiSecret) apiSecretInput.value = credentials.apiSecret;
 
@@ -126,6 +133,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await Promise.all([
       chrome.storage.local.set({
         "cf_trainer.handle": handleInput.value.trim(),
+        "cf_trainer.atcoder_handle": atcoderHandleInput.value.trim(),
         "cf_trainer.auto_export": autoExportCheckbox.checked,
       }),
       saveCredentials(apiKeyInput.value.trim(), apiSecretInput.value.trim()),

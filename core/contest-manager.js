@@ -34,7 +34,7 @@ export async function processNewContest(url, onProgress = () => {}) {
 
     let solvedCount = 0;
     contest.problems.forEach((prob) => {
-      if (solvedKeys.has(platform.solvedKey(contestId, prob.index))) {
+      if (solvedKeys.has(platform.solvedKey(contest, prob))) {
         prob.solved = true;
         solvedCount++;
       }

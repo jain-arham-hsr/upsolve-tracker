@@ -35,7 +35,6 @@ test("non-contest URLs return null rather than a plausible guess", () => {
   for (const url of [
     "https://codeforces.com/problemset",
     "https://codeforces.com/profile/tourist",
-    "https://atcoder.jp/contests/abc471",
     "https://www.codechef.com/START252D",
     "not a url",
     "",

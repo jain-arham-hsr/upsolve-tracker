@@ -54,6 +54,16 @@ export const codeforces = {
     return `${noun} ${contest.id}${problem.index}`;
   },
 
+  /** Badge text in the contest list. */
+  subtypeLabel(contest) {
+    return subtypeOf(contest) === "OFFICIAL" ? "Official" : "Gym";
+  },
+
+  /** Badge style: filled for primary contests, outlined for secondary. */
+  badgeClass(contest) {
+    return subtypeOf(contest) === "OFFICIAL" ? "type-official" : "type-gym";
+  },
+
   /** How the contest is named in prose, e.g. "Official contest". */
   contestLabel(contest) {
     return subtypeOf(contest) === "OFFICIAL" ? "Official contest" : "Gym contest";
@@ -65,8 +75,8 @@ export const codeforces = {
    * `${contestId}-${index}` would let a Codeforces contest and a CodeChef one
    * sharing a number mark each other's problems solved.
    */
-  solvedKey(contestId, index) {
-    return `codeforces:${contestId}-${index}`;
+  solvedKey(contest, problem) {
+    return `codeforces:${contest.id}-${problem.index}`;
   },
 
   /**

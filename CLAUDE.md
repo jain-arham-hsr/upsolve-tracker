@@ -74,7 +74,22 @@ Note every relative import must carry its `.js` extension. Vite resolves extensi
 
 `backup-validation.js` deliberately does **not** require `platform` — every backup written before this change lacks it — but does refuse a backup naming a platform this build doesn't know, since that would otherwise throw later while rendering the list.
 
-### Data acquisition: two channels, both required
+### AtCoder
+
+`core/platforms/atcoder/`. Far smaller than the Codeforces adapter, because AtCoder Problems (kenkoooo) publishes difficulty directly — **there is no scrape, no participant sampling and no estimator on this path**. Four static JSON files plus a submissions endpoint cover everything. AtCoder needs no key or secret, only a handle (`cf_trainer.atcoder_handle`), and only to read solved history.
+
+Four things that are easy to get wrong:
+
+- **`contest-problem.json` is not optional.** 1,906 of 9,383 problems belong to more than one contest, and `problems.json` records only the one a problem debuted in. Reading it alone under-reports a rerun badly — one daily-training round lists 4 problems instead of 9. Verified live.
+- **Difficulty is unbounded below.** 1,772 rated problems sit under 800 and 931 are negative; ABC 471's A is −817. Nothing on this path may apply the estimator's `Math.max(800, …)` floor. (`-10000` appears once, for `agc010_a` — a single fitting artifact, not a sentinel, so it needs no guard.)
+- **A problem's identity is its task id**, not contest + index, so `solvedKey` and `problemKey` are both `atcoder:<task_id>`. Solving a problem in its original contest clears it from every rerun too.
+- **Difficulty arrives only once a problem has run in a rated contest.** ABC/ARC/AGC are 92–99% covered, but a round added the evening it ends may have gaps, and unrated contests (`awc*`) never get models at all. Hence `allowsPartialRatings: true`: those problems store `rating: null`, render as "???" and are re-checked on every refresh. That re-check is free — `problem-models.json` is already fetched and cached.
+
+`problems-api.js` caches the four resources **in memory**, not in `chrome.storage.local`: they total ~5 MB parsed, against a 10 MB quota the queue itself needs. Requests are spaced ≥1 s per kenkoooo's published etiquette, and queue behind one another through a promise chain — checking a timestamp per call looks equivalent but lets concurrent requests all wait the same interval and then fire together, which is the exact burst the spacing exists to prevent.
+
+Submission paging is the other sharp edge. The endpoint returns at most 500 rows, and both failure modes are silent: stopping at the first full page leaves solved problems in the queue forever, while advancing the cursor *past* the newest timestamp skips every submission sharing that second. So the cursor moves **to** the newest timestamp, the overlapping row is deduplicated by id, and the loop stops when a page brings nothing new. Note the documented `atcoder-api/results?user=` endpoint **404s** — it was retired in favour of the v3 route.
+
+### Data acquisition on Codeforces: two channels, both required
 
 1. **Signed API** (`core/services/codeforces-service.js`) — builds the `apiSig` (SHA-512 over `rand/method?sortedParams#secret`) via `crypto.subtle`. Used for `user.status`, `contest.ratingChanges`, `contest.standings`, `user.info`.
 2. **HTML scraping** (`core/services/scraping-service.js` → `core/services/http-client.js`, parsing in `core/services/standings-dom.js`) — the standings page is the only source for problem names/URLs and official in-contest solve counts. `problemStatistics.solvedCount` is *not* a substitute: it counts all-time solves including practice, which the estimator can't use.

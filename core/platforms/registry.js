@@ -7,10 +7,11 @@
  * than failing — that is the migration, and it costs nothing at read time.
  */
 import { codeforces } from "./codeforces/descriptor.js";
+import { atcoder } from "./atcoder/descriptor.js";
 
 export const DEFAULT_PLATFORM_ID = codeforces.id;
 
-const PLATFORMS = [codeforces];
+const PLATFORMS = [codeforces, atcoder];
 const BY_ID = new Map(PLATFORMS.map((platform) => [platform.id, platform]));
 
 export function listPlatforms() {

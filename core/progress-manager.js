@@ -58,7 +58,7 @@ export function applySolvedStatus(contests, solvedKeys) {
       // load-bearing: a platform that answers with an empty solved list —
       // because the user is logged out, say — must not resurrect problems
       // they have already finished.
-      if (solvedKeys.has(platform.solvedKey(contest.id, prob.index))) {
+      if (solvedKeys.has(platform.solvedKey(contest, prob))) {
         prob.solved = true;
       }
 
