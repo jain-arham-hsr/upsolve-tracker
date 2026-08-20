@@ -106,6 +106,16 @@ export const codeforces = {
    * Codeforces rank bands, so a histogram bar carries the same meaning the
    * colour does on the site itself.
    */
+  /**
+   * Chart colour for this platform's slice of the overview ring — blue, matching the tallest bar in its logo.
+   *
+   * Fixed per platform, never assigned by size: a filter that changes which
+   * platforms are present must not repaint the survivors. Taken from the first
+   * three slots of the validated categorical theme rather than picked by eye;
+   * the icons' own brand colours fail the chroma floor as fills.
+   */
+  chartColor: "#3987e5",
+
   ratingBands: [
     { min: 2400, class: "band-red" },
     { min: 2100, class: "band-orange" },

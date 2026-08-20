@@ -1062,6 +1062,11 @@ cf-stats-view,
 }
 
 .filter-chip {
+  /* inline-flex so a platform mark can sit inside the chip; buttons default
+     to inline-block, which would not seat an SVG child. */
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: "Inter", sans-serif;
   font-size: 10px;
   font-weight: 700;
@@ -1138,4 +1143,103 @@ cf-stats-view,
 .contest-tags .platform-icon {
   width: 14px;
   height: 14px;
+}
+
+/* --- Overview ring: where the backlog sits, by platform --- */
+
+.ring-figure {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 0 12px;
+}
+
+.ring-chart {
+  width: 104px;
+  height: 104px;
+  flex-shrink: 0;
+}
+
+/* Rounded data-ends, and a surface-coloured seam so adjacent fills stay
+   separable without a border. */
+.ring-arc {
+  stroke-linecap: round;
+}
+
+.ring-total {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 19px;
+  font-weight: 700;
+  fill: var(--text-main);
+}
+
+.ring-caption {
+  font-family: "Inter", sans-serif;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  fill: var(--text-muted);
+}
+
+.ring-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.ring-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+}
+
+.ring-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Names and counts wear text tokens, not the series colour — the swatch and
+   the mark beside them carry identity. */
+.ring-legend-name {
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ring-legend-count {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* --- Solve-chance bands: one hue, light to dark ---
+   An ordinal ramp, not the rank colours. Reusing green-through-red there put
+   most of a normal queue in a "red" band, which reads as a verdict on the
+   reader rather than as a count of hard problems. Steps come from the blue
+   ramp and stop at 600, so the darkest still clears the surface. */
+.chance-1 {
+  background-color: #cde2fb;
+}
+.chance-2 {
+  background-color: #9ec5f4;
+}
+.chance-3 {
+  background-color: #6da7ec;
+}
+.chance-4 {
+  background-color: #3987e5;
+}
+.chance-5 {
+  background-color: #256abf;
+}
+.chance-6 {
+  background-color: #184f95;
 }

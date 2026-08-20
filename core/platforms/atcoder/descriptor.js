@@ -108,6 +108,16 @@ export const atcoder = {
    * scale runs negative — so borrowing Codeforces' thresholds would paint the
    * entire ABC range a single colour.
    */
+  /**
+   * Chart colour for this platform's slice of the overview ring — aqua; AtCoder brands achromatically, so the slot is arbitrary.
+   *
+   * Fixed per platform, never assigned by size: a filter that changes which
+   * platforms are present must not repaint the survivors. Taken from the first
+   * three slots of the validated categorical theme rather than picked by eye;
+   * the icons' own brand colours fail the chroma floor as fills.
+   */
+  chartColor: "#199e70",
+
   ratingBands: [
     { min: 2800, class: "band-red" },
     { min: 2400, class: "band-orange" },

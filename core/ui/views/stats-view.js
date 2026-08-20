@@ -5,6 +5,8 @@ import { escapeHtml } from "../escape-html.js";
 import { listPlatforms, platformOf, getPlatform } from "../../platforms/registry.js";
 import { getEffectiveRatings } from "../../services/user-ratings.js";
 import { solveProbability } from "../../queue-order.js";
+import { renderPlatformRing } from "../platform-ring.js";
+import { platformIcon } from "../platform-icons.js";
 import { collectPendingProblems } from "../../pending-problems.js";
 
 const BUCKET_SIZE = 100;
@@ -15,17 +17,22 @@ const SCOPE_KEY = "cf_trainer.stats_scope";
 const rangeKeyFor = (scope) => `cf_trainer.tag_rating_range.${scope || "all"}`;
 
 /**
- * Overview bins by solve probability rather than rating, because rating
- * buckets are not comparable across platforms — the one claim this whole
- * design avoids making.
+ * Overview bins by solve probability rather than rating, because rating buckets
+ * are not comparable across platforms — the one claim this whole design avoids
+ * making.
+ *
+ * A **sequential** ramp, one hue light-to-dark: this is ordered magnitude, with
+ * no meaningful midpoint to diverge around. The rank colours were used here
+ * first, which put most of a normal queue in a red band and made the chart read
+ * as a verdict on the reader rather than as a count of hard problems.
  */
 const CHANCE_BANDS = [
-  { min: 0.9, label: "90%+", class: "band-green" },
-  { min: 0.75, label: "75–90%", class: "band-cyan" },
-  { min: 0.5, label: "50–75%", class: "band-blue" },
-  { min: 0.25, label: "25–50%", class: "band-violet" },
-  { min: 0.1, label: "10–25%", class: "band-orange" },
-  { min: 0, label: "<10%", class: "band-red" },
+  { min: 0.9, label: "90%+", class: "chance-1" },
+  { min: 0.75, label: "75–90%", class: "chance-2" },
+  { min: 0.5, label: "50–75%", class: "chance-3" },
+  { min: 0.25, label: "25–50%", class: "chance-4" },
+  { min: 0.1, label: "10–25%", class: "chance-5" },
+  { min: 0, label: "<10%", class: "chance-6" },
 ];
 
 export class StatsView extends HTMLElement {
@@ -36,6 +43,9 @@ export class StatsView extends HTMLElement {
     this.summary = this.querySelector("#stats-summary");
     this.hint = this.querySelector("#stats-hint");
     this.coverage = this.querySelector("#tag-coverage");
+    this.ring = this.querySelector("#stats-ring");
+    this.ringSection = this.querySelector("#ring-section");
+    this.tagsSection = this.querySelector("#tags-section");
     this.scopeChips = this.querySelector("#stats-scope-chips");
     this.spreadTitle = this.querySelector("#spread-title");
     this.rangeBox = this.querySelector("#tag-range");
@@ -81,14 +91,20 @@ export class StatsView extends HTMLElement {
       return;
     }
 
-    const chip = (scope, label) =>
+    // Icons and full names, matching every other row in the panel. The label
+    // is escaped but the mark is static markup, so they interpolate separately.
+    const chip = (scope, label, mark = "") =>
       `<button type="button" class="filter-chip${
         this.scope === scope ? " is-on" : ""
-      }" data-scope="${escapeHtml(scope)}">${escapeHtml(label)}</button>`;
+      }" data-scope="${escapeHtml(scope)}">${mark}${escapeHtml(label)}</button>`;
 
     this.scopeChips.innerHTML =
       chip("", "Overview") +
-      present.map((platform) => chip(platform.id, platform.shortLabel)).join("");
+      present
+        .map((platform) =>
+          chip(platform.id, platform.label, platformIcon(platform.id, platform.shortLabel)),
+        )
+        .join("");
   }
 
   async render() {
@@ -118,18 +134,31 @@ export class StatsView extends HTMLElement {
     this.ratings = ratings;
 
     this.renderHint();
-    this.renderCoverage(allContests);
 
-    if (this.scope) {
+    // Tag vocabularies do not match between platforms — Codeforces says
+    // "dfs and similar" where CodeChef says "graphs", and AtCoder publishes
+    // none at all — so pooling them produces an authoritative-looking chart
+    // built from incompatible lists. Tags live in the per-platform panels only.
+    const scoped = Boolean(this.scope);
+    this.tagsSection.classList.toggle("hidden", !scoped);
+    this.ringSection.classList.toggle("hidden", scoped);
+
+    if (scoped) {
       this.spreadTitle.textContent = "RATING SPREAD";
       this.renderHistogram(ratings, getPlatform(this.scope));
+      this.renderCoverage(allContests);
+      this.syncRangeControls(ratings);
+      this.renderTags();
     } else {
-      this.spreadTitle.textContent = "HOW LIKELY YOU ARE TO SOLVE THEM";
+      this.ring.innerHTML = renderPlatformRing(
+        this.presentPlatforms.map((platform) => ({
+          platform,
+          count: this.pending.filter((entry) => entry.platform.id === platform.id).length,
+        })),
+      );
+      this.spreadTitle.textContent = "SOLVE CHANCE";
       this.renderChanceHistogram();
     }
-
-    this.syncRangeControls(ratings);
-    this.renderTags();
     this.summary.textContent = this.buildSummary(ratings, unrated);
   }
 
@@ -397,23 +426,14 @@ export class StatsView extends HTMLElement {
 
     const parts = [`${pending} pending`];
 
-    if (this.scope && ratings.length > 0) {
-      parts.push(`median ${median(ratings)}`);
-    } else if (!this.scope && this.presentPlatforms.length > 1) {
-      // A median across platforms would be a median of incomparable numbers.
-      parts.push(
-        this.presentPlatforms
-          .map((platform) => {
-            const count = this.pending.filter(
-              (entry) => entry.platform.id === platform.id,
-            ).length;
-            return `${platform.shortLabel} ${count}`;
-          })
-          .join(" · "),
-      );
-    }
+    // A median only means something inside one platform. Across three it would
+    // be a median of numbers that do not share a scale.
+    if (this.scope && ratings.length > 0) parts.push(`median ${median(ratings)}`);
 
+    // No per-platform breakdown here on the overview — the ring's legend
+    // carries it, with icons and full names instead of abbreviations.
     if (unrated > 0) parts.push(`${unrated} unrated`);
+
     return parts.join(" · ");
   }
 }

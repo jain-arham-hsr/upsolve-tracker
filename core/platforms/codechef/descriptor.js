@@ -94,6 +94,16 @@ export const codechef = {
   },
 
   /** CodeChef's star bands: 7★ from 2500, down to 1★ below 1400. */
+  /**
+   * Chart colour for this platform's slice of the overview ring — orange, nearest its brown toque.
+   *
+   * Fixed per platform, never assigned by size: a filter that changes which
+   * platforms are present must not repaint the survivors. Taken from the first
+   * three slots of the validated categorical theme rather than picked by eye;
+   * the icons' own brand colours fail the chroma floor as fills.
+   */
+  chartColor: "#d95926",
+
   ratingBands: [
     { min: 2500, class: "band-red" },
     { min: 2200, class: "band-orange" },
