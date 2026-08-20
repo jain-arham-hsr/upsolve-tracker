@@ -2,6 +2,9 @@
  * Your rating per platform. This is the highest-leverage number in the queue:
  * a problem's rating misplaces one row, yours misplaces a whole platform's
  * block. So the failure modes here are all about *not* changing it.
+ *
+ * Ratings are fetched automatically on every platform, so there is no manual
+ * override to test — see platform-identity.test.js for where they come from.
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -27,29 +30,13 @@ function stubChrome(initial = {}) {
   };
 }
 
-const {
-  mergeRatings,
-  storeFetchedRatings,
-  getEffectiveRatings,
-  setRatingOverride,
-  RATING_KEYS,
-} = await import("../core/services/user-ratings.js");
+const { storeFetchedRatings, getEffectiveRatings, RATING_KEYS } = await import(
+  "../core/services/user-ratings.js"
+);
 
-const { AUTO_KEY, OVERRIDE_KEY } = RATING_KEYS;
+const { AUTO_KEY } = RATING_KEYS;
 
 beforeEach(() => stubChrome());
-
-test("a manual override wins over the fetched rating", () => {
-  // AtCoder suppresses ratings for the first ~10-15 contests, so a strong
-  // newcomer's fetched number is wrong and only they can say so.
-  const merged = mergeRatings({ atcoder: 400, codeforces: 1800 }, { atcoder: 1700 });
-  assert.deepEqual(merged, { atcoder: 1700, codeforces: 1800 });
-});
-
-test("a non-numeric override is ignored rather than blanking the real value", () => {
-  assert.deepEqual(mergeRatings({ codeforces: 1800 }, { codeforces: "" }), { codeforces: 1800 });
-  assert.deepEqual(mergeRatings({ codeforces: 1800 }, { codeforces: NaN }), { codeforces: 1800 });
-});
 
 test("a platform that failed keeps its previous rating", async () => {
   // The important one. Clearing on failure would drop every problem from that
@@ -75,18 +62,9 @@ test("an empty result set writes nothing at all", async () => {
   assert.deepEqual(store[AUTO_KEY], { codeforces: 1800 });
 });
 
-test("effective ratings combine both sources", async () => {
-  stubChrome({
-    [AUTO_KEY]: { codeforces: 1800, atcoder: 400 },
-    [OVERRIDE_KEY]: { atcoder: 1700 },
-  });
-  assert.deepEqual(await getEffectiveRatings(), { codeforces: 1800, atcoder: 1700 });
-});
-
-test("clearing an override falls back to the fetched value", async () => {
-  stubChrome({ [AUTO_KEY]: { atcoder: 400 }, [OVERRIDE_KEY]: { atcoder: 1700 } });
-  await setRatingOverride("atcoder", "");
-  assert.deepEqual(await getEffectiveRatings(), { atcoder: 400 });
+test("effective ratings are whatever was last fetched", async () => {
+  stubChrome({ [AUTO_KEY]: { codeforces: 1800, atcoder: 400 } });
+  assert.deepEqual(await getEffectiveRatings(), { codeforces: 1800, atcoder: 400 });
 });
 
 test("no data anywhere yields an empty map, not zeroes", async () => {

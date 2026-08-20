@@ -153,25 +153,44 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
 }
 
 /**
- * Your current AtCoder rating, read from your profile page.
- *
- * The profile is server-rendered, unlike CodeChef's SPA, so the rating is in
- * the HTML. `robots.txt` disallows `/users/*​/history/` but not the profile
- * itself, so this uses the permitted path.
- *
- * Worth knowing when reading a low number here: AtCoder suppresses ratings
- * heavily for the first ~10-15 rated contests, which is why Settings offers a
- * manual override.
+ * AtCoder identity is configured, not ambient: kenkoooo is queried by handle
+ * and the profile fetch omits credentials, so the browser session plays no
+ * part.
  */
-export async function fetchUserRating(session) {
-  if (!session?.handle) return null;
+export const identityIsAmbient = false;
+
+/**
+ * Confirms the stored handle exists, and reads the rating from the same page.
+ *
+ * A handle that does not exist yields no solved problems, which looks exactly
+ * like a slow sync; one that belongs to somebody else yields their history.
+ * Both are silent, so this runs before solved status is read.
+ *
+ * Worth knowing when the number looks low: AtCoder suppresses ratings heavily
+ * for the first 10-15 rated contests.
+ *
+ * @throws when no handle is set, or AtCoder has no such user.
+ */
+export async function verifyIdentity(session) {
+  if (!session?.handle) {
+    throw new Error("No AtCoder handle set. Add one in Settings.");
+  }
 
   const response = await fetch(
     `https://atcoder.jp/users/${encodeURIComponent(session.handle)}`,
     { credentials: "omit" },
   );
-  if (!response.ok) return null;
+
+  if (response.status === 404) {
+    throw new Error(`AtCoder has no user "${session.handle}".`);
+  }
+  if (!response.ok) {
+    throw new Error(`AtCoder returned ${response.status} for that profile.`);
+  }
 
   const doc = new DOMParser().parseFromString(await response.text(), "text/html");
-  return extractRating(doc);
+
+  // extractRating returns null rather than a default when the page shape
+  // changes — a substituted rating would mis-sort every AtCoder problem.
+  return { username: session.handle, rating: extractRating(doc) };
 }

@@ -238,9 +238,29 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
 }
 
 /**
- * CodeChef puts the signed-in user's rating in the page bootstrap, so
- * createSession already has it — no extra request.
+ * CodeChef identity is **ambient**: it comes from the browser session rather
+ * than from anything configured. That is why a mismatch is treated as an
+ * intruder and refused, instead of being adopted the way an edited handle is.
  */
-export async function fetchUserRating(session) {
-  return typeof session?.rating === "number" ? session.rating : null;
+export const identityIsAmbient = true;
+
+/**
+ * The signed-in account, from the bootstrap object createSession already read
+ * — no extra request.
+ *
+ * @throws when signed out. Signing out is indistinguishable from having solved
+ *   nothing (`problemsstats.solved` is simply empty), so this has to fail
+ *   rather than let a caller read that as "nothing solved".
+ */
+export async function verifyIdentity(session) {
+  if (!session?.signedIn || !session.username) {
+    throw new Error(
+      "Not signed in to CodeChef. Open codechef.com, sign in, and try again.",
+    );
+  }
+
+  return {
+    username: session.username,
+    rating: typeof session.rating === "number" ? session.rating : null,
+  };
 }

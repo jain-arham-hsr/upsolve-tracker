@@ -5,16 +5,13 @@ import {
   saveCredentials,
   loadCredentials,
 } from "../../services/secure-store.js";
-import {
-  getRatingOverrides,
-  setRatingOverride,
-} from "../../services/user-ratings.js";
 import { CodeforcesService } from "../../services/codeforces-service.js";
+import * as codechefAdapter from "../../platforms/codechef/adapter.js";
+import { getStoredIdentity } from "../../services/platform-identity.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const handleInput = document.getElementById("cf-handle");
   const atcoderHandleInput = document.getElementById("atcoder-handle");
-  const atcoderRatingInput = document.getElementById("atcoder-rating");
   const apiKeyInput = document.getElementById("api-key");
   const apiSecretInput = document.getElementById("api-secret");
 
@@ -22,6 +19,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const folderInfo = document.getElementById("folder-info");
   const folderStatus = document.getElementById("folder-status");
   const chooseFolderBtn = document.getElementById("choose-folder-btn");
+
+  const codechefStatus = document.getElementById("codechef-status");
 
   const saveBtn = document.getElementById("save-btn");
   const saveMsg = document.getElementById("save-msg");
@@ -34,7 +33,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ==========================================
   // JOB 1: LOAD EXISTING SETTINGS
   // ==========================================
-  const [storageResult, credentials, dirHandle, overrides] = await Promise.all([
+  const [storageResult, credentials, dirHandle] = await Promise.all([
     chrome.storage.local.get([
       "cf_trainer.handle",
       "cf_trainer.atcoder_handle",
@@ -42,15 +41,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     ]),
     loadCredentials(),
     loadDirHandle(),
-    getRatingOverrides(),
   ]);
 
   if (storageResult["cf_trainer.handle"])
     handleInput.value = storageResult["cf_trainer.handle"];
   if (storageResult["cf_trainer.atcoder_handle"])
     atcoderHandleInput.value = storageResult["cf_trainer.atcoder_handle"];
-  if (typeof overrides.atcoder === "number")
-    atcoderRatingInput.value = overrides.atcoder;
   if (credentials.apiKey) apiKeyInput.value = credentials.apiKey;
   if (credentials.apiSecret) apiSecretInput.value = credentials.apiSecret;
 
@@ -145,11 +141,66 @@ document.addEventListener("DOMContentLoaded", async () => {
         "cf_trainer.auto_export": autoExportCheckbox.checked,
       }),
       saveCredentials(apiKeyInput.value.trim(), apiSecretInput.value.trim()),
-      // Blank clears the override, falling back to the fetched rating.
-      setRatingOverride("atcoder", Number.parseInt(atcoderRatingInput.value, 10)),
     ]);
 
     saveMsg.classList.remove("hidden");
     setTimeout(() => saveMsg.classList.add("hidden"), 2500);
   });
+
+  // ==========================================
+  // JOB 5: WHOSE CODECHEF ACCOUNT IS THIS?
+  // ==========================================
+  //
+  // CodeChef is the one platform whose identity is ambient — it comes from the
+  // browser session rather than anything typed here. That makes it the one
+  // worth showing plainly: the dangerous state is being signed in as someone
+  // else, which otherwise looks exactly like a normal sync.
+  await renderCodeChefStatus();
+
+  async function renderCodeChefStatus() {
+    const setStatus = (text, ok) => {
+      codechefStatus.textContent = text;
+      codechefStatus.classList.toggle("failure", ok === false);
+    };
+
+    let session;
+    try {
+      session = await codechefAdapter.createSession();
+    } catch {
+      setStatus("Couldn't reach codechef.com to check.", false);
+      return;
+    }
+
+    const pinned = await getStoredIdentity("codechef");
+
+    if (!session.signedIn) {
+      setStatus(
+        pinned
+          ? `Signed out. This queue belongs to ${pinned} — sign in at codechef.com to sync.`
+          : "Signed out. Sign in at codechef.com and reopen this page.",
+        false,
+      );
+      return;
+    }
+
+    const rating = session.rating == null ? "unrated" : `rating ${session.rating}`;
+
+    if (!pinned) {
+      setStatus(`Signed in as ${session.username} — ${rating}.`, true);
+      return;
+    }
+
+    if (pinned === session.username) {
+      setStatus(`✓ This queue belongs to ${session.username} — ${rating}.`, true);
+      return;
+    }
+
+    // The state the identity check exists for. Say what will happen, not just
+    // that something is wrong.
+    setStatus(
+      `✕ Signed in as ${session.username}, but this queue belongs to ${pinned}. ` +
+        `CodeChef syncing is paused until you sign back in as ${pinned}.`,
+      false,
+    );
+  }
 });

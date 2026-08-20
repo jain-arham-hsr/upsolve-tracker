@@ -185,16 +185,41 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
 }
 
 /**
- * Your current Codeforces rating, for the queue's solve-probability ordering.
- *
- * Returns null rather than a fallback when it can't be read — an unrated
- * account has no `rating` field at all, and substituting one would silently
- * shift every Codeforces problem's place in the merged queue.
+ * Codeforces identity is configured, not ambient: `user.status` and `user.info`
+ * query by the stored handle, so who is signed into codeforces.com in this
+ * browser is irrelevant.
  */
-export async function fetchUserRating(session) {
-  if (!session?.handle) return null;
+export const identityIsAmbient = false;
 
+/**
+ * Confirms the stored handle is a real account, and returns it along with the
+ * rating — both come from the one `user.info` call, so verifying costs nothing
+ * beyond what fetching the rating already did.
+ *
+ * Note `user.status?handle=X` returns X's submissions no matter whose key
+ * signs the request, so an unchecked handle silently yields someone else's
+ * history. Hence this runs before anything reads solved status.
+ *
+ * @throws when no handle is set, or Codeforces does not know it.
+ */
+export async function verifyIdentity(session) {
+  if (!session?.handle) {
+    throw new Error("No Codeforces handle set. Add one in Settings.");
+  }
+
+  // The API answers a bad handle with a FAILED status, which the service turns
+  // into a throw — so an unknown handle never reaches the next line.
   const users = await session.service.getUsersInfo([session.handle]);
-  const rating = users?.[0]?.rating;
-  return typeof rating === "number" ? rating : null;
+  const user = users?.[0];
+
+  if (!user?.handle) {
+    throw new Error(`Codeforces doesn't recognise the handle "${session.handle}".`);
+  }
+
+  // Take Codeforces' own casing, so "Tourist" and "tourist" don't read as two
+  // different accounts on the next comparison.
+  return {
+    username: user.handle,
+    rating: typeof user.rating === "number" ? user.rating : null,
+  };
 }

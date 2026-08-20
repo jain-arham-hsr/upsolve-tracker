@@ -208,9 +208,15 @@ export class CFApp extends HTMLElement {
 
     try {
       // 3. Run the sync logic, reporting each stage as it starts
-      const removedContests = await updateSolvedStatus((message) =>
-        this.setSyncStatus(message),
+      const { removed: removedContests, failures } = await updateSolvedStatus(
+        (message) => this.setSyncStatus(message),
       );
+
+      // A platform refusing — someone else signed into CodeChef, say — has to
+      // be seen. Silently skipping it looks exactly like a successful sync.
+      if (failures.length > 0) {
+        this.setSyncStatus(failures[0].message, { sticky: true });
+      }
 
       // 4. The sync rewrites stored contests, so the backup has to follow it
       // or the file drifts from what the extension shows.

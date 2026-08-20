@@ -7,33 +7,19 @@
  *
  *  - A failed lookup **keeps the previous value**. Clearing it would silently
  *    re-sort everything from that site to the bottom of the queue.
- *  - A manual override always wins. AtCoder suppresses ratings heavily for the
- *    first ~10-15 rated contests, so a strong newcomer's fetched rating is
- *    genuinely wrong and only they can say so.
  *  - Nothing is ever defaulted. Unknown stays null, and the queue shows those
  *    rows with an em dash rather than inventing a probability.
+ *
+ * Ratings are fetched as part of verifying who the account belongs to (see
+ * platform-identity.js), so they arrive with an identity attached rather than
+ * floating free.
  */
 const AUTO_KEY = "cf_trainer.platform_ratings";
-const OVERRIDE_KEY = "cf_trainer.rating_overrides";
 
-/** @returns {Promise<Record<string, number|null>>} override ?? fetched. */
+/** @returns {Promise<Record<string, number|null>>} platform id → your rating. */
 export async function getEffectiveRatings() {
-  const stored = await chrome.storage.local.get({
-    [AUTO_KEY]: {},
-    [OVERRIDE_KEY]: {},
-  });
-  return mergeRatings(stored[AUTO_KEY], stored[OVERRIDE_KEY]);
-}
-
-export function mergeRatings(auto = {}, overrides = {}) {
-  const merged = { ...auto };
-
-  for (const [platformId, value] of Object.entries(overrides)) {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      merged[platformId] = value;
-    }
-  }
-  return merged;
+  const stored = await chrome.storage.local.get({ [AUTO_KEY]: {} });
+  return stored[AUTO_KEY] ?? {};
 }
 
 /**
@@ -56,21 +42,4 @@ export async function storeFetchedRatings(fetched) {
   await chrome.storage.local.set({ [AUTO_KEY]: next });
 }
 
-export async function getRatingOverrides() {
-  const stored = await chrome.storage.local.get({ [OVERRIDE_KEY]: {} });
-  return stored[OVERRIDE_KEY];
-}
-
-export async function setRatingOverride(platformId, value) {
-  const overrides = await getRatingOverrides();
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    overrides[platformId] = value;
-  } else {
-    delete overrides[platformId];
-  }
-
-  await chrome.storage.local.set({ [OVERRIDE_KEY]: overrides });
-}
-
-export const RATING_KEYS = { AUTO_KEY, OVERRIDE_KEY };
+export const RATING_KEYS = { AUTO_KEY };

@@ -52,6 +52,23 @@ Two conventions the registry depends on:
 
 `capabilities.allowsPartialRatings` decides whether a contest may be stored with some problems still unrated. Codeforces sets it **false** — the estimator fills every gap there, so a hole means something broke and `contest-manager.js` refuses loudly. Platforms that publish their own difficulty set it true and let unrated problems converge on a later refresh. This is *not* the default-1500 fallback the comments elsewhere warn about: those problems store `rating: null` and render as "???" rather than getting a fabricated number.
 
+### Whose data is this? (`services/platform-identity.js`)
+
+**Every read of user-specific data must be attributable to a verified account.** Nothing that writes `solved`, or sets a rating the queue orders by, may run against an unconfirmed identity. Adapters expose `verifyIdentity(session)` — returning `{username, rating}` or throwing — and it runs before solved status is read, on **both** the refresh and the add path (adding a CodeChef contest reads `problemsstats` too).
+
+Verification is free: the same call already fetched the rating. Codeforces uses `user.info`, AtCoder the profile page, CodeChef the bootstrap object `createSession` already read.
+
+A mismatch means different things depending on where the identity comes from, which is why adapters declare **`identityIsAmbient`**:
+
+- **Ambient** (`codechef`) — identity is the browser session, so a mismatch means *someone else signed in*. **Refuse**, and leave everything untouched. This is not hypothetical: `solved` is only ever set true, fully-solved contests are deleted outright, and `writeBackup()` runs after the sync — so one sync under another account permanently corrupts the queue *and* overwrites the backup with the corruption.
+- **Configured** (`codeforces`, `atcoder`) — identity is a handle typed into Settings, so a mismatch means the user changed it deliberately. **Adopt it, and clear that platform's `solved` flags first**: they cache the *old* account's history and would otherwise keep hiding problems this account has never solved. Codeforces' canonical casing is taken from the API so `Tourist` vs `tourist` isn't read as a change.
+
+Verification also catches a handle that simply doesn't exist — which otherwise yields no solved problems and looks exactly like a slow sync — and a valid handle belonging to someone else, which yields *their* history (`user.status?handle=X` returns X's submissions regardless of whose key signs the request).
+
+`updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption.
+
+Note the Codeforces scrape sends cookies (`http-client.js:32`), but `standings-dom.js` reads only the contest name, problems, *competitors'* handles, solve counts and pagination — nothing about the viewer. So it needs no identity, and neither do the public bulk endpoints or kenkoooo's static files.
+
 ### Platform adapters
 
 The registry is *pure* — URLs, identity, capabilities — so anything can import it. Network work lives behind an **adapter**, resolved by `core/platforms/adapters.js`. The split is deliberate: `backup-validation.js` imports the registry, and must not drag the network stack in with it.
@@ -212,9 +229,7 @@ Rows fall into three bands, and the two reasons a row can lack a probability mus
 
 Collapsing those would hide a missing *user* rating — which mis-sorts a whole platform at once — behind what looks like ordinary missing problem data. Ties break deterministically (platform, then contest date, then index) or the list reshuffles between renders.
 
-`services/user-ratings.js` holds your rating per platform, and is deliberately conservative because **one rating moves an entire platform's block**: a failed lookup keeps the previous value rather than clearing it, a manual override always wins, and nothing is ever defaulted. The override exists mainly for AtCoder, which suppresses ratings heavily for the first 10–15 rated contests — a strong newcomer's fetched rating is genuinely wrong.
-
-Ratings come from `fetchUserRating` on each adapter: `user.info` for Codeforces, the server-rendered profile page for AtCoder (`platforms/atcoder/profile.js`, quarantined and null-on-failure), and the page bootstrap for CodeChef, which costs no extra request.
+`services/user-ratings.js` holds your rating per platform, and is deliberately conservative because **one rating moves an entire platform's block**: a failed lookup keeps the previous value rather than clearing it, and nothing is ever defaulted. Ratings arrive from `verifyIdentity` (above), so a rating always comes attached to a confirmed account rather than floating free. There is no manual override — all three platforms fetch automatically.
 
 ### UI shell
 

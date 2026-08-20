@@ -6,12 +6,13 @@
  * what to do with what comes back.
  */
 import { LocalDB } from "./services/storage.js";
-import { matchContestUrl } from "./platforms/registry.js";
+import { matchContestUrl, DEFAULT_PLATFORM_ID } from "./platforms/registry.js";
 import { getAdapter } from "./platforms/adapters.js";
+import { storeFetchedRatings } from "./services/user-ratings.js";
 import {
-  getEffectiveRatings,
-  storeFetchedRatings,
-} from "./services/user-ratings.js";
+  settleIdentity,
+  clearSolvedForPlatform,
+} from "./services/platform-identity.js";
 
 export async function processNewContest(url, onProgress = () => {}) {
   try {
@@ -26,7 +27,11 @@ export async function processNewContest(url, onProgress = () => {}) {
     }
 
     const session = await adapter.createSession();
-    await ensureUserRating(platform.id, adapter, session);
+
+    // Adding reads user-specific data too — CodeChef's problemsstats carries
+    // solved status — so the identity has to be settled here as well, not just
+    // on refresh.
+    await establishIdentity(platform, adapter, session);
 
     const contest = await adapter.fetchContestRecord({
       contestId,
@@ -80,29 +85,32 @@ export async function processNewContest(url, onProgress = () => {}) {
 }
 
 /**
- * Makes sure we know the user's rating on this platform before their first
- * refresh.
+ * Confirms whose account this is before any user-specific data is read, and
+ * records the rating while it is at it.
  *
- * Without it, a fresh install adds a contest and every row shows an em dash
- * for solve chance until the first sync — the queue is ordered, but by the
- * fallback rather than by anything meaningful.
+ * Both facts come from one call, so this costs a single request — and on
+ * CodeChef none at all, since the bootstrap object was already fetched to
+ * create the session.
  *
- * Only fetched when the platform is absent entirely. A stored null means "we
- * asked and there was no rating", which is an answer and not worth re-asking
- * on every add. Failure is non-fatal: ordering degrades to native ratings,
- * which is not worth losing a contest over.
+ * It also removes the old first-run wrinkle: before this, ratings only arrived
+ * on a refresh, so a fresh install added a contest and then showed an em dash
+ * for every solve chance until the first sync.
  */
-async function ensureUserRating(platformId, adapter, session) {
-  if (typeof adapter.fetchUserRating !== "function") return;
+async function establishIdentity(platform, adapter, session) {
+  const identity = await adapter.verifyIdentity(session);
+  const verdict = await settleIdentity(platform, adapter, identity);
 
-  const known = await getEffectiveRatings();
-  if (platformId in known) return;
-
-  try {
-    await storeFetchedRatings({
-      [platformId]: await adapter.fetchUserRating(session),
-    });
-  } catch (error) {
-    console.warn(`[Contest Manager] ${platformId} rating lookup failed:`, error.message);
+  if (verdict === "changed") {
+    // Stale flags belong to the previous account. Unlike the refresh, nothing
+    // is held in memory here, so this reads and writes storage directly.
+    const contests = await LocalDB.getTrackedContests();
+    const cleared = clearSolvedForPlatform(
+      contests,
+      platform.id,
+      DEFAULT_PLATFORM_ID,
+    );
+    if (cleared > 0) await LocalDB.saveTrackedContests(contests);
   }
+
+  await storeFetchedRatings({ [platform.id]: identity.rating });
 }
