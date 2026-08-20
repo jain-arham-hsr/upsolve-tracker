@@ -1,5 +1,4 @@
 import templateHtml from "./contest-list.html?raw";
-import { processNewContest } from "../../contest-manager.js";
 import { LocalDB } from "../../services/storage.js";
 import {
   BACKUP_FILENAME,
@@ -9,13 +8,7 @@ import {
 import { byStartTimeDesc } from "../../start-time-service.js";
 import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
-import {
-  platformOf,
-  matchContestUrl,
-  contestKey,
-  makeContestKey,
-  matchesFilter,
-} from "../../platforms/registry.js";
+import { platformOf, matchesFilter } from "../../platforms/registry.js";
 import {
   loadFilter,
   renderFilterChips,
@@ -29,14 +22,7 @@ const HOLD_MS = 700;
 export class ContestList extends HTMLElement {
   constructor() {
     super();
-    this.boundCheckActiveTab = this.checkActiveTab.bind(this);
-    this.boundTabUpdatedHandler = (tabId, changeInfo, tab) => {
-      if (changeInfo.url || changeInfo.status === "complete") {
-        this.checkActiveTab();
-      }
-    };
-    this.currentValidUrl = null;
-    this.filter = "ALL";
+    this.filter = [];
     this.hold = null;
     this.boundCancelHold = () => this.cancelHold();
   }
@@ -45,16 +31,12 @@ export class ContestList extends HTMLElement {
     this.innerHTML = templateHtml;
 
     // UI References
-    this.btnAddContest = this.querySelector("#btn-add-contest");
     this.container = this.querySelector("#contest-items");
     this.btnExport = this.querySelector("#btn-export");
     this.btnImport = this.querySelector("#btn-import");
     this.fileInput = this.querySelector("#import-file-input");
     this.alertDiv = this.querySelector("#contest-alert");
     this.countLabel = this.querySelector("#contest-count");
-
-    this.btnAddContest.disabled = true;
-    this.btnAddContest.setAttribute("data-tooltip", "Checking current page...");
 
     // The view is destroyed on every navigation, so the choice is persisted
     // rather than kept on the instance.
@@ -73,45 +55,6 @@ export class ContestList extends HTMLElement {
     );
 
     await this.renderQueue();
-
-    this.btnAddContest.addEventListener("click", async () => {
-      if (this.currentValidUrl) {
-        // 1. Instantly test/prompt and store the unlocked handle
-        const activeDirHandle = await verifyExportPermission();
-
-        this.btnAddContest.textContent = "Fetching...";
-        this.btnAddContest.disabled = true;
-        this.alertDiv.classList.add("hidden");
-
-        try {
-          // 2. Run the slow Codeforces API logic, reporting each stage
-          await processNewContest(this.currentValidUrl, (message) =>
-            this.reportStatus(message),
-          );
-          await this.renderQueue();
-
-          // 3. Write using the exact handle we just unlocked
-          if (activeDirHandle && !(await writeBackup(activeDirHandle))) {
-            this.showInlineAlert(
-              "Added to Queue, but Auto-Export failed to write the file.",
-            );
-          }
-
-          this.btnAddContest.textContent = "✓ Added";
-          this.btnAddContest.disabled = true;
-          this.btnAddContest.setAttribute(
-            "data-tooltip",
-            "Contest added successfully!",
-          );
-        } catch (error) {
-          this.showInlineAlert(error.message);
-          this.btnAddContest.textContent = "+ Add Contest";
-          this.btnAddContest.disabled = false;
-        } finally {
-          this.reportStatus(null);
-        }
-      }
-    });
 
     // Management Actions
     this.btnExport.addEventListener("click", async () => {
@@ -164,10 +107,6 @@ export class ContestList extends HTMLElement {
     // Releasing anywhere aborts, including outside the panel.
     document.addEventListener("pointerup", this.boundCancelHold);
     document.addEventListener("pointercancel", this.boundCancelHold);
-
-    this.checkActiveTab();
-    chrome.tabs.onActivated.addListener(this.boundCheckActiveTab);
-    chrome.tabs.onUpdated.addListener(this.boundTabUpdatedHandler);
   }
 
   /**
@@ -214,7 +153,6 @@ export class ContestList extends HTMLElement {
     if (dirHandle) await writeBackup(dirHandle);
 
     // Re-enables "+ Add Contest" if the removed contest is the open tab.
-    await this.checkActiveTab();
   }
 
   /**
@@ -345,70 +283,8 @@ export class ContestList extends HTMLElement {
     this.cancelHold();
     document.removeEventListener("pointerup", this.boundCancelHold);
     document.removeEventListener("pointercancel", this.boundCancelHold);
-    chrome.tabs.onActivated.removeListener(this.boundCheckActiveTab);
-    chrome.tabs.onUpdated.removeListener(this.boundTabUpdatedHandler);
   }
 
-  async checkActiveTab() {
-    this.currentValidUrl = null;
-    this.btnAddContest.disabled = true;
-    this.btnAddContest.textContent = "+ Add Contest";
-    this.btnAddContest.setAttribute("data-tooltip", "Checking current page...");
-
-    try {
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        lastFocusedWindow: true,
-      });
-
-      if (tab && tab.url) {
-        const match = matchContestUrl(tab.url);
-
-        if (match) {
-          this.currentValidUrl = tab.url;
-
-          // Keyed on platform + id: a bare id would call a CodeChef contest
-          // "already tracked" because a Codeforces one shares its number.
-          const key = makeContestKey(match.platform.id, match.contestId);
-          const contests = await LocalDB.getTrackedContests();
-          const isAlreadyTracked = contests.some(
-            (contest) => contestKey(contest) === key,
-          );
-
-          if (isAlreadyTracked) {
-            this.btnAddContest.disabled = true;
-            this.btnAddContest.textContent = "✓ Added";
-            this.btnAddContest.setAttribute(
-              "data-tooltip",
-              "Contest is already in your queue.",
-            );
-          } else {
-            this.btnAddContest.disabled = false;
-            this.btnAddContest.setAttribute(
-              "data-tooltip",
-              "Add this contest to the queue",
-            );
-          }
-        } else {
-          this.btnAddContest.setAttribute(
-            "data-tooltip",
-            "Must be on a supported contest page.",
-          );
-        }
-      } else {
-        this.btnAddContest.setAttribute(
-          "data-tooltip",
-          "Navigate to a contest page first.",
-        );
-      }
-    } catch (error) {
-      console.error("Tab check failed:", error);
-      this.btnAddContest.setAttribute(
-        "data-tooltip",
-        "Error checking tab context.",
-      );
-    }
-  }
 }
 
 customElements.define("cf-contest-list", ContestList);

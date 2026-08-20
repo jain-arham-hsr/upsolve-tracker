@@ -1026,3 +1026,41 @@ cf-stats-view,
   border-color: var(--accent-color);
   color: var(--bg-color);
 }
+
+/* --- Contextual add banner ---
+   Sits above the tab bar so the offer to add a contest is visible from any
+   view, and only appears when the active browser tab is actually on one. */
+
+.add-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background-color: var(--panel-bg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.add-banner.hidden {
+  display: none;
+}
+
+.add-banner-text {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-banner-text strong {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.add-banner .btn {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+}
