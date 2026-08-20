@@ -79,9 +79,24 @@ export function contestsOnPlatform(contests, platformId) {
   );
 }
 
-/** Every filter chip, in platform order. */
+/** Every filter group, flattened, in platform order. */
 export function listFilterGroups() {
   return PLATFORMS.flatMap((platform) => platform.filterGroups ?? []);
+}
+
+/**
+ * Filter groups kept under their platform, so the control can render a header
+ * with nested rows without knowing any platform's name.
+ *
+ * A platform contributing one group is a single row; one contributing several
+ * — only Codeforces, splitting Official from Gym — gets a header plus nested
+ * rows. Nobody wants five AtCoder rows for its contest families.
+ */
+export function listFilterPlatforms() {
+  return PLATFORMS.map((platform) => ({
+    platform,
+    groups: platform.filterGroups ?? [],
+  })).filter((entry) => entry.groups.length > 0);
 }
 
 /** Which chip a contest belongs to. */

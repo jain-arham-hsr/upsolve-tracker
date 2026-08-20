@@ -5,8 +5,8 @@ import { matchesFilter } from "../../platforms/registry.js";
 import { collectPendingProblems } from "../../pending-problems.js";
 import {
   loadFilter,
-  renderFilterChips,
-  bindFilterChips,
+  renderFilterControl,
+  bindFilterControl,
 } from "../platform-filter.js";
 import { getEffectiveRatings } from "../../services/user-ratings.js";
 import { compareQueueItems } from "../../queue-order.js";
@@ -35,11 +35,11 @@ export class QueueView extends HTMLElement {
     // Persisted, not held on the instance: the view is rebuilt on every tab
     // switch. Shared with the Contests tab so the two agree.
     this.filter = await loadFilter();
-    this.filterChips = this.querySelector("#queue-filter-chips");
+    this.filterControl = this.querySelector("#queue-filter");
     this.renderFilter();
 
-    bindFilterChips(
-      this.filterChips,
+    bindFilterControl(
+      this.filterControl,
       () => this.filter,
       async (next) => {
         this.filter = next;
@@ -79,8 +79,8 @@ export class QueueView extends HTMLElement {
   }
 
   renderFilter() {
-    if (this.filterChips) {
-      this.filterChips.innerHTML = renderFilterChips(this.filter ?? []);
+    if (this.filterControl) {
+      this.filterControl.innerHTML = renderFilterControl(this.filter ?? []);
     }
   }
 

@@ -12,8 +12,8 @@ import { platformOf, matchesFilter } from "../../platforms/registry.js";
 import { platformIcon } from "../platform-icons.js";
 import {
   loadFilter,
-  renderFilterChips,
-  bindFilterChips,
+  renderFilterControl,
+  bindFilterControl,
 } from "../platform-filter.js";
 
 /** How long the remove button must be held. Drives the fill animation too. */
@@ -42,11 +42,11 @@ export class ContestList extends HTMLElement {
     // The view is destroyed on every navigation, so the choice is persisted
     // rather than kept on the instance.
     this.filter = await loadFilter();
-    this.filterChips = this.querySelector("#contest-filter-chips");
+    this.filterControl = this.querySelector("#contest-filter");
     this.renderFilter();
 
-    bindFilterChips(
-      this.filterChips,
+    bindFilterControl(
+      this.filterControl,
       () => this.filter,
       async (next) => {
         this.filter = next;
@@ -218,8 +218,8 @@ export class ContestList extends HTMLElement {
   }
 
   renderFilter() {
-    if (this.filterChips) {
-      this.filterChips.innerHTML = renderFilterChips(this.filter);
+    if (this.filterControl) {
+      this.filterControl.innerHTML = renderFilterControl(this.filter);
     }
   }
 

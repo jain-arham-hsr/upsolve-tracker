@@ -1,7 +1,7 @@
 /**
  * The shared platform filter. The subtle case is that "nothing selected" means
- * *no filter*, not *show nothing* — an empty queue with every chip dark reads
- * as a broken extension rather than a filter.
+ * *no filter*, not *show nothing* — an empty queue with nothing highlighted
+ * reads as a broken extension rather than as a filter.
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -25,7 +25,7 @@ function stubChrome(initial = {}) {
   };
 }
 
-const { loadFilter, saveFilter, renderFilterChips, PLATFORM_FILTER_KEY } =
+const { loadFilter, saveFilter, renderFilterControl, PLATFORM_FILTER_KEY } =
   await import("../core/ui/platform-filter.js");
 const { matchesFilter } = await import("../core/platforms/registry.js");
 
@@ -70,16 +70,46 @@ test("a contest predating platforms filters as Codeforces official", async () =>
   assert.equal(matchesFilter({ id: "1", type: "OFFICIAL" }, ["atcoder"]), false);
 });
 
-test("chips render an All option and mark the active ones", () => {
-  const html = renderFilterChips(["atcoder"]);
-  assert.match(html, /data-filter-key=""/);
-  assert.match(html, /class="filter-chip is-on" data-filter-key="atcoder"/);
-  // With a selection active, All is not highlighted.
-  assert.ok(!/class="filter-chip is-on" data-filter-key=""/.test(html));
+test("the collapsed button says what is filtered without being opened", () => {
+  assert.match(renderFilterControl([]), /All platforms/);
+
+  const some = renderFilterControl(["codeforces:GYM", "codechef"]);
+  assert.match(some, /2 of 4/, "should count selected groups against the total");
+  assert.ok(!/All platforms/.test(some));
 });
 
-test("with no selection, All is the highlighted chip", () => {
-  assert.match(renderFilterChips([]), /class="filter-chip is-on" data-filter-key=""/);
+test("the summary shows one mark per platform, not one per group", () => {
+  // Selecting both Codeforces groups is still one platform.
+  const both = renderFilterControl(["codeforces:OFFICIAL", "codeforces:GYM"]);
+  assert.equal((both.match(/aria-label="Codeforces"/g) ?? []).length, 2,
+    "one mark in the summary, one on the panel row");
+});
+
+test("Codeforces nests its two groups; the others are a single row", () => {
+  const html = renderFilterControl([]);
+  assert.match(html, /filter-group-head/);
+  assert.match(html, /data-filter-key="codeforces:OFFICIAL"[^>]*[\s\S]*?Official/);
+  assert.match(html, /class="filter-row is-nested"/);
+  // AtCoder contributes one group, so it is a plain row named for the platform.
+  assert.match(html, /data-filter-key="atcoder"[\s\S]*?AtCoder/);
+  assert.ok(!/is-nested[^>]*data-filter-key="atcoder"/.test(html));
+});
+
+test("selected rows are marked pressed, so state is not colour-alone", () => {
+  const html = renderFilterControl(["atcoder"]);
+  assert.match(html, /data-filter-key="atcoder" aria-pressed="true"/);
+  assert.match(html, /data-filter-key="codechef" aria-pressed="false"/);
+});
+
+test("the panel starts closed", () => {
+  assert.match(renderFilterControl([]), /class="filter-panel hidden"/);
+  assert.match(renderFilterControl([]), /aria-expanded="false"/);
+});
+
+test("a stale key from an older build doesn't inflate the count", () => {
+  // Selections persist, so a removed platform's key can outlive it.
+  const html = renderFilterControl(["codechef", "leetcode:OFFICIAL"]);
+  assert.match(html, /1 of 4/);
 });
 
 test("round-tripping a selection through storage preserves it", async () => {

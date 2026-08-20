@@ -60,8 +60,8 @@ export const codeforces = {
    * group instead — nobody wants five AtCoder chips.
    */
   filterGroups: [
-    { key: "codeforces:OFFICIAL", label: "CF Official" },
-    { key: "codeforces:GYM", label: "CF Gym" },
+    { key: "codeforces:OFFICIAL", label: "Official" },
+    { key: "codeforces:GYM", label: "Gym" },
   ],
 
   filterKey(contest) {
