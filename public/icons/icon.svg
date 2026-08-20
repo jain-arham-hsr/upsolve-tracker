@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Upsolve Tracker</title>
+  <!--
+    Three chevrons climbing. Bottom to top: yellow, blue, red — the palette
+    lifted from the previous icon, but here the order carries meaning, since
+    the queue runs easiest-first.
+
+    Each chevron is drawn twice: a dark stroke underneath for legibility on a
+    light browser toolbar, then the colour on top. Round joins match the
+    rounded rectangles of the old artwork.
+  -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#1C1D1D" stroke-width="12">
+      <path d="M14 56 L32 45 L50 56" />
+      <path d="M14 37 L32 26 L50 37" />
+      <path d="M14 18 L32 7  L50 18" />
+    </g>
+    <path d="M14 56 L32 45 L50 56" stroke="#FFCE33" stroke-width="8" />
+    <path d="M14 37 L32 26 L50 37" stroke="#0E85DC" stroke-width="8" />
+    <path d="M14 18 L32 7  L50 18" stroke="#D81A24" stroke-width="8" />
+  </g>
+</svg>

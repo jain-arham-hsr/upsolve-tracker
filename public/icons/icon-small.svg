@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Upsolve Tracker</title>
+  <!--
+    The 16px variant: two chevrons instead of three, and chunkier. At that size
+    three give about five pixels each and mush together. Yellow and red keep the
+    easy-to-hard reading with maximum contrast between them.
+  -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#1C1D1D" stroke-width="17">
+      <path d="M13 51 L32 36 L51 51" />
+      <path d="M13 28 L32 13 L51 28" />
+    </g>
+    <path d="M13 51 L32 36 L51 51" stroke="#FFCE33" stroke-width="11" />
+    <path d="M13 28 L32 13 L51 28" stroke="#D81A24" stroke-width="11" />
+  </g>
+</svg>

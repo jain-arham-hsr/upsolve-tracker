@@ -1,7 +1,7 @@
 {
-  "name": "cf-trainer",
-  "version": "1.4.0",
-  "description": "Chrome extension that builds an upsolving queue from Codeforces contests, estimating a difficulty rating for every unrated problem.",
+  "name": "upsolve-tracker",
+  "version": "2.0.0",
+  "description": "Chrome extension that builds an upsolving queue from Codeforces, AtCoder and CodeChef contests, ordered by how likely you are to solve each problem.",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -11,6 +11,8 @@
   },
   "keywords": [
     "codeforces",
+    "atcoder",
+    "codechef",
     "competitive-programming",
     "upsolving",
     "chrome-extension"

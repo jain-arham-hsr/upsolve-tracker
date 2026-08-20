@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+The extension is **Upsolve Tracker** (the repo directory is still `cf-trainer`). It covers Codeforces, AtCoder and CodeChef. Internal identifiers were deliberately *not* renamed: storage keys keep the `cf_trainer.*` prefix and custom elements the `cf-` prefix, because renaming them means migrating live user data for no visible benefit and a failed migration silently loses someone's queue. `BACKUP_FILENAME` is unchanged for the same reason — writing to a new name would strand the existing backup, and restoring from that stale file later would lose everything added since.
+
 ## Commands
 
 ```bash
