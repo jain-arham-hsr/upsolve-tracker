@@ -102,6 +102,26 @@ export const codeforces = {
     return `codeforces:${contest.id}-${problem.index}`;
   },
 
+  /**
+   * Codeforces rank bands, so a histogram bar carries the same meaning the
+   * colour does on the site itself.
+   */
+  ratingBands: [
+    { min: 2400, class: "band-red" },
+    { min: 2100, class: "band-orange" },
+    { min: 1900, class: "band-violet" },
+    { min: 1600, class: "band-blue" },
+    { min: 1400, class: "band-cyan" },
+    { min: 1200, class: "band-green" },
+    { min: -Infinity, class: "band-gray" },
+  ],
+
+  ratingBandClass(rating) {
+    return (
+      this.ratingBands.find((band) => rating >= band.min)?.class ?? "band-gray"
+    );
+  },
+
   capabilities: {
     // problemset.problems covers every official problem in one request.
     bulkProblemData: true,

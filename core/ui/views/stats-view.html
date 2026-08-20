@@ -4,11 +4,15 @@
     <span id="stats-summary"></span>
   </div>
 
+  <div class="list-toolbar" id="stats-scope-chips"></div>
+
   <div id="stats-body">
     <div id="stats-hint" class="stats-hint hidden"></div>
 
     <section class="stats-section">
-      <div class="stats-section-title">TAG FREQUENCY</div>
+      <div class="stats-section-title" id="tags-title">TAG FREQUENCY</div>
+
+      <div id="tag-coverage" class="tag-range-caption"></div>
 
       <div id="tag-range" class="tag-range hidden">
         <label class="filter-label" for="tag-range-min">Rating</label>
@@ -23,7 +27,7 @@
     </section>
 
     <section class="stats-section">
-      <div class="stats-section-title">RATING SPREAD</div>
+      <div class="stats-section-title" id="spread-title">RATING SPREAD</div>
       <div id="stats-histogram"></div>
     </section>
   </div>

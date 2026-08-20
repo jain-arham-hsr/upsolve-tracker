@@ -826,6 +826,11 @@ cf-stats-view,
   padding: 3px 0;
 }
 
+/* Overview labels read "75-90%", so they need more room than a bucket number. */
+.hist-label.wide {
+  min-width: 52px;
+}
+
 .hist-label {
   font-family: "JetBrains Mono", "Courier New", monospace;
   font-size: 11px;

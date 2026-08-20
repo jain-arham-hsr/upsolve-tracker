@@ -103,6 +103,27 @@ export const atcoder = {
     return this.solvedKey(contest, problem);
   },
 
+  /**
+   * AtCoder's own bands. Note they start far lower than Codeforces' — its
+   * scale runs negative — so borrowing Codeforces' thresholds would paint the
+   * entire ABC range a single colour.
+   */
+  ratingBands: [
+    { min: 2800, class: "band-red" },
+    { min: 2400, class: "band-orange" },
+    { min: 2000, class: "band-violet" },
+    { min: 1600, class: "band-blue" },
+    { min: 1200, class: "band-cyan" },
+    { min: 800, class: "band-green" },
+    { min: -Infinity, class: "band-gray" },
+  ],
+
+  ratingBandClass(rating) {
+    return (
+      this.ratingBands.find((band) => rating >= band.min)?.class ?? "band-gray"
+    );
+  },
+
   capabilities: {
     // AtCoder Problems publishes difficulty for every rated contest.
     bulkProblemData: true,

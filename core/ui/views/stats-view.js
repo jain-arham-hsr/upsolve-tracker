@@ -2,27 +2,30 @@ import templateHtml from "./stats-view.html?raw";
 import { LocalDB } from "../../services/storage.js";
 import { countPendingTags } from "../../tag-service.js";
 import { escapeHtml } from "../escape-html.js";
+import { listPlatforms, platformOf, getPlatform } from "../../platforms/registry.js";
+import { getEffectiveRatings } from "../../services/user-ratings.js";
+import { solveProbability } from "../../queue-order.js";
 
 const BUCKET_SIZE = 100;
-const RANGE_KEY = "cf_trainer.tag_rating_range";
+const SCOPE_KEY = "cf_trainer.stats_scope";
+
+/** Per-platform: a 1600–1900 span means nothing on AtCoder, where a third of
+ *  rated problems sit below 800. */
+const rangeKeyFor = (scope) => `cf_trainer.tag_rating_range.${scope || "all"}`;
 
 /**
- * Codeforces rank bands, so a bar's colour carries the same meaning it does
- * on the site itself. Tints are lightened for legibility on the dark panel.
+ * Overview bins by solve probability rather than rating, because rating
+ * buckets are not comparable across platforms — the one claim this whole
+ * design avoids making.
  */
-const RANK_BANDS = [
-  { min: 2400, class: "band-red" },
-  { min: 2100, class: "band-orange" },
-  { min: 1900, class: "band-violet" },
-  { min: 1600, class: "band-blue" },
-  { min: 1400, class: "band-cyan" },
-  { min: 1200, class: "band-green" },
-  { min: 0, class: "band-gray" },
+const CHANCE_BANDS = [
+  { min: 0.9, label: "90%+", class: "band-green" },
+  { min: 0.75, label: "75–90%", class: "band-cyan" },
+  { min: 0.5, label: "50–75%", class: "band-blue" },
+  { min: 0.25, label: "25–50%", class: "band-violet" },
+  { min: 0.1, label: "10–25%", class: "band-orange" },
+  { min: 0, label: "<10%", class: "band-red" },
 ];
-
-function bandClass(rating) {
-  return RANK_BANDS.find((band) => rating >= band.min).class;
-}
 
 export class StatsView extends HTMLElement {
   async connectedCallback() {
@@ -31,15 +34,29 @@ export class StatsView extends HTMLElement {
     this.tagList = this.querySelector("#stats-tags");
     this.summary = this.querySelector("#stats-summary");
     this.hint = this.querySelector("#stats-hint");
+    this.coverage = this.querySelector("#tag-coverage");
+    this.scopeChips = this.querySelector("#stats-scope-chips");
+    this.spreadTitle = this.querySelector("#spread-title");
     this.rangeBox = this.querySelector("#tag-range");
     this.rangeMin = this.querySelector("#tag-range-min");
     this.rangeMax = this.querySelector("#tag-range-max");
     this.rangeCaption = this.querySelector("#tag-range-caption");
 
-    // The view is rebuilt on every navigation, so the selection is persisted
-    // the same way the contest list's type filter is.
-    const stored = await chrome.storage.local.get({ [RANGE_KEY]: null });
-    this.range = stored[RANGE_KEY];
+    // The view is rebuilt on every navigation, so both selections are
+    // persisted rather than kept on the instance.
+    const stored = await chrome.storage.local.get({ [SCOPE_KEY]: "" });
+    this.scope = stored[SCOPE_KEY];
+
+    this.renderScopeChips();
+    this.scopeChips.addEventListener("click", async (event) => {
+      const chip = event.target.closest("[data-scope]");
+      if (!chip) return;
+
+      this.scope = chip.dataset.scope;
+      await chrome.storage.local.set({ [SCOPE_KEY]: this.scope });
+      this.renderScopeChips();
+      await this.render();
+    });
 
     this.rangeMin.addEventListener("change", () => this.onRangeChange("min"));
     this.rangeMax.addEventListener("change", () => this.onRangeChange("max"));
@@ -47,24 +64,211 @@ export class StatsView extends HTMLElement {
     await this.render();
   }
 
-  /**
-   * Called by the shell after a global refresh, which is also what fills in
-   * tags for contests still missing them.
-   */
+  /** Called by the shell after a global refresh. */
   async refreshData() {
     await this.render();
   }
 
+  /**
+   * One chip per platform that actually has contests queued, plus Overview.
+   * A single-platform user sees no chips at all rather than three inert ones.
+   */
+  renderScopeChips() {
+    const present = this.presentPlatforms ?? [];
+    if (present.length < 2) {
+      this.scopeChips.innerHTML = "";
+      return;
+    }
+
+    const chip = (scope, label) =>
+      `<button type="button" class="filter-chip${
+        this.scope === scope ? " is-on" : ""
+      }" data-scope="${escapeHtml(scope)}">${escapeHtml(label)}</button>`;
+
+    this.scopeChips.innerHTML =
+      chip("", "Overview") +
+      present.map((platform) => chip(platform.id, platform.shortLabel)).join("");
+  }
+
   async render() {
-    this.contests = await LocalDB.getTrackedContests();
+    const [allContests, userRatings] = await Promise.all([
+      LocalDB.getTrackedContests(),
+      getEffectiveRatings(),
+    ]);
+    this.userRatings = userRatings;
+
+    const platformIds = new Set(allContests.map((c) => platformOf(c).id));
+    this.presentPlatforms = listPlatforms().filter((p) => platformIds.has(p.id));
+
+    // A scope whose contests have all been solved away falls back to Overview
+    // rather than showing an empty panel with no explanation.
+    if (this.scope && !platformIds.has(this.scope)) this.scope = "";
+    this.renderScopeChips();
+
+    this.contests = this.scope
+      ? allContests.filter((contest) => platformOf(contest).id === this.scope)
+      : allContests;
+
+    const stored = await chrome.storage.local.get({ [rangeKeyFor(this.scope)]: null });
+    this.range = stored[rangeKeyFor(this.scope)];
+
     const { ratings, unrated } = collectRatings(this.contests);
     this.ratings = ratings;
 
-    this.renderHint(this.contests);
-    this.renderHistogram(ratings);
+    this.renderHint();
+    this.renderCoverage(allContests);
+
+    if (this.scope) {
+      this.spreadTitle.textContent = "RATING SPREAD";
+      this.renderHistogram(ratings, getPlatform(this.scope));
+    } else {
+      this.spreadTitle.textContent = "HOW LIKELY YOU ARE TO SOLVE THEM";
+      this.renderChanceHistogram();
+    }
+
     this.syncRangeControls(ratings);
     this.renderTags();
-    this.summary.textContent = buildSummary(ratings, unrated);
+    this.summary.textContent = this.buildSummary(ratings, unrated);
+  }
+
+  /**
+   * States plainly how much of the queue the tag chart can even see.
+   *
+   * Without this an empty "graphs" bar reads as "I have no graph problems"
+   * when the truth is that half the queue is untagged — AtCoder publishes no
+   * tags at all, and Codeforces gyms sit outside its taxonomy.
+   */
+  renderCoverage(allContests) {
+    const scoped = this.scope ? this.contests : allContests;
+    const totals = new Map();
+
+    scoped.forEach((contest) => {
+      const id = platformOf(contest).id;
+      const entry = totals.get(id) ?? { tagged: 0, total: 0 };
+      contest.problems.forEach((prob) => {
+        if (prob.solved) return;
+        entry.total++;
+        if (prob.tags?.length) entry.tagged++;
+      });
+      totals.set(id, entry);
+    });
+
+    const total = [...totals.values()].reduce((sum, e) => sum + e.total, 0);
+    const tagged = [...totals.values()].reduce((sum, e) => sum + e.tagged, 0);
+
+    if (total === 0) {
+      this.coverage.textContent = "";
+      return;
+    }
+
+    const overall = Math.round((tagged / total) * 100);
+    const breakdown = [...totals.entries()]
+      .map(([id, e]) => `${getPlatform(id).shortLabel} ${Math.round((e.tagged / e.total) * 100)}%`)
+      .join(", ");
+
+    this.coverage.textContent =
+      totals.size > 1
+        ? `Tags cover ${overall}% of these problems — ${breakdown}`
+        : `Tags cover ${overall}% of these problems`;
+  }
+
+  renderHint() {
+    const untagged = this.contests.filter(
+      (contest) =>
+        platformOf(contest).id === "codeforces" &&
+        contest.type === "OFFICIAL" &&
+        !contest.tagsSyncedAt &&
+        !contest.tagsSynced,
+    ).length;
+
+    if (untagged === 0) {
+      this.hint.classList.add("hidden");
+      return;
+    }
+
+    this.hint.textContent = `${untagged} contest${untagged === 1 ? "" : "s"} queued before tags were tracked. Hit ↻ to fetch them.`;
+    this.hint.classList.remove("hidden");
+  }
+
+  /** Overview: unitless, so every platform belongs on the same axis. */
+  renderChanceHistogram() {
+    const counts = new Map(CHANCE_BANDS.map((band) => [band.label, 0]));
+    let unknown = 0;
+
+    this.contests.forEach((contest) => {
+      const platform = platformOf(contest);
+      contest.problems.forEach((prob) => {
+        if (prob.solved) return;
+
+        const chance = solveProbability(
+          prob.rating,
+          this.userRatings[platform.id] ?? null,
+        );
+        if (chance === null) {
+          unknown++;
+          return;
+        }
+        const band = CHANCE_BANDS.find((entry) => chance >= entry.min);
+        counts.set(band.label, counts.get(band.label) + 1);
+      });
+    });
+
+    const tallest = Math.max(...counts.values(), 1);
+    const rows = CHANCE_BANDS.map((band) => {
+      const count = counts.get(band.label);
+      return `
+        <div class="hist-row">
+          <span class="hist-label wide">${band.label}</span>
+          <div class="hist-track">
+            ${count > 0 ? `<div class="hist-bar ${band.class}" style="width: ${(count / tallest) * 100}%"></div>` : ""}
+          </div>
+          <span class="hist-count ${count > 0 ? "" : "is-zero"}">${count}</span>
+        </div>`;
+    });
+
+    if (unknown > 0) {
+      rows.push(
+        `<div class="stats-empty">${unknown} problem${unknown === 1 ? "" : "s"} can't be placed — no published difficulty, or no rating of yours on that site.</div>`,
+      );
+    }
+
+    this.histogram.innerHTML = rows.join("");
+  }
+
+  renderHistogram(ratings, platform) {
+    if (ratings.length === 0) {
+      this.histogram.innerHTML = `<div class="stats-empty">No rated problems pending.</div>`;
+      return;
+    }
+
+    const counts = new Map();
+    ratings.forEach((rating) => {
+      const bucket = bucketOf(rating);
+      counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+    });
+
+    // Walk every bucket in range, not just the occupied ones, so gaps in the
+    // queue stay visible as gaps.
+    const lowest = Math.min(...counts.keys());
+    const highest = Math.max(...counts.keys());
+    const tallest = Math.max(...counts.values());
+
+    const rows = [];
+    for (let bucket = lowest; bucket <= highest; bucket += BUCKET_SIZE) {
+      const count = counts.get(bucket) ?? 0;
+      const width = (count / tallest) * 100;
+
+      rows.push(`
+        <div class="hist-row">
+          <span class="hist-label">${bucket}</span>
+          <div class="hist-track">
+            ${count > 0 ? `<div class="hist-bar ${platform.ratingBandClass(bucket)}" style="width: ${width}%"></div>` : ""}
+          </div>
+          <span class="hist-count ${count > 0 ? "" : "is-zero"}">${count}</span>
+        </div>`);
+    }
+
+    this.histogram.innerHTML = rows.join("");
   }
 
   /**
@@ -103,8 +307,9 @@ export class StatsView extends HTMLElement {
     this.rangeMin.value = String(min);
     this.rangeMax.value = String(max);
 
-    // A single bucket leaves nothing to choose between.
-    this.rangeBox.classList.toggle("hidden", options.length < 2);
+    // A single bucket leaves nothing to choose between. Mixed platforms have
+    // no shared rating axis, so the range only applies to one platform.
+    this.rangeBox.classList.toggle("hidden", options.length < 2 || !this.scope);
   }
 
   async onRangeChange(changed) {
@@ -124,61 +329,8 @@ export class StatsView extends HTMLElement {
     }
 
     this.range = { min, max };
-    await chrome.storage.local.set({ [RANGE_KEY]: this.range });
+    await chrome.storage.local.set({ [rangeKeyFor(this.scope)]: this.range });
     this.renderTags();
-  }
-
-  renderHint(contests) {
-    const untagged = contests.filter(
-      (contest) =>
-        contest.type === "OFFICIAL" &&
-        !contest.tagsSyncedAt &&
-        !contest.tagsSynced,
-    ).length;
-
-    if (untagged === 0) {
-      this.hint.classList.add("hidden");
-      return;
-    }
-
-    this.hint.textContent = `${untagged} contest${untagged === 1 ? "" : "s"} queued before tags were tracked. Hit ↻ to fetch them.`;
-    this.hint.classList.remove("hidden");
-  }
-
-  renderHistogram(ratings) {
-    if (ratings.length === 0) {
-      this.histogram.innerHTML = `<div class="stats-empty">No rated problems pending.</div>`;
-      return;
-    }
-
-    const counts = new Map();
-    ratings.forEach((rating) => {
-      const bucket = bucketOf(rating);
-      counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
-    });
-
-    // Walk every bucket in range, not just the occupied ones, so gaps in the
-    // queue stay visible as gaps.
-    const lowest = Math.min(...counts.keys());
-    const highest = Math.max(...counts.keys());
-    const tallest = Math.max(...counts.values());
-
-    const rows = [];
-    for (let bucket = lowest; bucket <= highest; bucket += BUCKET_SIZE) {
-      const count = counts.get(bucket) ?? 0;
-      const width = (count / tallest) * 100;
-
-      rows.push(`
-        <div class="hist-row">
-          <span class="hist-label">${bucket}</span>
-          <div class="hist-track">
-            ${count > 0 ? `<div class="hist-bar ${bandClass(bucket)}" style="width: ${width}%"></div>` : ""}
-          </div>
-          <span class="hist-count ${count > 0 ? "" : "is-zero"}">${count}</span>
-        </div>`);
-    }
-
-    this.histogram.innerHTML = rows.join("");
   }
 
   renderTags() {
@@ -186,6 +338,7 @@ export class StatsView extends HTMLElement {
     // queue; at full span unrated problems still contribute their tags.
     const isFullSpan =
       !this.bounds ||
+      !this.scope ||
       (this.range.min === this.bounds.lowest &&
         this.range.max === this.bounds.highest);
     const range = isFullSpan ? null : this.range;
@@ -194,11 +347,7 @@ export class StatsView extends HTMLElement {
     this.renderRangeCaption(range, tagCounts.length);
 
     if (tagCounts.length === 0) {
-      this.tagList.innerHTML = `<div class="stats-empty">${
-        range
-          ? "No tagged problems in that rating range."
-          : "No tags on the pending problems."
-      }</div>`;
+      this.tagList.innerHTML = `<div class="stats-empty">${this.noTagsMessage(range)}</div>`;
       return;
     }
 
@@ -220,8 +369,21 @@ export class StatsView extends HTMLElement {
       .join("");
   }
 
+  /**
+   * AtCoder has no tags at all — not "none yet", none published, ever. Saying
+   * so beats an empty chart that looks like a loading failure.
+   */
+  noTagsMessage(range) {
+    if (this.scope === "atcoder") {
+      return "AtCoder doesn't publish problem tags, so there's nothing to chart here.";
+    }
+    return range
+      ? "No tagged problems in that rating range."
+      : "No tags on the pending problems.";
+  }
+
   renderRangeCaption(range, tagCount) {
-    if (!this.bounds) {
+    if (!this.bounds || !this.scope) {
       this.rangeCaption.textContent = "";
       return;
     }
@@ -235,6 +397,36 @@ export class StatsView extends HTMLElement {
     const scope = range ? `rated ${range.min}–${range.max}` : "across all ratings";
     this.rangeCaption.textContent = `${tagCount} tag${tagCount === 1 ? "" : "s"} across ${matched} problem${matched === 1 ? "" : "s"} ${scope}`;
   }
+
+  buildSummary(ratings, unrated) {
+    const pending = ratings.length + unrated;
+    if (pending === 0) return "";
+
+    const parts = [`${pending} pending`];
+
+    if (this.scope && ratings.length > 0) {
+      parts.push(`median ${median(ratings)}`);
+    } else if (!this.scope && this.presentPlatforms.length > 1) {
+      // A median across platforms would be a median of incomparable numbers.
+      parts.push(
+        this.presentPlatforms
+          .map((platform) => {
+            const count = this.contests
+              .filter((contest) => platformOf(contest).id === platform.id)
+              .reduce(
+                (sum, contest) =>
+                  sum + contest.problems.filter((prob) => !prob.solved).length,
+                0,
+              );
+            return `${platform.shortLabel} ${count}`;
+          })
+          .join(" · "),
+      );
+    }
+
+    if (unrated > 0) parts.push(`${unrated} unrated`);
+    return parts.join(" · ");
+  }
 }
 
 function bucketOf(rating) {
@@ -243,6 +435,14 @@ function bucketOf(rating) {
 
 function clamp(value, low, high) {
   return Math.min(Math.max(value, low), high);
+}
+
+function median(ratings) {
+  const sorted = [...ratings].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
+    : sorted[mid];
 }
 
 /**
@@ -265,21 +465,6 @@ function collectRatings(contests) {
   });
 
   return { ratings, unrated };
-}
-
-function buildSummary(ratings, unrated) {
-  if (ratings.length === 0) return "";
-
-  const sorted = [...ratings].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  const median =
-    sorted.length % 2 === 0
-      ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
-      : sorted[mid];
-
-  const parts = [`${ratings.length} pending`, `median ${median}`];
-  if (unrated > 0) parts.push(`${unrated} unrated`);
-  return parts.join(" · ");
 }
 
 customElements.define("cf-stats-view", StatsView);
