@@ -208,11 +208,15 @@ cf-stats-view {
   flex-direction: column;
 }
 
+/* Also previously three competing blocks; this is their computed result. */
 .view-container {
   display: flex;
   flex-direction: column;
   flex: 1;
-  padding-top: 20px; /* Top padding only, list handles the rest */
+  min-height: 0; /* Respect the window height rather than growing past it */
+  height: 100%;
+  box-sizing: border-box;
+  padding: 16px;
 }
 
 /* --- View Meta Line --- */
@@ -237,6 +241,7 @@ cf-stats-view {
   flex: 1; /* Fill the remaining vertical space */
   overflow-y: auto; /* Enable independent scrolling */
   padding-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 /* --- Problem List Items --- */
@@ -355,19 +360,28 @@ cf-stats-view {
 }
 
 /* --- Contest List Items --- */
+/* One declaration. This was previously spread across five blocks that each
+   overrode the last, so editing any one of them appeared to do nothing —
+   which matters, because the row is about to be rebuilt. Values here are the
+   computed result of that cascade, unchanged. */
 .contest-row {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border-color);
+  gap: 8px;
+  /* Right padding leaves room for the row's menu button. */
+  padding: 14px 36px 14px 10px;
+  border-bottom: 1px solid #2a2a2a;
   font-family: "Courier New", Courier, monospace;
-  color: var(--text-main);
-  transition: background-color 0.15s ease;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
 .contest-row:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: #222;
 }
 
 .contest-row:last-child {
@@ -412,10 +426,6 @@ cf-app,
 cf-queue-view,
 cf-contest-list,
 cf-stats-view,
-.view-container {
-  min-height: 0; /* Forces containers to respect the height of the window */
-}
-
 /* --- Additional Styles for Contest List --- */
 
 /* New List Header Alignment */
@@ -433,12 +443,6 @@ cf-stats-view,
 }
 
 /* Contest Row Restyling */
-.contest-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 /* Badges for Contest Types */
 .contest-type {
   font-family: "Inter", sans-serif;
@@ -512,22 +516,7 @@ cf-stats-view,
 }
 
 /* Ensure the parent fills the side panel and organizes children */
-.view-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  box-sizing: border-box;
-  padding: 16px; /* Adjust based on your current padding */
-}
-
 /* Make the list fill the available space and scroll */
-#contest-items {
-  flex: 1;
-  overflow-y: auto;
-  margin-bottom: 12px;
-  /* Custom scrollbar to keep it looking clean */
-}
-
 #contest-items::-webkit-scrollbar {
   width: 4px;
 }
@@ -584,31 +573,7 @@ cf-stats-view,
 }
 
 /* Ensure the anchor behaves like the previous div row */
-.contest-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 10px;
-  border-bottom: 1px solid #2a2a2a;
-  text-decoration: none; /* Remove default underline */
-  color: inherit; /* Inherit text color from theme */
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.contest-row:hover {
-  background-color: #222;
-  cursor: pointer;
-}
-
 /* Rows stack the full name above its meta pills, so names never truncate */
-.contest-row {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 14px 10px;
-}
-
 .contest-name {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 0.9rem;
@@ -727,20 +692,7 @@ cf-stats-view,
 }
 
 /* Keep the name and pills clear of the button */
-.contest-row {
-  padding-right: 36px;
-}
-
 /* --- Filter Toolbar --- */
-.list-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  margin-bottom: 16px;
-  flex-shrink: 0;
-}
-
 .filter-label {
   font-size: 0.65rem;
   text-transform: uppercase;
@@ -1057,8 +1009,11 @@ cf-stats-view,
 .list-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
   align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
   /* Anchors the filter panel, which is absolute so opening it never reflows
      the rows beneath. */
   position: relative;

@@ -249,6 +249,14 @@ It is deliberately **not a progress ring**. `updateSolvedStatus` deletes a conte
 
 **The chance histogram uses a sequential ramp** — one hue, light to dark — not the rank colours. Those ran green through red and put 202 of a real 243-problem queue in a "red" band, so the chart's loudest message was that most of the backlog is failure. Sequential is the correct family here: ordered magnitude with no midpoint to diverge around. Both palettes were checked with the dataviz skill's validator against the real `#1e1e1e` surface rather than picked by eye.
 
+### A note on `style.css`
+
+`.contest-row` was once declared **five times**, each block overriding the last, so editing any one of them appeared to do nothing. `.view-container` had three, `.list-toolbar` and `#contest-items` two each. Those are now single declarations holding the computed result of the old cascade — verified pixel-identical, not eyeballed.
+
+Two apparent duplicates are deliberate and should stay: `.contest-type` appears twice because the second is part of a **grouped** selector (`.contest-id, .contest-type`), and deleting it would silently restyle `.contest-id`; `.btn` gains a bare `position: relative` later for tooltip anchoring. Before removing an apparent duplicate, check whether it is one line of a group.
+
+The rank-band colours live in `--band-*` variables so the histogram fills (`.band-*`) and the queue's rating text (`.tone-*`) cannot drift apart.
+
 ### UI shell
 
 `core/ui/index.js` defines `<cf-app>`, which clones the `#tpl-app` template from `index.html` and hand-rolls a router over three views in `#router-outlet`: `<cf-queue-view>`, `<cf-contest-list>` and `<cf-stats-view>`. Navigation is the tab bar; the header holds only refresh and settings, which act on the app rather than on a view. Views import their markup with Vite `?raw` imports and set `innerHTML`, and are **destroyed and rebuilt on every tab switch** — which is why selections that should survive (the contest type filter, the tag rating range) are persisted to `chrome.storage.local` rather than held on the instance.
