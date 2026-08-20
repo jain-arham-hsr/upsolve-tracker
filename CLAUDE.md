@@ -234,6 +234,21 @@ Collapsing those would hide a missing *user* rating — which mis-sorts a whole 
 
 `services/user-ratings.js` holds your rating per platform, and is deliberately conservative because **one rating moves an entire platform's block**: a failed lookup keeps the previous value rather than clearing it, and nothing is ever defaulted. Ratings arrive from `verifyIdentity` (above), so a rating always comes attached to a confirmed account rather than floating free. There is no manual override — all three platforms fetch automatically.
 
+### Stats: an overview, plus one panel per platform
+
+A scope selector switches between them, and **panels never mix platforms** — no chart bins numbers from different sites on one axis.
+
+- **Per-platform panels** show a native rating histogram in that platform's own units, coloured by its own `ratingBands` (AtCoder's scale runs negative; Codeforces' thresholds would paint the whole ABC range one colour), plus tags and the rating-range control.
+- **The overview** carries only what is genuinely comparable across sites: the platform ring, and the solve-chance histogram.
+
+**There is no tag chart on the overview.** Vocabularies do not match — Codeforces' `dfs and similar` versus CodeChef's `graphs`, and AtCoder publishes none at all — so pooling them produces an authoritative-looking chart built from incompatible lists. The per-platform panels state tag coverage outright ("tags cover 47% of these problems"), because an empty "graphs" bar otherwise reads as "I have no graph problems" rather than "half of this is untagged". The AtCoder panel says plainly that AtCoder publishes no tags.
+
+**The ring** (`ui/platform-ring.js`) shows pending problems per platform, from the same `collectPendingProblems()` the queue uses, so the two cannot disagree. Colour encodes **identity**, so each platform's `chartColor` is fixed on its descriptor and never assigned by size — filtering must not repaint the survivors. Those hues come from a validated categorical theme rather than the brand colours, which fail the chroma floor as fills (AtCoder brands achromatically, CodeChef's brown reads gray); the icons keep carrying brand identity in the legend.
+
+It is deliberately **not a progress ring**. `updateSolvedStatus` deletes a contest once every problem in it is solved, so the only solved problems still on disk sit in part-finished contests — a "you have solved 12%" figure would understate by an unknowable amount and would *fall* as you cleared contests.
+
+**The chance histogram uses a sequential ramp** — one hue, light to dark — not the rank colours. Those ran green through red and put 202 of a real 243-problem queue in a "red" band, so the chart's loudest message was that most of the backlog is failure. Sequential is the correct family here: ordered magnitude with no midpoint to diverge around. Both palettes were checked with the dataviz skill's validator against the real `#1e1e1e` surface rather than picked by eye.
+
 ### UI shell
 
 `core/ui/index.js` defines `<cf-app>`, which clones the `#tpl-app` template from `index.html` and hand-rolls a router over three views in `#router-outlet`: `<cf-queue-view>`, `<cf-contest-list>` and `<cf-stats-view>`. Navigation is the tab bar; the header holds only refresh and settings, which act on the app rather than on a view. Views import their markup with Vite `?raw` imports and set `innerHTML`, and are **destroyed and rebuilt on every tab switch** — which is why selections that should survive (the contest type filter, the tag rating range) are persisted to `chrome.storage.local` rather than held on the instance.
