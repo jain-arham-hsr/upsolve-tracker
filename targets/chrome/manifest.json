@@ -7,7 +7,8 @@
   "host_permissions": [
     "*://*.codeforces.com/*",
     "*://*.atcoder.jp/*",
-    "*://kenkoooo.com/*"
+    "*://kenkoooo.com/*",
+    "*://*.codechef.com/*"
   ],
   "icons": {
     "16": "icons/icon-16.png",

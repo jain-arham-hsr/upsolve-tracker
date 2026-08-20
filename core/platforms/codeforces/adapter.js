@@ -57,8 +57,11 @@ export async function createSession() {
  *
  * Reads Codeforces' own submission shape (`verdict`, `problem.contestId`),
  * which is why it lives here rather than in a shared module.
+ *
+ * `contests` is unused: user.status returns the whole history in one call.
+ * CodeChef answers per contest and does need it.
  */
-export async function fetchSolvedKeys(session, onProgress = () => {}) {
+export async function fetchSolvedKeys(session, _contests, onProgress = () => {}) {
   onProgress("Checking your submissions…");
   const submissions = await session.service.getUserStatus(session.handle);
   return new Set(

@@ -9,8 +9,9 @@
  */
 import * as codeforces from "./codeforces/adapter.js";
 import * as atcoder from "./atcoder/adapter.js";
+import * as codechef from "./codechef/adapter.js";
 
-const ADAPTERS = { codeforces, atcoder };
+const ADAPTERS = { codeforces, atcoder, codechef };
 
 export function getAdapter(platformId) {
   return ADAPTERS[platformId] ?? null;

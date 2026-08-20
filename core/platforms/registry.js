@@ -8,10 +8,11 @@
  */
 import { codeforces } from "./codeforces/descriptor.js";
 import { atcoder } from "./atcoder/descriptor.js";
+import { codechef } from "./codechef/descriptor.js";
 
 export const DEFAULT_PLATFORM_ID = codeforces.id;
 
-const PLATFORMS = [codeforces, atcoder];
+const PLATFORMS = [codeforces, atcoder, codechef];
 const BY_ID = new Map(PLATFORMS.map((platform) => [platform.id, platform]));
 
 export function listPlatforms() {

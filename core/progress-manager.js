@@ -100,7 +100,7 @@ async function collectSolvedKeys(trackedContests, onProgress) {
         continue;
       }
 
-      const keys = await adapter.fetchSolvedKeys(session, onProgress);
+      const keys = await adapter.fetchSolvedKeys(session, mine, onProgress);
       keys.forEach((key) => solvedKeys.add(key));
 
       // Fill in metadata for contests still missing it. Handed only this

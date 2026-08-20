@@ -30,7 +30,7 @@ export async function processNewContest(url, onProgress = () => {}) {
       onProgress,
     });
 
-    const solvedKeys = await adapter.fetchSolvedKeys(session, onProgress);
+    const solvedKeys = await adapter.fetchSolvedKeys(session, [contest], onProgress);
 
     let solvedCount = 0;
     contest.problems.forEach((prob) => {

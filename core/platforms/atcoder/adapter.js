@@ -92,7 +92,7 @@ function buildProblem(entry, problemsById, models) {
   };
 }
 
-export async function fetchSolvedKeys(session, onProgress = () => {}) {
+export async function fetchSolvedKeys(session, _contests, onProgress = () => {}) {
   if (!session.handle) return new Set();
 
   onProgress("Checking your AtCoder submissions…");

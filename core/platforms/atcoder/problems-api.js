@@ -19,6 +19,8 @@
  *    time rather than silently producing an empty contest.
  */
 
+import { createPacer } from "../../services/request-pacer.js";
+
 const BASE = "https://kenkoooo.com/atcoder";
 const RESOURCE_TTL_MS = 15 * 60 * 1000;
 const MIN_GAP_MS = 1100;
@@ -29,40 +31,10 @@ const PAGE_SIZE = 500;
 /** Backstop against a pagination bug turning into an unbounded loop. */
 const MAX_PAGES = 200;
 
-let lastRequestAt = 0;
-let minGapMs = MIN_GAP_MS;
 const cache = new Map();
 
-/**
- * Requests queue behind one another rather than each checking the clock.
- * Reading `lastRequestAt` at call time looks equivalent but isn't: four
- * concurrent calls would all see the same value, all wait the same amount and
- * then fire together, which is precisely the burst the spacing exists to
- * avoid.
- */
-let chain = Promise.resolve();
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function spacedFetch(url, init = {}) {
-  const result = chain.then(async () => {
-    const wait = lastRequestAt + minGapMs - Date.now();
-    if (wait > 0) await sleep(wait);
-    lastRequestAt = Date.now();
-
-    // No credentials: this is a third-party service and has no business
-    // receiving any cookie of the user's.
-    return fetch(url, { ...init, credentials: "omit" });
-  });
-
-  // Keep the chain alive even when a request fails, or one error would stall
-  // every later request behind it.
-  chain = result.then(
-    () => {},
-    () => {},
-  );
-  return result;
-}
+// Its own pacer, so AtCoder's budget is independent of the other platforms'.
+const paced = createPacer({ minGapMs: MIN_GAP_MS, credentials: "omit" });
 
 /**
  * Fetches a static resource, revalidating with its ETag once the cached copy
@@ -77,7 +49,7 @@ async function getResource(path) {
   }
 
   const headers = entry?.etag ? { "If-None-Match": entry.etag } : {};
-  const response = await spacedFetch(url, { headers });
+  const response = await paced(url, { headers });
 
   if (response.status === 304 && entry) {
     entry.fetchedAt = Date.now();
@@ -137,7 +109,7 @@ export async function getAcceptedProblemIds(handle) {
       `${BASE}/atcoder-api/v3/user/submissions` +
       `?user=${encodeURIComponent(handle)}&from_second=${fromSecond}`;
 
-    const response = await spacedFetch(url);
+    const response = await paced(url);
     if (!response.ok) {
       throw new Error(
         `AtCoder Problems returned ${response.status} for your submissions. ` +
@@ -174,8 +146,7 @@ export async function getAcceptedProblemIds(handle) {
 /** Test seam: drops the in-memory resource cache and resets pacing. */
 export function clearResourceCache() {
   cache.clear();
-  lastRequestAt = 0;
-  chain = Promise.resolve();
+  paced.reset();
 }
 
 /**
@@ -183,5 +154,5 @@ export function clearResourceCache() {
  * not spend real seconds observing an etiquette rule it isn't exercising.
  */
 export function setRequestSpacing(ms) {
-  minGapMs = ms;
+  paced.setSpacing(ms);
 }

@@ -168,12 +168,12 @@ test("only accepted submissions count", async () => {
 
 test("solved keys are namespaced task ids, so a rerun clears too", async () => {
   submissionPages = [[{ id: 1, epoch_second: 1, problem_id: "abc471_a", result: "AC" }]];
-  const keys = await fetchSolvedKeys({ handle: "me" });
+  const keys = await fetchSolvedKeys({ handle: "me" }, []);
   assert.deepEqual([...keys], ["atcoder:abc471_a"]);
 });
 
 test("no handle means no request and no keys", async () => {
-  const keys = await fetchSolvedKeys({ handle: undefined });
+  const keys = await fetchSolvedKeys({ handle: undefined }, []);
   assert.equal(keys.size, 0);
   assert.equal(requestLog.length, 0);
 });
