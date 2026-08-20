@@ -5,6 +5,7 @@ import { escapeHtml } from "../escape-html.js";
 import { listPlatforms, platformOf, getPlatform } from "../../platforms/registry.js";
 import { getEffectiveRatings } from "../../services/user-ratings.js";
 import { solveProbability } from "../../queue-order.js";
+import { collectPendingProblems } from "../../pending-problems.js";
 
 const BUCKET_SIZE = 100;
 const SCOPE_KEY = "cf_trainer.stats_scope";
@@ -112,7 +113,8 @@ export class StatsView extends HTMLElement {
     const stored = await chrome.storage.local.get({ [rangeKeyFor(this.scope)]: null });
     this.range = stored[rangeKeyFor(this.scope)];
 
-    const { ratings, unrated } = collectRatings(this.contests);
+    this.pending = collectPendingProblems(this.contests);
+    const { ratings, unrated } = collectRatings(this.pending);
     this.ratings = ratings;
 
     this.renderHint();
@@ -139,18 +141,14 @@ export class StatsView extends HTMLElement {
    * tags at all, and Codeforces gyms sit outside its taxonomy.
    */
   renderCoverage(allContests) {
-    const scoped = this.scope ? this.contests : allContests;
+    const scoped = collectPendingProblems(this.scope ? this.contests : allContests);
     const totals = new Map();
 
-    scoped.forEach((contest) => {
-      const id = platformOf(contest).id;
-      const entry = totals.get(id) ?? { tagged: 0, total: 0 };
-      contest.problems.forEach((prob) => {
-        if (prob.solved) return;
-        entry.total++;
-        if (prob.tags?.length) entry.tagged++;
-      });
-      totals.set(id, entry);
+    scoped.forEach(({ platform, problem }) => {
+      const entry = totals.get(platform.id) ?? { tagged: 0, total: 0 };
+      entry.total++;
+      if (problem.tags?.length) entry.tagged++;
+      totals.set(platform.id, entry);
     });
 
     const total = [...totals.values()].reduce((sum, e) => sum + e.total, 0);
@@ -195,22 +193,17 @@ export class StatsView extends HTMLElement {
     const counts = new Map(CHANCE_BANDS.map((band) => [band.label, 0]));
     let unknown = 0;
 
-    this.contests.forEach((contest) => {
-      const platform = platformOf(contest);
-      contest.problems.forEach((prob) => {
-        if (prob.solved) return;
-
-        const chance = solveProbability(
-          prob.rating,
-          this.userRatings[platform.id] ?? null,
-        );
-        if (chance === null) {
-          unknown++;
-          return;
-        }
-        const band = CHANCE_BANDS.find((entry) => chance >= entry.min);
-        counts.set(band.label, counts.get(band.label) + 1);
-      });
+    this.pending.forEach(({ platform, problem }) => {
+      const chance = solveProbability(
+        problem.rating,
+        this.userRatings[platform.id] ?? null,
+      );
+      if (chance === null) {
+        unknown++;
+        return;
+      }
+      const band = CHANCE_BANDS.find((entry) => chance >= entry.min);
+      counts.set(band.label, counts.get(band.label) + 1);
     });
 
     const tallest = Math.max(...counts.values(), 1);
@@ -411,13 +404,9 @@ export class StatsView extends HTMLElement {
       parts.push(
         this.presentPlatforms
           .map((platform) => {
-            const count = this.contests
-              .filter((contest) => platformOf(contest).id === platform.id)
-              .reduce(
-                (sum, contest) =>
-                  sum + contest.problems.filter((prob) => !prob.solved).length,
-                0,
-              );
+            const count = this.pending.filter(
+              (entry) => entry.platform.id === platform.id,
+            ).length;
             return `${platform.shortLabel} ${count}`;
           })
           .join(" · "),
@@ -449,19 +438,16 @@ function median(ratings) {
  * Ratings of every pending problem across tracked contests. Mirrors the queue
  * view: solved problems are excluded.
  */
-function collectRatings(contests) {
+function collectRatings(pending) {
   const ratings = [];
   let unrated = 0;
 
-  contests.forEach((contest) => {
-    contest.problems.forEach((prob) => {
-      if (prob.solved) return;
-      if (typeof prob.rating === "number") {
-        ratings.push(prob.rating);
-      } else {
-        unrated++;
-      }
-    });
+  pending.forEach(({ problem }) => {
+    if (typeof problem.rating === "number") {
+      ratings.push(problem.rating);
+    } else {
+      unrated++;
+    }
   });
 
   return { ratings, unrated };

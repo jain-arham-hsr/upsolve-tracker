@@ -8,6 +8,10 @@
 import { LocalDB } from "./services/storage.js";
 import { matchContestUrl } from "./platforms/registry.js";
 import { getAdapter } from "./platforms/adapters.js";
+import {
+  getEffectiveRatings,
+  storeFetchedRatings,
+} from "./services/user-ratings.js";
 
 export async function processNewContest(url, onProgress = () => {}) {
   try {
@@ -22,6 +26,7 @@ export async function processNewContest(url, onProgress = () => {}) {
     }
 
     const session = await adapter.createSession();
+    await ensureUserRating(platform.id, adapter, session);
 
     const contest = await adapter.fetchContestRecord({
       contestId,
@@ -71,5 +76,33 @@ export async function processNewContest(url, onProgress = () => {}) {
   } catch (error) {
     console.error("[Contest Manager] Failed:", error);
     throw error;
+  }
+}
+
+/**
+ * Makes sure we know the user's rating on this platform before their first
+ * refresh.
+ *
+ * Without it, a fresh install adds a contest and every row shows an em dash
+ * for solve chance until the first sync — the queue is ordered, but by the
+ * fallback rather than by anything meaningful.
+ *
+ * Only fetched when the platform is absent entirely. A stored null means "we
+ * asked and there was no rating", which is an answer and not worth re-asking
+ * on every add. Failure is non-fatal: ordering degrades to native ratings,
+ * which is not worth losing a contest over.
+ */
+async function ensureUserRating(platformId, adapter, session) {
+  if (typeof adapter.fetchUserRating !== "function") return;
+
+  const known = await getEffectiveRatings();
+  if (platformId in known) return;
+
+  try {
+    await storeFetchedRatings({
+      [platformId]: await adapter.fetchUserRating(session),
+    });
+  } catch (error) {
+    console.warn(`[Contest Manager] ${platformId} rating lookup failed:`, error.message);
   }
 }

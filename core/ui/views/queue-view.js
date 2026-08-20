@@ -2,7 +2,8 @@ import templateHtml from "./queue-view.html?raw";
 import { LocalDB } from "../../services/storage.js";
 import { escapeHtml } from "../escape-html.js";
 import { hasCompleteSetup } from "../../services/secure-store.js";
-import { platformOf, matchesFilter } from "../../platforms/registry.js";
+import { matchesFilter } from "../../platforms/registry.js";
+import { collectPendingProblems } from "../../pending-problems.js";
 import {
   loadFilter,
   renderFilterChips,
@@ -97,33 +98,26 @@ export class QueueView extends HTMLElement {
     const contests = allContests.filter((contest) =>
       matchesFilter(contest, this.filter ?? []),
     );
-    const upsolveList = [];
-
-    // 1. Collect all unsolved problems
-    contests.forEach((contest) => {
-      const platform = platformOf(contest);
-
-      contest.problems.forEach((prob) => {
-        if (!prob.solved) {
-          upsolveList.push({
-            ...prob,
-            contestId: contest.id,
-            platform: platform.id,
-            platformLabel: platform.shortLabel,
-            startTimeSeconds: contest.startTimeSeconds ?? null,
-            url: platform.problemUrl(contest, prob),
-            sourceLabel: platform.sourceLabel(contest, prob),
-            // Ratings from different sites aren't comparable, so the queue
-            // orders by how likely you are to solve each one instead. Null
-            // whenever either input is unknown — never a stand-in.
-            solveProbability: solveProbability(
-              prob.rating,
-              userRatings[platform.id] ?? null,
-            ),
-          });
-        }
-      });
-    });
+    // Deduplicated: the same problem belongs to several contests on AtCoder
+    // and CodeChef, so a flat walk would list it more than once.
+    const upsolveList = collectPendingProblems(contests).map(
+      ({ contest, platform, problem }) => ({
+        ...problem,
+        contestId: contest.id,
+        platform: platform.id,
+        platformLabel: platform.shortLabel,
+        startTimeSeconds: contest.startTimeSeconds ?? null,
+        url: platform.problemUrl(contest, problem),
+        sourceLabel: platform.sourceLabel(contest, problem),
+        // Ratings from different sites aren't comparable, so the queue orders
+        // by how likely you are to solve each one instead. Null whenever
+        // either input is unknown — never a stand-in.
+        solveProbability: solveProbability(
+          problem.rating,
+          userRatings[platform.id] ?? null,
+        ),
+      }),
+    );
 
     // 2. Easiest first, by solve probability. See queue-order.js for why the
     //    rows without one split into two bands rather than one.
