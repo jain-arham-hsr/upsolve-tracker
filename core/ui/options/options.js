@@ -4,7 +4,7 @@ import {
   clearDirHandle,
   saveCredentials,
   loadCredentials,
-} from "../../services/secure-store";
+} from "../../services/secure-store.js";
 import { CodeforcesService } from "../../services/codeforces-service.js";
 
 document.addEventListener("DOMContentLoaded", async () => {

@@ -10,6 +10,11 @@
  * Gym problems are absent from the problemset entirely. Their tags, where they
  * exist, come from the standings response that adding a gym already fetches;
  * their ratings are always estimated.
+ *
+ * This module is Codeforces-only. It keys on bare `contestId-index`, so it
+ * must be handed Codeforces contests exclusively — see contestsOnPlatform in
+ * platforms/registry.js. Another platform's ids live in a different namespace
+ * and would match the wrong problems.
  */
 
 /** How long before a contest with missing data is worth asking about again. */

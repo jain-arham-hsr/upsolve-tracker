@@ -59,9 +59,14 @@ export const codeforces = {
     return subtypeOf(contest) === "OFFICIAL" ? "Official contest" : "Gym contest";
   },
 
-  /** Matches the `${contestId}-${index}` keys built from user.status. */
+  /**
+   * Key for "the user has solved this". Namespaced by platform so a single
+   * Set can hold solved history from every site at once — bare
+   * `${contestId}-${index}` would let a Codeforces contest and a CodeChef one
+   * sharing a number mark each other's problems solved.
+   */
   solvedKey(contestId, index) {
-    return `${contestId}-${index}`;
+    return `codeforces:${contestId}-${index}`;
   },
 
   /**

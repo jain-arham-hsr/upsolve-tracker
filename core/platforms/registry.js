@@ -6,7 +6,7 @@
  * carry no `platform` field, so every lookup falls back to Codeforces rather
  * than failing — that is the migration, and it costs nothing at read time.
  */
-import { codeforces } from "./codeforces.js";
+import { codeforces } from "./codeforces/descriptor.js";
 
 export const DEFAULT_PLATFORM_ID = codeforces.id;
 
@@ -61,4 +61,18 @@ export function contestKey(contest) {
 
 export function makeContestKey(platformId, contestId) {
   return `${platformId ?? DEFAULT_PLATFORM_ID}:${String(contestId)}`;
+}
+
+/**
+ * The subset of `contests` belonging to one platform.
+ *
+ * Per-platform sync helpers (problemset-sync.js, start-time-service.js) are
+ * Codeforces implementations, not generic services — handing them another
+ * platform's contests would have them match on bare contest ids across
+ * namespaces. Callers filter first.
+ */
+export function contestsOnPlatform(contests, platformId) {
+  return (contests ?? []).filter(
+    (contest) => (contest?.platform ?? DEFAULT_PLATFORM_ID) === platformId,
+  );
 }

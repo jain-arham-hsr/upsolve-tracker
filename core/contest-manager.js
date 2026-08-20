@@ -1,17 +1,13 @@
-import { estimateProblemRating } from "./rating-estimator.js";
+/**
+ * Orchestrates adding a contest, and nothing else.
+ *
+ * Everything site-specific — auth, fetching, rating, solved history — lives
+ * behind the platform adapter. This file only decides *which* platform, and
+ * what to do with what comes back.
+ */
 import { LocalDB } from "./services/storage.js";
-import { CodeforcesService } from "./services/codeforces-service.js";
-import {
-  getOfficialRatingDist,
-  getGymRatingDist,
-  distributionSize,
-} from "./get-rating-distribution.js";
-import { getProblemStats } from "./get-prob-stats.js";
-import { buildSolvedKeys } from "./progress-manager.js";
-import { loadCredentials } from "./services/secure-store.js";
-import { syncOfficialProblemData } from "./problemset-sync.js";
-import { syncStartTimes } from "./start-time-service.js";
 import { matchContestUrl } from "./platforms/registry.js";
+import { getAdapter } from "./platforms/adapters.js";
 
 export async function processNewContest(url, onProgress = () => {}) {
   try {
@@ -20,148 +16,58 @@ export async function processNewContest(url, onProgress = () => {}) {
 
     const { platform, contestId, subtype } = parsed;
 
-    // The acquisition pipeline below is still Codeforces-specific: signed API
-    // plus standings scrape. A second platform slots in as its own branch
-    // here rather than by teaching these helpers about other sites.
-    if (platform.id !== "codeforces") {
+    const adapter = getAdapter(platform.id);
+    if (!adapter) {
       throw new Error(`${platform.label} contests aren't supported yet.`);
     }
-    const type = subtype === "OFFICIAL" ? "contest" : "gym";
 
-    const [storageSettings, { apiKey, apiSecret }] = await Promise.all([
-      chrome.storage.local.get("cf_trainer.handle"),
-      loadCredentials(),
-    ]);
+    const session = await adapter.createSession();
 
-    const handle = storageSettings["cf_trainer.handle"];
+    const contest = await adapter.fetchContestRecord({
+      contestId,
+      subtype,
+      session,
+      onProgress,
+    });
 
-    if (!apiKey || !apiSecret) {
-      throw new Error(
-        "No API key set yet. Open Settings and add your Codeforces handle, key and secret.",
-      );
-    }
-
-    const cfService = new CodeforcesService(apiKey, apiSecret);
-
-    onProgress("Reading the standings…");
-    const {
-      contestName,
-      problems,
-      tagsSynced,
-      startTimeSeconds,
-      solveCountsRead,
-    } = await getProblemStats(type, contestId, cfService);
-
-    const contestData = {
-      id: contestId,
-      platform: platform.id,
-      name: contestName,
-      type: subtype,
-      problems,
-      tagsSyncedAt: tagsSynced ? Date.now() : null,
-      startTimeSeconds,
-      addedAt: Date.now(),
-    };
-
-    // Codeforces' own ratings are the same quantity the estimator approximates,
-    // so take them where they exist. For a rated official contest this leaves
-    // nothing to estimate, and the scraped solve counts stop mattering.
-    await syncOfficialProblemData(cfService, [contestData], onProgress);
-
-    const needsEstimate = problems.filter(
-      (problem) => problem.rating === null,
-    );
-
-    // Only now is it knowable whether the unreadable totals row actually
-    // matters. Estimating from counts we failed to parse would silently invent
-    // ratings, so refuse instead.
-    if (needsEstimate.length > 0 && !solveCountsRead) {
-      throw new Error(
-        `Couldn't read the solve counts for ${type} ${contestId}, and ${needsEstimate.length} ` +
-          `problem(s) have no published rating to fall back on. Codeforces may have changed ` +
-          `its standings layout.`,
-      );
-    }
-
-    if (needsEstimate.length > 0) {
-      onProgress("Measuring the field…");
-      let distribution = { strata: [] };
-      if (type === "contest") {
-        distribution = await getOfficialRatingDist(
-          cfService,
-          contestId,
-          onProgress,
-        );
-        if (distributionSize(distribution) === 0) {
-          distribution = await getGymRatingDist(cfService, contestId);
-        }
-      } else {
-        distribution = await getGymRatingDist(cfService, contestId);
-      }
-
-      console.log(
-        `[Contest Manager] Distribution: ${distributionSize(distribution)} competitors read, ` +
-          `representing ~${Math.round(
-            distribution.strata.reduce(
-              (sum, s) => sum + s.ratings.length * s.scale,
-              0,
-            ),
-          )}.`,
-      );
-
-      if (distributionSize(distribution) > 0) {
-        onProgress("Estimating problem ratings…");
-        needsEstimate.forEach((problem) => {
-          problem.rating = estimateProblemRating(
-            distribution,
-            problem.officialSolves,
-          );
-          if (problem.rating !== null) problem.ratingSource = "estimated";
-        });
-      }
-    }
-
-    // --- REMOVED THE 1500 FALLBACK COMPLETELY ---
-
-    onProgress("Checking your submissions…");
-    const solvedKeys = await buildSolvedKeys(cfService, handle);
+    const solvedKeys = await adapter.fetchSolvedKeys(session, onProgress);
 
     let solvedCount = 0;
-    problems.forEach((prob) => {
+    contest.problems.forEach((prob) => {
       if (solvedKeys.has(platform.solvedKey(contestId, prob.index))) {
         prob.solved = true;
         solvedCount++;
       }
     });
 
-    if (solvedCount === problems.length && problems.length > 0) {
+    if (solvedCount === contest.problems.length && contest.problems.length > 0) {
       throw new Error(
-        `All problems in ${subtype === "OFFICIAL" ? "Official" : "Gym"} contest ${contestId} are already solved!`,
+        `All problems in ${platform.contestLabel(contest)} ${contestId} are already solved!`,
       );
     }
 
-    const missing = problems.filter((problem) => problem.rating === null);
-
-    await syncStartTimes(cfService, [contestData], onProgress);
-
+    // There is deliberately no default rating here. A fabricated number would
+    // sort like a real one and quietly corrupt the queue's whole point.
     // Platforms that publish their own difficulty may store a contest with
-    // some problems still unrated — those converge on a later refresh, and the
-    // queue shows them as "???" rather than inventing a number. Codeforces
-    // sets this false: the estimator fills every gap there, so a hole is a bug
-    // worth refusing on.
-    if (missing.length === 0 || platform.capabilities.allowsPartialRatings) {
-      onProgress("Saving to your queue…");
-      await LocalDB.addTrackedContest(contestData);
-    } else {
+    // gaps — those show as "???" and converge on a later refresh — while
+    // Codeforces, where the estimator fills every gap, refuses loudly.
+    const missing = contest.problems.filter((problem) => problem.rating === null);
+
+    if (missing.length > 0 && !platform.capabilities.allowsPartialRatings) {
       console.warn("[Contest Manager] Skipping storage. Missing ratings.");
       throw new Error(
-        missing.length === problems.length
-          ? `Couldn't rate this contest: Codeforces returned no participant ratings for ${contestId}. Private or unrated standings can't be measured.`
-          : `Couldn't rate ${missing.length} of ${problems.length} problems (${missing.map((p) => p.index).join(", ")}), so the contest wasn't added.`,
+        missing.length === contest.problems.length
+          ? `Couldn't rate this contest: ${platform.label} returned no participant ratings for ${contestId}. Private or unrated standings can't be measured.`
+          : `Couldn't rate ${missing.length} of ${contest.problems.length} problems (${missing
+              .map((p) => p.index)
+              .join(", ")}), so the contest wasn't added.`,
       );
     }
 
-    return contestData;
+    onProgress("Saving to your queue…");
+    await LocalDB.addTrackedContest(contest);
+
+    return contest;
   } catch (error) {
     console.error("[Contest Manager] Failed:", error);
     throw error;

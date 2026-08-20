@@ -50,6 +50,28 @@ Two conventions the registry depends on:
 
 `capabilities.allowsPartialRatings` decides whether a contest may be stored with some problems still unrated. Codeforces sets it **false** — the estimator fills every gap there, so a hole means something broke and `contest-manager.js` refuses loudly. Platforms that publish their own difficulty set it true and let unrated problems converge on a later refresh. This is *not* the default-1500 fallback the comments elsewhere warn about: those problems store `rating: null` and render as "???" rather than getting a fabricated number.
 
+### Platform adapters
+
+The registry is *pure* — URLs, identity, capabilities — so anything can import it. Network work lives behind an **adapter**, resolved by `core/platforms/adapters.js`. The split is deliberate: `backup-validation.js` imports the registry, and must not drag the network stack in with it.
+
+A platform adapter exports four things:
+
+- `createSession()` — loads whatever that site needs to authenticate. Codeforces wants a key pair and a handle; AtCoder will want only a handle; CodeChef reads both from the page. **The orchestrator never sees a credential.**
+- `fetchContestRecord({contestId, subtype, session, onProgress})` — the entire acquisition pipeline behind one call, returning a stored-shape contest whose problems all carry `rating`, `ratingSource`, `tags` and `officialSolves`.
+- `fetchSolvedKeys(session, onProgress)` — a Set of `platform.solvedKey(...)` values.
+- `syncMetadata(session, contests, onProgress)` — optional; fills in data that only arrives later.
+
+`contest-manager.js` is now just the orchestrator: match the URL, pick the adapter, mark solved, decide whether the record is complete enough to store. Everything Codeforces-specific — the signed API, the standings scrape, the Elo estimator — sits in `core/platforms/codeforces/adapter.js`. Adding a platform means writing one adapter, not editing the orchestrator.
+
+`progress-manager.js#updateSolvedStatus()` loops over every platform with tracked contests, **isolating failures**: one site being down or unconfigured must not stop the others, and if *every* platform fails it returns before the write so a bad sync can't touch storage. `applySolvedStatus()` is split out and pure because it's the step that fails quietly.
+
+Two invariants there:
+
+- **`solved` is only ever set true, never cleared.** That stickiness is load-bearing. CodeChef answers a logged-out request with an *empty* solved list rather than an error, and clearing on that would resurrect every finished problem.
+- **`solvedKey` is namespaced by platform** (`codeforces:2193-A`). One `Set` holds solved history from every site, so a bare `contestId-index` would let two platforms sharing a contest number mark each other's problems solved.
+
+Note every relative import must carry its `.js` extension. Vite resolves extensionless paths, Node does not — three of them had been sitting in `get-prob-stats.js`, `get-rating-distribution.js` and `options.js`, invisible until a test imported that part of the graph.
+
 `backup-validation.js` deliberately does **not** require `platform` — every backup written before this change lacks it — but does refuse a backup naming a platform this build doesn't know, since that would otherwise throw later while rendering the list.
 
 ### Data acquisition: two channels, both required

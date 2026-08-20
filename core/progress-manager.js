@@ -1,95 +1,117 @@
-import { CodeforcesService } from "./services/codeforces-service.js";
+/**
+ * Re-syncs the queue against what the user has actually solved.
+ */
 import { LocalDB } from "./services/storage.js";
-import { loadCredentials } from "./services/secure-store.js";
-import { syncOfficialProblemData } from "./problemset-sync.js";
-import { syncStartTimes } from "./start-time-service.js";
-import { platformOf } from "./platforms/registry.js";
+import {
+  listPlatforms,
+  platformOf,
+  contestsOnPlatform,
+} from "./platforms/registry.js";
+import { getAdapter } from "./platforms/adapters.js";
 
 /**
- * Fetches all accepted submissions for a user and returns them as a Set
- * of "contestId-index" keys for fast lookup.
- * @param {CodeforcesService} cfService
- * @param {string} handle
- * @returns {Promise<Set<string>>}
+ * Reconciles local contest data with each platform's submission history.
+ * Updates the 'solved' status for individual problems and removes contests
+ * that are 100% completed.
+ *
+ * @returns {Promise<Object[]>} List of {type, id} for contests removed.
  */
-export async function buildSolvedKeys(cfService, handle) {
-  const submissions = await cfService.getUserStatus(handle);
-  return new Set(
-    submissions
-      .filter((s) => s.verdict === "OK")
-      .map((s) => `${s.problem.contestId}-${s.problem.index}`),
+export async function updateSolvedStatus(onProgress = () => {}) {
+  const trackedContests = await LocalDB.getTrackedContests();
+
+  const { solvedKeys, anySucceeded } = await collectSolvedKeys(
+    trackedContests,
+    onProgress,
   );
+
+  // Every platform failed — usually an unconfigured extension or an outage.
+  // Returning before the write keeps a bad sync from touching storage at all.
+  if (!anySucceeded) return [];
+
+  onProgress("Updating your queue…");
+  const { kept, removed } = applySolvedStatus(trackedContests, solvedKeys);
+
+  await LocalDB.saveTrackedContests(kept);
+
+  return removed;
 }
 
 /**
- * Reconciles local contest data with Codeforces submission history.
- * Updates the 'solved' status for individual problems and removes
- * contests that are 100% completed.
- * * @returns {Promise<Object[]>} List of {type, id} for contests removed.
+ * Marks solved problems and splits off contests that are now complete.
+ *
+ * Pure, and separated out because it is the step that would fail quietly:
+ * clearing a solved flag, or dropping a contest that isn't finished, both look
+ * like ordinary behaviour until the queue is wrong.
+ *
+ * @returns {{kept: object[], removed: {type: string, id: string}[]}}
  */
-export async function updateSolvedStatus(onProgress = () => {}) {
-  // 1. Fetch credentials from storage
-  const [storageSettings, { apiKey, apiSecret }] = await Promise.all([
-    chrome.storage.local.get("cf_trainer.handle"),
-    loadCredentials(),
-  ]);
+export function applySolvedStatus(contests, solvedKeys) {
+  const kept = [];
+  const removed = [];
 
-  const handle = storageSettings["cf_trainer.handle"];
-
-  // Exit if credentials haven't been set up yet
-  if (!handle || !apiKey || !apiSecret) {
-    console.warn("[Progress Manager] Missing API credentials. Skipping sync.");
-    return [];
-  }
-
-  // 2. Initialize service and fetch solved keys
-  const cfService = new CodeforcesService(apiKey, apiSecret);
-  onProgress("Checking your submissions…");
-  const solvedKeys = await buildSolvedKeys(cfService, handle);
-
-  // 3. Update the Queue
-  const trackedContests = await LocalDB.getTrackedContests();
-
-  // Fill in metadata for contests still missing it. Both no-op once every
-  // contest is resolved, so they usually cost nothing.
-  await syncOfficialProblemData(cfService, trackedContests, onProgress);
-  await syncStartTimes(cfService, trackedContests, onProgress);
-
-  onProgress("Updating your queue…");
-  const updatedContests = [];
-  const removedDetails = [];
-
-  for (const contest of trackedContests) {
+  for (const contest of contests) {
     let allSolved = true;
     const platform = platformOf(contest);
 
-    // Update the 'solved' boolean for every problem in the contest
     contest.problems.forEach((prob) => {
-      // Check if problem is in the latest "OK" submissions
+      // `solved` is only ever set true, never cleared. That stickiness is
+      // load-bearing: a platform that answers with an empty solved list —
+      // because the user is logged out, say — must not resurrect problems
+      // they have already finished.
       if (solvedKeys.has(platform.solvedKey(contest.id, prob.index))) {
         prob.solved = true;
       }
 
-      // If any problem remains unsolved, the contest isn't finished
-      if (!prob.solved) {
-        allSolved = false;
-      }
+      if (!prob.solved) allSolved = false;
     });
 
     if (allSolved) {
-      // Contest is finished: Capture details for the UI alert and exclude from update
-      removedDetails.push({
-        type: platform.contestLabel(contest),
-        id: contest.id,
-      });
+      removed.push({ type: platform.contestLabel(contest), id: contest.id });
     } else {
-      // Contest still has pending problems: Keep it in the list
-      updatedContests.push(contest);
+      kept.push(contest);
     }
   }
 
-  // 4. Persist the updated state to Local Storage
-  await LocalDB.saveTrackedContests(updatedContests);
+  return { kept, removed };
+}
 
-  return removedDetails;
+/**
+ * Asks every platform that has contests tracked for its solved history, and
+ * lets it fill in any metadata it owes.
+ *
+ * Failures are isolated per platform: one site being down or unconfigured
+ * must not stop the others syncing, and must never clear anything.
+ */
+async function collectSolvedKeys(trackedContests, onProgress) {
+  const solvedKeys = new Set();
+  let anySucceeded = false;
+
+  for (const platform of listPlatforms()) {
+    const mine = contestsOnPlatform(trackedContests, platform.id);
+    if (mine.length === 0) continue;
+
+    const adapter = getAdapter(platform.id);
+    if (!adapter) continue;
+
+    try {
+      const session = await adapter.createSession();
+      if (!session.handle) {
+        console.warn(`[Progress Manager] No ${platform.label} handle set. Skipping.`);
+        continue;
+      }
+
+      const keys = await adapter.fetchSolvedKeys(session, onProgress);
+      keys.forEach((key) => solvedKeys.add(key));
+
+      // Fill in metadata for contests still missing it. Handed only this
+      // platform's contests, since these match on bare contest ids.
+      await adapter.syncMetadata?.(session, mine, onProgress);
+
+      anySucceeded = true;
+    } catch (error) {
+      console.warn(`[Progress Manager] ${platform.label} sync failed:`, error.message);
+    }
+  }
+
+  return { solvedKeys, anySucceeded };
 }

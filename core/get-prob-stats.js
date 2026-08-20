@@ -1,4 +1,4 @@
-import { scrapeContestProblems } from "./services/scraping-service";
+import { scrapeContestProblems } from "./services/scraping-service.js";
 
 /**
  * Fetches problem metadata and solve counts for a contest.
