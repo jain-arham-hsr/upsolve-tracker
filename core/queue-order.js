@@ -82,8 +82,22 @@ function breakTie(a, b) {
   return String(a.index ?? "").localeCompare(String(b.index ?? ""));
 }
 
-/** `~72%`, or an em dash when unknown. Coarse on purpose: it is a model. */
+/**
+ * `~72%`, or an em dash when unknown. Coarse on purpose: it is a model.
+ *
+ * Clamped to 1–99. Plain rounding renders a 3500-rated problem as "~0%", which
+ * is both demotivating and wrong — you are reading an upsolving queue, so the
+ * point is that you *will* get there. It overclaims at the other end too:
+ * "~100%" asserts a certainty no model has.
+ *
+ * Clamping only the extremes rather than rounding up throughout keeps every
+ * value in between honest; a blanket ceiling would bias the whole column up by
+ * as much as a point. **Ordering uses the raw probability**, so problems that
+ * all display "~1%" still sort correctly among themselves.
+ */
 export function formatSolveProbability(probability) {
   if (typeof probability !== "number") return "—";
-  return `~${Math.round(probability * 100)}%`;
+
+  const percent = Math.min(99, Math.max(1, Math.round(probability * 100)));
+  return `~${percent}%`;
 }

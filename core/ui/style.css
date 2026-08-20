@@ -313,7 +313,15 @@ cf-stats-view {
   color: var(--text-main);
 }
 
-/* Which site, so a merged queue stays readable at a glance. */
+/* Which site a row came from. The mark carries it; the text chip is only a
+   fallback for a platform that has no icon yet. */
+.platform-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  display: block;
+}
+
 .platform-chip {
   font-family: "JetBrains Mono", "Courier New", monospace;
   font-size: 9px;
@@ -625,7 +633,7 @@ cf-stats-view,
   color: var(--text-muted);
 }
 
-/* Which site a contest came from. Sized with .contest-id and .contest-type. */
+/* Fallback chip for a platform with no mark yet. */
 .contest-platform {
   font-family: "JetBrains Mono", "Courier New", monospace;
   font-size: 10px;
@@ -1063,4 +1071,11 @@ cf-stats-view,
   flex-shrink: 0;
   padding: 4px 12px;
   font-size: 0.75rem;
+}
+
+/* In the contest list the mark sits with the id and type pills, so it needs a
+   touch more presence than the queue's inline one. */
+.contest-tags .platform-icon {
+  width: 14px;
+  height: 14px;
 }

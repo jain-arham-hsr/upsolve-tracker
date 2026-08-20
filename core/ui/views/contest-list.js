@@ -9,6 +9,7 @@ import { byStartTimeDesc } from "../../start-time-service.js";
 import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
 import { platformOf, matchesFilter } from "../../platforms/registry.js";
+import { platformIcon } from "../platform-icons.js";
 import {
   loadFilter,
   renderFilterChips,
@@ -264,7 +265,7 @@ export class ContestList extends HTMLElement {
           <a href="${url}" target="_blank" class="contest-row">
             <span class="contest-name">${name}</span>
             <span class="contest-tags">
-              <span class="contest-platform">${escapeHtml(platform.shortLabel)}</span>
+              ${platformIcon(platform.id, platform.shortLabel)}
               <span class="contest-id">#${escapeHtml(String(contest.id))}</span>
               <span class="contest-type ${typeClass}">${label}</span>
             </span>

@@ -4,6 +4,7 @@ import { escapeHtml } from "../escape-html.js";
 import { hasCompleteSetup } from "../../services/secure-store.js";
 import { matchesFilter } from "../../platforms/registry.js";
 import { collectPendingProblems } from "../../pending-problems.js";
+import { platformIcon } from "../platform-icons.js";
 import {
   loadFilter,
   renderFilterChips,
@@ -153,7 +154,8 @@ export class QueueView extends HTMLElement {
         );
         const url = escapeHtml(prob.url);
         const sourceLabel = escapeHtml(prob.sourceLabel);
-        const platformLabel = escapeHtml(prob.platformLabel ?? "");
+        // Static markup, not user data — no escaping needed.
+        const platformMark = platformIcon(prob.platform, prob.platformLabel ?? "");
         const experimental =
           prob.ratingConfidence === "experimental"
             ? ' <span class="rating-flag" title="Low-confidence estimate">~</span>'
@@ -170,7 +172,7 @@ export class QueueView extends HTMLElement {
                 <span class="rating">${rating}${experimental}</span>
               </span>
               <span class="meta-line">
-                <span class="platform-chip">${platformLabel}</span>
+                ${platformMark}
                 <span class="source">${sourceLabel}</span>
               </span>
             </div>

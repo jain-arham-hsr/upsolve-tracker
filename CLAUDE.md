@@ -231,6 +231,14 @@ Two conventions the shell depends on:
 
 `contest-list` watches `chrome.tabs` events to enable "+ Add Contest" only on a supported contest page, sorts by `startTimeSeconds` (newest first, unknown last), and deletes on a 700 ms hold rather than a click so a stray press does nothing at all.
 
+### Platform marks
+
+`core/ui/platform-icons.js` holds a small inline SVG per platform, used wherever a row has to say which site it came from. They are **drawn, not the real logos** — those are someone else's artwork and don't survive being shrunk to 12px — but each keeps the recognisable shape and colours: Codeforces' three bars, AtCoder's letterform, CodeChef's toque.
+
+AtCoder's is deliberately light-on-dark, inverting its black-on-white branding, because a `#222` square on the `#1e1e1e` panel is close to invisible.
+
+A platform with no mark yet falls back to a text chip rather than rendering nothing.
+
 ### Untrusted input
 
 Views build rows with template strings and `innerHTML`, so anything originating outside the extension goes through `ui/escape-html.js` first. That covers contest names, problem names and tags (scraped or API-supplied), and the problem URL and source label, which are both built from a scraped problem index. Values the extension derives itself — counts, ratings, the type badge — don't need it.

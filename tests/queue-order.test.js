@@ -104,3 +104,31 @@ test("probabilities are shown coarsely, because they are modelled", () => {
   assert.equal(formatSolveProbability(null), "—");
   assert.equal(formatSolveProbability(undefined), "—");
 });
+
+test("a hard problem never reads as 0% — it is an upsolving queue", () => {
+  // A 3500-rated problem against a 1450 rating is about 0.0008%.
+  assert.equal(formatSolveProbability(solveProbability(3500, 1450)), "~1%");
+  assert.equal(formatSolveProbability(0.000001), "~1%");
+  assert.equal(formatSolveProbability(0.004), "~1%");
+});
+
+test("nothing reads as 100% either — no model is that certain", () => {
+  assert.equal(formatSolveProbability(solveProbability(-817, 1450)), "~99%");
+  assert.equal(formatSolveProbability(0.9999), "~99%");
+  assert.equal(formatSolveProbability(1), "~99%");
+});
+
+test("values in between are not nudged — only the extremes clamp", () => {
+  // A blanket ceiling would push every one of these up a point.
+  assert.equal(formatSolveProbability(0.721), "~72%");
+  assert.equal(formatSolveProbability(0.015), "~2%");
+  assert.equal(formatSolveProbability(0.985), "~99%");
+  assert.equal(formatSolveProbability(0.5049), "~50%");
+});
+
+test("clamping is display-only — ordering still separates the hard ones", () => {
+  const a = { platform: "cf", contestId: "1", index: "A", rating: 3500, solveProbability: solveProbability(3500, 1450) };
+  const b = { platform: "cf", contestId: "1", index: "B", rating: 4000, solveProbability: solveProbability(4000, 1450) };
+  assert.equal(formatSolveProbability(a.solveProbability), formatSolveProbability(b.solveProbability));
+  assert.ok(compareQueueItems(a, b) < 0, "both show ~1% but 3500 must still come first");
+});
