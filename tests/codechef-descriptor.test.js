@@ -60,3 +60,37 @@ test("partial ratings are allowed — there is no estimator fallback here", () =
   assert.equal(codechef.capabilities.allowsPartialRatings, true);
   assert.equal(codechef.capabilities.bulkProblemData, false);
 });
+
+test("the queue label drops the division — a problem usually spans several", () => {
+  // MODSUB ran in all four divisions of Starters 252, so "START252D MODSUB"
+  // claims it belongs to Div 4 specifically.
+  assert.equal(
+    codechef.sourceLabel({ id: "START252D" }, { index: "MODSUB" }),
+    "START252 MODSUB",
+  );
+  assert.equal(
+    codechef.sourceLabel({ id: "START252C" }, { index: "MODSUB" }),
+    codechef.sourceLabel({ id: "START252D" }, { index: "MODSUB" }),
+    "the same problem should read identically whichever division is tracked",
+  );
+});
+
+test("the URL keeps the division, because the parent has no problems", () => {
+  // /START252/problems/MODSUB does not exist.
+  assert.equal(
+    codechef.problemUrl({ id: "START252D" }, { index: "MODSUB" }),
+    "https://www.codechef.com/START252D/problems/MODSUB",
+  );
+});
+
+test("codes that merely end in a letter are left alone", () => {
+  for (const id of ["COOK89", "CAH1801", "SNCKPL21", "PRACTICE", "START252"]) {
+    assert.equal(
+      codechef.sourceLabel({ id }, { index: "X" }),
+      `${id} X`,
+      `${id} should not be treated as a division`,
+    );
+  }
+  // Lunchtimes are divisioned too.
+  assert.equal(codechef.sourceLabel({ id: "LTIME110B" }, { index: "X" }), "LTIME110 X");
+});

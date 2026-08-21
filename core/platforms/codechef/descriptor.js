@@ -56,8 +56,20 @@ export const codechef = {
     return `${this.contestUrl(contest)}/problems/${problem.index}`;
   },
 
+  /**
+   * Names the contest without its division letter.
+   *
+   * A Starters problem usually runs in several divisions at once — MODSUB was
+   * in all four of Starters 252 — so "START252D MODSUB" claims it belongs to
+   * Div 4 specifically, which is not true. The division is still real and is
+   * still shown on the Contests tab, where it identifies the contest actually
+   * tracked; here it only misleads.
+   *
+   * The URL keeps it: `/START252/problems/MODSUB` does not exist, because the
+   * parent contest carries no problems of its own.
+   */
   sourceLabel(contest, problem) {
-    return `${contest.id} ${problem.index}`;
+    return `${withoutDivision(contest.id)} ${problem.index}`;
   },
 
   contestLabel() {
@@ -131,6 +143,16 @@ export const codechef = {
     allowsPartialRatings: true,
   },
 };
+
+/**
+ * Drops a single trailing division letter: START252D -> START252.
+ *
+ * Anchored on digits before the letter so codes that simply end in one are
+ * untouched — the divisions are always a suffix on a numbered contest.
+ */
+function withoutDivision(contestId) {
+  return String(contestId).replace(/^([A-Z]+\d+)[A-Z]$/, "$1");
+}
 
 function subtypeFor(contestId) {
   for (const [pattern, subtype] of SUBTYPE_PREFIXES) {
