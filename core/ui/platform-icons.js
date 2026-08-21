@@ -7,10 +7,13 @@
  *
  *  - **Codeforces** — its three bars, yellow/blue/red with blue tallest,
  *    which is exactly what its favicon shows.
- *  - **AtCoder** — the crown and shield of its heraldic crest, with the globe
- *    reduced to a disc. The full crest adds two rampant horses, scrollwork and
- *    a wordmark, none of which survive shrinking. The crown earns its pixels:
- *    without it a bare shield reads as a generic security badge.
+ *  - **AtCoder** — the crown and shield of its heraldic crest, the shield
+ *    divided per pale. The full crest adds a globe, two rampant horses,
+ *    scrollwork and a wordmark; none of those survive shrinking. Every part
+ *    that stayed is earning its pixels: without the crown a bare shield is a
+ *    security badge, and the division is what stops the shield reading as a
+ *    solid blob — a *disc* in the middle instead made the whole thing an
+ *    apricot.
  *  - **CodeChef** — `CC` on brown, which *is* its favicon, in its own colours
  *    (`#583722` / `#FAFAED`, sampled from it). A toque was drawn three times
  *    and read as a cloud, then a muffin, then a mushroom: at 12px a lobed
@@ -21,12 +24,13 @@
  * believing a mark works — that is what caught the `@` tried for AtCoder,
  * handsome large and a blob small.
  *
- * The marks render at **14px**, and the AtCoder globe is a plain disc because
- * of it. A circle with an equator and a meridian needs 16px once a crown has
- * pushed the shield down — below that its strokes land on the same pixels and
- * grey out. A filled disc has no interior strokes to merge, so it reads at 14.
- * Measured at 12, 14, 16 and 18 by magnifying the real pixels; every variant
- * looks fine at 96px, which is how the earlier ones got through.
+ * The marks render at **14px**, which is why the AtCoder shield is narrow,
+ * flat-topped and divided rather than rounded and filled. Roughly 200 pixels
+ * buys a silhouette and one interior stroke; a globe's circle, equator and
+ * meridian need 16px once a crown sits above them, and a centred disc reads as
+ * fruit at any size. Measured at 12, 14, 16 and 18 by magnifying the real
+ * pixels — every rejected variant looked fine at 96px, which is how a cloud, a
+ * muffin, a mushroom and an apricot all got through.
  *
  * Light-on-dark marks are inverted from their sites' branding, because a dark
  * mark on the #1e1e1e panel is close to invisible.
@@ -46,11 +50,11 @@ const ICONS = {
   atcoder: `
     <svg viewBox="0 0 16 16" class="platform-icon" role="img" aria-label="AtCoder">
       <rect width="16" height="16" rx="3" fill="#F7F7F5" />
-      <path d="M4.6 4.2 L4.1 1.4 6 3.1 8 1.0 10 3.1 11.9 1.4 11.4 4.2 Z" fill="#1C1D1D" />
-      <rect x="4.3" y="4.35" width="7.4" height="1.05" rx="0.35" fill="#1C1D1D" />
-      <path d="M8 5.1 12.6 6.6 V10 C12.6 12.4 8 14.5 8 14.5 S3.4 12.4 3.4 10 V6.6 Z"
+      <path d="M5.1 4.0 L4.6 1.5 6.4 3.0 8 1.1 9.6 3.0 11.4 1.5 10.9 4.0 Z" fill="#1C1D1D" />
+      <rect x="4.8" y="4.2" width="6.4" height="1.0" rx="0.3" fill="#1C1D1D" />
+      <path d="M4.4 6.5 H11.6 V9.9 C11.6 12.3 9.4 13.8 8 14.8 6.6 13.8 4.4 12.3 4.4 9.9 Z"
             fill="#1C1D1D" />
-      <circle cx="8" cy="9.6" r="1.8" fill="#F7F7F5" />
+      <path d="M8 6.5 V14.8" stroke="#F7F7F5" stroke-width="0.75" />
     </svg>`,
 
   codechef: `
