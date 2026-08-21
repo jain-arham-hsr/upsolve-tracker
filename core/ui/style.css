@@ -241,6 +241,10 @@ cf-stats-view {
   flex: 1; /* Fill the remaining vertical space */
   overflow-y: auto; /* Enable independent scrolling */
   padding-bottom: 20px;
+}
+
+/* Contest rows only — the queue has never carried this gap. */
+#contest-items {
   margin-bottom: 12px;
 }
 
@@ -428,15 +432,18 @@ cf-stats-view {
   padding: 20px;
 }
 
-/* --- The Flexbox Scrolling Fix --- */
+/* --- The Flexbox Scrolling Fix ---
+   Without min-height: 0 a flex item refuses to shrink below its content, so
+   the lists grow past the panel instead of scrolling inside it. `.view-container`
+   carries the same rule in its own block. */
 cf-app,
 #router-outlet,
 cf-queue-view,
 cf-contest-list,
-cf-stats-view,
-/* --- Additional Styles for Contest List --- */
+cf-stats-view {
+  min-height: 0;
+}
 
-/* New List Header Alignment */
 /* Outline Button Variation */
 .btn.outline {
   background-color: transparent;

@@ -255,6 +255,8 @@ It is deliberately **not a progress ring**. `updateSolvedStatus` deletes a conte
 
 `.contest-row` was once declared **five times**, each block overriding the last, so editing any one of them appeared to do nothing. `.view-container` had three, `.list-toolbar` and `#contest-items` two each. Those are now single declarations holding the computed result of the old cascade — verified pixel-identical, not eyeballed.
 
+**Check for a preceding comma before removing an apparent duplicate.** This bit once already: `.view-container` was the *last selector of a grouped rule*, so deleting it destroyed the whole block — the one commented "The Flexbox Scrolling Fix" — and left a dangling comma that ran the selector list on into `.btn.outline`. The queue stopped scrolling and `#router-outlet` inherited a button's border. `tests/stylesheet.test.js` now guards the shape: no selector list may contain a comment after a comma or end in one, and the scrolling fix must still name every element in the chain.
+
 Two apparent duplicates are deliberate and should stay: `.contest-type` appears twice because the second is part of a **grouped** selector (`.contest-id, .contest-type`), and deleting it would silently restyle `.contest-id`; `.btn` gains a bare `position: relative` later for tooltip anchoring. Before removing an apparent duplicate, check whether it is one line of a group.
 
 The rank-band colours live in `--band-*` variables so the histogram fills (`.band-*`) and the queue's rating text (`.tone-*`) cannot drift apart.
