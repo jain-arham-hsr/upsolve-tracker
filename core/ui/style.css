@@ -624,16 +624,16 @@ cf-stats-view {
   line-height: 12px;
   padding: 2px 6px;
   border-radius: 3px;
+  text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 /* Keeps a box, but a quieter one than the id beside it: the outline sits below
-   --border-color, the fill is left off, and the word is lowercase. Set in caps
-   at full border weight it out-shouted the id, which is the thing you scan for. */
+   --border-color, the fill is left off, and the weight drops to medium. At full
+   border weight it out-shouted the id, which is the thing you scan for. */
 .contest-flag {
   font-family: "Inter", sans-serif;
   font-weight: 500;
-  text-transform: lowercase;
   color: #6b6b6b;
   border: 1px solid #2c2c2c;
 }
@@ -641,7 +641,6 @@ cf-stats-view {
 .contest-id {
   font-family: "JetBrains Mono", "Courier New", monospace;
   font-weight: bold;
-  text-transform: uppercase;
   /* Matches the flag's outer height, which carries a 1px border it doesn't. */
   padding: 3px 6px;
   background-color: rgba(255, 255, 255, 0.08);

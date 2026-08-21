@@ -100,6 +100,11 @@ export const codechef = {
     return [];
   },
 
+  /** Already a code, not a number — no "#" needed to say so. */
+  contestIdLabel(contest) {
+    return String(contest.id);
+  },
+
   /** CodeChef's star bands: 7★ from 2500, down to 1★ below 1400. */
   /**
    * Chart colour for this platform's slice of the overview ring — orange, nearest its brown toque.

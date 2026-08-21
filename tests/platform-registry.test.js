@@ -72,7 +72,7 @@ test("every registered platform implements the descriptor contract", () => {
   for (const platform of listPlatforms()) {
     for (const method of [
       "matchUrl", "contestUrl", "problemUrl", "sourceLabel", "solvedKey", "problemKey",
-      "contestFlags",
+      "contestFlags", "contestIdLabel",
     ]) {
       assert.equal(typeof platform[method], "function", `${platform.id}.${method}`);
     }
@@ -140,4 +140,14 @@ test("only Codeforces carries a row flag", () => {
   assert.deepEqual(flagsFor("codeforces", { id: 2242, type: "OFFICIAL" }), ["Official"]);
   assert.deepEqual(flagsFor("atcoder", { id: "abc466", type: "ABC" }), []);
   assert.deepEqual(flagsFor("codechef", { id: "START252D", type: "STARTERS" }), []);
+});
+
+test("only Codeforces hashes its contest id", () => {
+  // A bare number needs "#" to read as an id; ABC466 and START252D do not.
+  const label = (platform, contest) => getPlatform(platform).contestIdLabel(contest);
+
+  assert.equal(label("codeforces", { id: 692934 }), "#692934");
+  assert.equal(label("codeforces", { id: 2225 }), "#2225");
+  assert.equal(label("atcoder", { id: "abc466" }), "abc466");
+  assert.equal(label("codechef", { id: "START252D" }), "START252D");
 });

@@ -80,6 +80,11 @@ export const atcoder = {
     return [];
   },
 
+  /** Already a code, not a number — no "#" needed to say so. */
+  contestIdLabel(contest) {
+    return String(contest.id);
+  },
+
   contestLabel() {
     return "AtCoder contest";
   },

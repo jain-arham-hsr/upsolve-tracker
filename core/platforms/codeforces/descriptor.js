@@ -92,6 +92,15 @@ export const codeforces = {
     return [subtypeOf(contest) === "OFFICIAL" ? "Official" : "Gym"];
   },
 
+  /**
+   * A Codeforces contest is identified by a bare number, so "#" is what marks
+   * 692934 as an id rather than a stray count. AtCoder's ABC466 and CodeChef's
+   * START252D already read as codes and take the hash badly.
+   */
+  contestIdLabel(contest) {
+    return `#${contest.id}`;
+  },
+
   /** How the contest is named in prose, e.g. "Official contest". */
   contestLabel(contest) {
     return subtypeOf(contest) === "OFFICIAL" ? "Official contest" : "Gym contest";

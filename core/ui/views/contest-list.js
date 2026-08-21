@@ -373,7 +373,7 @@ export class ContestList extends HTMLElement {
                 .contestFlags(contest)
                 .map((flag) => `<span class="contest-flag">${escapeHtml(flag)}</span>`)
                 .join("")}
-              <span class="contest-id">${escapeHtml(String(contest.id))}</span>
+              <span class="contest-id">${escapeHtml(platform.contestIdLabel(contest))}</span>
             </span>
           </button>
           <button type="button" class="contest-menu-btn" data-menu-key="${safeKey}"
