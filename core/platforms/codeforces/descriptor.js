@@ -137,7 +137,10 @@ export const codeforces = {
    * three slots of the validated categorical theme rather than picked by eye;
    * the icons' own brand colours fail the chroma floor as fills.
    */
-  chartColor: "#3987e5",
+  /* Chart slot. Not CF's brand blue — these three are a validated categorical
+     triple, stepped to full chroma at a lightness the dark surface can carry.
+     Changing one means re-running the dataviz validator on all three. */
+  chartColor: "#2d8fff",
 
   ratingBands: [
     { min: 2400, class: "band-red" },

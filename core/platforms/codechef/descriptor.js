@@ -120,7 +120,9 @@ export const codechef = {
    * three slots of the validated categorical theme rather than picked by eye;
    * the icons' own brand colours fail the chroma floor as fills.
    */
-  chartColor: "#d95926",
+  /* Chart slot. CodeChef's brown fails the chroma floor as a fill, so this is
+     its slot in the validated categorical triple. The icon keeps the brand. */
+  chartColor: "#f15400",
 
   /**
    * **No rank colours.** CodeChef grades in stars, so painting its ratings on
