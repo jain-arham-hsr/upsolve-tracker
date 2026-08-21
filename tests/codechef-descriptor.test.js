@@ -32,7 +32,7 @@ test("the site's own lower-case sections are not contests", () => {
     "https://www.codechef.com/problems/CDMT",
     "https://www.codechef.com/ratings",
     "https://www.codechef.com/practice",
-    "https://www.codechef.com/users/jain_arham_hsr",
+    "https://www.codechef.com/users/tourist",
     "https://www.codechef.com/dashboard",
     "https://www.codechef.com/",
   ]) {

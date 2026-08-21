@@ -49,9 +49,9 @@ test("CodeChef accepts a matching session, with no extra request", async () => {
   globalThis.fetch = async () => { calls++; return { ok: true, status: 200 }; };
 
   const identity = await codechef.verifyIdentity({
-    handle: "jain_arham_hsr", signedIn: true, signedInAs: "jain_arham_hsr", rating: 1394,
+    handle: "tourist", signedIn: true, signedInAs: "tourist", rating: 1394,
   });
-  assert.deepEqual(identity, { username: "jain_arham_hsr", rating: 1394 });
+  assert.deepEqual(identity, { username: "tourist", rating: 1394 });
   assert.equal(calls, 0, "createSession already fetched the bootstrap");
 });
 

@@ -122,10 +122,27 @@ input:focus {
   font-weight: 500;
 }
 
-/* Test-connection result sits beside its button */
+/* Button and its verdict on one line, with the explanation above them rather
+   than underneath — the result used to land on top of the help text. */
+.test-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
 #test-msg {
-  margin-left: 12px;
   font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+/* A verdict about the field above it, not a caption crammed against it. */
+#codechef-status:not(:empty) {
+  display: block;
+  margin-top: 10px;
+  font-size: 0.85rem;
+  line-height: 1.4;
 }
 
 /* Intro / privacy note */
@@ -203,9 +220,11 @@ input:focus {
    long undifferentiated form. Codeforces owns Test connection because it is the
    only platform the test can check — it verifies a key pair the others do not
    have. */
+/* The rule has to be visible against #1e1e1e — --border-color at #333 all but
+   disappeared, so the four sections read as one continuous form. */
 .settings-section {
-  padding: 20px 0 4px;
-  border-top: 1px solid var(--border-color);
+  padding: 30px 0 6px;
+  border-top: 1px solid #3d3d3d;
 }
 
 .settings-section:first-of-type {
@@ -213,26 +232,13 @@ input:focus {
 }
 
 .section-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 18px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-main);
-}
-
-/* Muted: the glyph inherits this colour, so it sits below the heading it
-   labels rather than competing with it. */
-.section-glyph {
-  display: inline-flex;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
+  margin: 0 0 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 
-.section-glyph .platform-glyph {
-  width: 100%;
-  height: 100%;
-}
+
+

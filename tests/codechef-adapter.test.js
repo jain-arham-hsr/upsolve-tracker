@@ -38,7 +38,7 @@ function stub({ signedIn = true } = {}) {
 
     if (url.endsWith("/dashboard")) {
       const user = signedIn
-        ? `{"user":{"username":"jain_arham_hsr","rating":"1450","note":"has } brace"}}`
+        ? `{"user":{"username":"tourist","rating":"1450","note":"has } brace"}}`
         : `{"user":{"username":null,"rating":null}}`;
       return textResponse(`<script>window.codeChefUserData = ${user};</script>`);
     }
