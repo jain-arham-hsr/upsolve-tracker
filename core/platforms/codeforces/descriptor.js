@@ -48,10 +48,15 @@ export const codeforces = {
     return `${this.contestUrl(contest)}/problem/${problem.index}`;
   },
 
-  /** Display-only, e.g. "Contest 2193A". */
+  /**
+   * Display-only, e.g. "Official 2193A".
+   *
+   * Reuses the badge wording rather than keeping a second Official/Gym
+   * mapping — "Contest" and "Gym" read as different kinds of thing, when they
+   * are two values of the same one.
+   */
   sourceLabel(contest, problem) {
-    const noun = subtypeOf(contest) === "OFFICIAL" ? "Contest" : "Gym";
-    return `${noun} ${contest.id}${problem.index}`;
+    return `${this.subtypeLabel(contest)} ${contest.id}${problem.index}`;
   },
 
   /**

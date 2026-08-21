@@ -108,3 +108,23 @@ test("a null entry in storage doesn't break the lookup", () => {
   // but the lookup runs against whatever is already stored.
   assert.equal(findTrackedContest([null, { id: "1", platform: "codeforces" }], "codeforces", "1")?.id, "1");
 });
+
+test("the queue label matches the badge wording, not a second vocabulary", () => {
+  // "Contest 2237C" beside "Gym 703136K" reads as two kinds of thing, when
+  // Official and Gym are two values of the same one.
+  const cf = getPlatform("codeforces");
+  assert.equal(cf.sourceLabel({ id: "2237", type: "OFFICIAL" }, { index: "C" }), "Official 2237C");
+  assert.equal(cf.sourceLabel({ id: "703136", type: "GYM" }, { index: "K" }), "Gym 703136K");
+
+  // Whatever the badge says is what the label says.
+  for (const type of ["OFFICIAL", "GYM"]) {
+    const contest = { id: "1", type };
+    assert.ok(
+      cf.sourceLabel(contest, { index: "A" }).startsWith(cf.subtypeLabel(contest)),
+    );
+  }
+});
+
+test("a record predating platforms still labels as Official", () => {
+  assert.equal(getPlatform("codeforces").sourceLabel({ id: "2193" }, { index: "A" }), "Official 2193A");
+});
