@@ -305,6 +305,14 @@ cf-stats-view {
   font-weight: 500;
 }
 
+/* Optical, not geometric. The boxes centre exactly, but digits have no
+   descenders so their ink sits in the upper part of the line box while the
+   mark fills its own — leaving the mark about 2px low. Measured, not judged
+   by eye. */
+.meta-line .platform-icon {
+  transform: translateY(-2px);
+}
+
 /* Each meta row pairs two values so the block stays two lines tall. */
 .meta-line {
   display: flex;
