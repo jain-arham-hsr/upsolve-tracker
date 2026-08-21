@@ -7,8 +7,17 @@ import {
 } from "../../services/secure-store.js";
 import { CodeforcesService } from "../../services/codeforces-service.js";
 import * as codechefAdapter from "../../platforms/codechef/adapter.js";
+import { platformGlyph } from "../platform-icons.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // Section marks come from platform-icons.js rather than being pasted in as
+  // markup, so there is one place a mark is defined. They are monochrome and
+  // inherit the heading's colour, which is what makes them read as muted here
+  // without a second set of hexes to keep in sync.
+  for (const slot of document.querySelectorAll("[data-glyph]")) {
+    slot.innerHTML = platformGlyph(slot.dataset.glyph);
+  }
+
   const handleInput = document.getElementById("cf-handle");
   const atcoderHandleInput = document.getElementById("atcoder-handle");
   const codechefHandleInput = document.getElementById("codechef-handle");

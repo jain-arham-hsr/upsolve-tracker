@@ -196,3 +196,43 @@ input:focus {
 .hidden {
   display: none;
 }
+
+/* --- Per-platform sections --- */
+
+/* One card per platform, so the three sets of credentials stop reading as one
+   long undifferentiated form. Codeforces owns Test connection because it is the
+   only platform the test can check — it verifies a key pair the others do not
+   have. */
+.settings-section {
+  padding: 20px 0 4px;
+  border-top: 1px solid var(--border-color);
+}
+
+.settings-section:first-of-type {
+  border-top: none;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 18px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* Muted: the glyph inherits this colour, so it sits below the heading it
+   labels rather than competing with it. */
+.section-glyph {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.section-glyph .platform-glyph {
+  width: 100%;
+  height: 100%;
+}
