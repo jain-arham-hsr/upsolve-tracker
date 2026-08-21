@@ -12,6 +12,7 @@ import { LocalDB } from "../services/storage.js";
 import { matchContestUrl, findTrackedContest } from "../platforms/registry.js";
 import { escapeHtml } from "./escape-html.js";
 import { platformIcon } from "./platform-icons.js";
+import { migrateStoredKeys } from "../services/storage-migration.js";
 
 // Inline so it inherits the header's colour and hover transition, which a
 // colour emoji would ignore. Knobs are filled with the header background so
@@ -23,12 +24,16 @@ const SETTINGS_ICON = `<svg viewBox="0 0 16 16" width="15" height="15" fill="non
   <circle cx="5" cy="11.5" r="1.9" fill="var(--panel-bg)"></circle>
 </svg>`;
 
-export class CFApp extends HTMLElement {
+export class UpsolveApp extends HTMLElement {
   constructor() {
     super();
   }
 
-  connectedCallback() {
+  async connectedCallback() {
+    // Before anything reads a setting. Every view resolves its own keys, so a
+    // half-migrated store would have some of them silently reading defaults.
+    await migrateStoredKeys();
+
     const template = document.getElementById("tpl-app");
     const content = template.content.cloneNode(true);
     this.appendChild(content);
@@ -44,7 +49,7 @@ export class CFApp extends HTMLElement {
 
     this.setupListeners();
     this.watchActiveTab();
-    this.navigate("cf-queue-view");
+    this.navigate("upsolve-queue-view");
   }
 
   disconnectedCallback() {
@@ -288,4 +293,4 @@ export class CFApp extends HTMLElement {
   }
 }
 
-customElements.define("cf-app", CFApp);
+customElements.define("upsolve-app", UpsolveApp);

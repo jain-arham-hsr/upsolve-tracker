@@ -14,7 +14,7 @@
  * platform-identity.js), so they arrive with an identity attached rather than
  * floating free.
  */
-const AUTO_KEY = "cf_trainer.platform_ratings";
+const AUTO_KEY = "upsolve_tracker.platform_ratings";
 
 /** @returns {Promise<Record<string, number|null>>} platform id → your rating. */
 export async function getEffectiveRatings() {

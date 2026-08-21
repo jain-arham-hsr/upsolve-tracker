@@ -23,7 +23,7 @@
  * solved flags were derived? If so they belong to the previous account and have
  * to go, or the queue keeps hiding problems this account has never solved.
  */
-const IDENTITY_KEY = "cf_trainer.platform_identity";
+const IDENTITY_KEY = "upsolve_tracker.platform_identity";
 
 /** @returns {Promise<Record<string, string>>} platform id → verified account */
 export async function getStoredIdentities() {

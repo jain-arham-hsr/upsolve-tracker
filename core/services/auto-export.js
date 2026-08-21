@@ -26,8 +26,8 @@ const LEGACY_BACKUP_FILENAME = "cf_trainer_backup.json";
  * @returns {Promise<FileSystemDirectoryHandle|null>} The unlocked handle, or null.
  */
 export async function verifyExportPermission() {
-  const settings = await chrome.storage.local.get("cf_trainer.auto_export");
-  if (!settings["cf_trainer.auto_export"]) return null;
+  const settings = await chrome.storage.local.get("upsolve_tracker.auto_export");
+  if (!settings["upsolve_tracker.auto_export"]) return null;
 
   const dirHandle = await loadDirHandle();
   if (!dirHandle) return null;

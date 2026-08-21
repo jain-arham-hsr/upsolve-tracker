@@ -120,4 +120,4 @@ export class QueueView extends HTMLElement {
   }
 }
 
-customElements.define("cf-queue-view", QueueView);
+customElements.define("upsolve-queue-view", QueueView);

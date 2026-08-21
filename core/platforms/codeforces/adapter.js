@@ -36,7 +36,7 @@ import { codeforces } from "./descriptor.js";
  */
 export async function createSession() {
   const [settings, { apiKey, apiSecret }] = await Promise.all([
-    chrome.storage.local.get("cf_trainer.handle"),
+    chrome.storage.local.get("upsolve_tracker.handle"),
     loadCredentials(),
   ]);
 
@@ -48,7 +48,7 @@ export async function createSession() {
 
   return {
     service: new CodeforcesService(apiKey, apiSecret),
-    handle: settings["cf_trainer.handle"],
+    handle: settings["upsolve_tracker.handle"],
   };
 }
 

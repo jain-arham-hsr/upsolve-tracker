@@ -64,7 +64,7 @@ export class LocalDB {
     );
   }
 
-  // Settings live under dotted `cf_trainer.*` keys, read directly by the code
+  // Settings live under dotted `upsolve_tracker.*` keys, read directly by the code
   // that needs them; credentials live in IndexedDB (see secure-store.js).
   // Solved state is derived fresh from user.status on every sync rather than
   // cached, so there is deliberately nothing else here.

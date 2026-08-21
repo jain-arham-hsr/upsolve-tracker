@@ -10,7 +10,7 @@ import { getResources, getAcceptedProblemIds } from "./problems-api.js";
 import { atcoder } from "./descriptor.js";
 import { extractRating } from "./profile.js";
 
-export const HANDLE_KEY = "cf_trainer.atcoder_handle";
+export const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
 
 /**
  * AtCoder needs no key or secret — only a handle, to read solved history.

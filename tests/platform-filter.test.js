@@ -38,17 +38,22 @@ test("no stored filter means everything shows", async () => {
 });
 
 test("a saved single-select choice survives the move to chips", async () => {
-  // The old dropdown stored "OFFICIAL" / "GYM" / "ALL" under another key.
-  stubChrome({ "cf_trainer.contest_filter": "GYM" });
+  // The old dropdown stored "OFFICIAL" / "GYM" / "ALL" under another key. Note
+  // the prefix here is the current one: the storage migration renames
+  // cf_trainer.* before any view reads, so by the time this code runs the old
+  // dropdown's value is sitting under upsolve_tracker.contest_filter. Both
+  // migrations have to hold for a long-standing install — see the end-to-end
+  // case in storage-migration.test.js.
+  stubChrome({ "upsolve_tracker.contest_filter": "GYM" });
   assert.deepEqual(await loadFilter(), ["codeforces:GYM"]);
 
-  stubChrome({ "cf_trainer.contest_filter": "ALL" });
+  stubChrome({ "upsolve_tracker.contest_filter": "ALL" });
   assert.deepEqual(await loadFilter(), []);
 });
 
 test("the new selection wins once one exists", async () => {
   stubChrome({
-    "cf_trainer.contest_filter": "GYM",
+    "upsolve_tracker.contest_filter": "GYM",
     [PLATFORM_FILTER_KEY]: ["atcoder"],
   });
   assert.deepEqual(await loadFilter(), ["atcoder"]);

@@ -48,10 +48,10 @@ test("no selector list ends with a comma", () => {
 test("the flexbox scrolling fix still reaches the whole chain", () => {
   // Every one of these has to be able to shrink below its content, or the
   // lists grow past the panel instead of scrolling inside it.
-  const rule = css.match(/cf-app,[\s\S]*?\{[\s\S]*?\}/);
+  const rule = css.match(/upsolve-app,[\s\S]*?\{[\s\S]*?\}/);
   assert.ok(rule, "the scrolling-fix rule is gone");
 
-  for (const selector of ["cf-app", "#router-outlet", "cf-queue-view", "cf-contest-list", "cf-stats-view"]) {
+  for (const selector of ["upsolve-app", "#router-outlet", "upsolve-queue-view", "upsolve-contest-list", "upsolve-stats-view"]) {
     assert.ok(rule[0].includes(selector), `${selector} dropped out of the scrolling fix`);
   }
   assert.match(rule[0], /min-height:\s*0/);

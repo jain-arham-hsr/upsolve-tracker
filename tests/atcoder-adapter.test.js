@@ -50,7 +50,7 @@ let requestLog = [];
 function stubFetch() {
   requestLog = [];
   globalThis.chrome = {
-    storage: { local: { async get() { return { "cf_trainer.atcoder_handle": "me" }; } } },
+    storage: { local: { async get() { return { "upsolve_tracker.atcoder_handle": "me" }; } } },
   };
   globalThis.fetch = async (url) => {
     requestLog.push(url);

@@ -14,10 +14,10 @@ import { escapeHtml } from "./escape-html.js";
 import { platformIcon } from "./platform-icons.js";
 import { bindDismiss } from "./dismissable.js";
 
-export const PLATFORM_FILTER_KEY = "cf_trainer.platform_filter";
+export const PLATFORM_FILTER_KEY = "upsolve_tracker.platform_filter";
 
 /** The single-select key this replaced, read once so a saved choice survives. */
-const LEGACY_KEY = "cf_trainer.contest_filter";
+const LEGACY_KEY = "upsolve_tracker.contest_filter";
 const LEGACY_MAP = { OFFICIAL: ["codeforces:OFFICIAL"], GYM: ["codeforces:GYM"] };
 
 /**

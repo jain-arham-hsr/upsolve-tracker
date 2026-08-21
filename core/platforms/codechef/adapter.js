@@ -21,7 +21,7 @@ const NOT_RATED = new Set([-1, 9999]);
 /** Setter handles and contest codes get tagged alongside real topics. */
 const TAG_NOISE = /^(?:start|cook|ltime|snck)\d+$|_adm$/i;
 
-export const HANDLE_KEY = "cf_trainer.codechef_handle";
+export const HANDLE_KEY = "upsolve_tracker.codechef_handle";
 
 /**
  * The handle you declared, plus whoever the browser is actually signed in as.

@@ -1,5 +1,6 @@
 import templateHtml from "./contest-list.html?raw";
 import { LocalDB } from "../../services/storage.js";
+import { renameLegacyKeys } from "../../services/storage-migration.js";
 import {
   BACKUP_FILENAME,
   verifyExportPermission,
@@ -29,7 +30,7 @@ import {
 /** Which contests are expanded, persisted because the view is rebuilt on
  *  every tab switch — in-memory state would collapse each time you glanced at
  *  the Queue. */
-const EXPANDED_KEY = "cf_trainer.expanded_contests";
+const EXPANDED_KEY = "upsolve_tracker.expanded_contests";
 
 
 export class ContestList extends HTMLElement {
@@ -286,7 +287,10 @@ export class ContestList extends HTMLElement {
       .querySelector("[data-import-confirm]")
       .addEventListener("click", async () => {
         try {
-          await chrome.storage.local.set(data);
+          // A backup exported before the rename carries cf_trainer.* keys, and
+          // import writes straight to storage with no undo — so it would put
+          // back exactly what the migration removed.
+          await chrome.storage.local.set(renameLegacyKeys(data).data);
           await this.renderQueue();
           this.showInlineAlert(`Imported ${incoming} contest(s).`);
         } catch (error) {
@@ -456,4 +460,4 @@ export class ContestList extends HTMLElement {
 
 }
 
-customElements.define("cf-contest-list", ContestList);
+customElements.define("upsolve-contest-list", ContestList);

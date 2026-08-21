@@ -8,8 +8,12 @@ import {
 import { CodeforcesService } from "../../services/codeforces-service.js";
 import * as codechefAdapter from "../../platforms/codechef/adapter.js";
 import { platformGlyph } from "../platform-icons.js";
+import { migrateStoredKeys } from "../../services/storage-migration.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // The settings page can be opened directly, without the panel booting first.
+  await migrateStoredKeys();
+
   // Section marks come from platform-icons.js rather than being pasted in as
   // markup, so there is one place a mark is defined. They are monochrome and
   // inherit the heading's colour, which is what makes them read as muted here
@@ -44,25 +48,25 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ==========================================
   const [storageResult, credentials, dirHandle] = await Promise.all([
     chrome.storage.local.get([
-      "cf_trainer.handle",
-      "cf_trainer.atcoder_handle",
-      "cf_trainer.codechef_handle",
-      "cf_trainer.auto_export",
+      "upsolve_tracker.handle",
+      "upsolve_tracker.atcoder_handle",
+      "upsolve_tracker.codechef_handle",
+      "upsolve_tracker.auto_export",
     ]),
     loadCredentials(),
     loadDirHandle(),
   ]);
 
-  if (storageResult["cf_trainer.handle"])
-    handleInput.value = storageResult["cf_trainer.handle"];
-  if (storageResult["cf_trainer.atcoder_handle"])
-    atcoderHandleInput.value = storageResult["cf_trainer.atcoder_handle"];
-  if (storageResult["cf_trainer.codechef_handle"])
-    codechefHandleInput.value = storageResult["cf_trainer.codechef_handle"];
+  if (storageResult["upsolve_tracker.handle"])
+    handleInput.value = storageResult["upsolve_tracker.handle"];
+  if (storageResult["upsolve_tracker.atcoder_handle"])
+    atcoderHandleInput.value = storageResult["upsolve_tracker.atcoder_handle"];
+  if (storageResult["upsolve_tracker.codechef_handle"])
+    codechefHandleInput.value = storageResult["upsolve_tracker.codechef_handle"];
   if (credentials.apiKey) apiKeyInput.value = credentials.apiKey;
   if (credentials.apiSecret) apiSecretInput.value = credentials.apiSecret;
 
-  if (storageResult["cf_trainer.auto_export"]) {
+  if (storageResult["upsolve_tracker.auto_export"]) {
     autoExportCheckbox.checked = true;
     folderInfo.classList.remove("hidden");
   }
@@ -148,10 +152,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   saveBtn.addEventListener("click", async () => {
     await Promise.all([
       chrome.storage.local.set({
-        "cf_trainer.handle": handleInput.value.trim(),
-        "cf_trainer.atcoder_handle": atcoderHandleInput.value.trim(),
-        "cf_trainer.codechef_handle": codechefHandleInput.value.trim(),
-        "cf_trainer.auto_export": autoExportCheckbox.checked,
+        "upsolve_tracker.handle": handleInput.value.trim(),
+        "upsolve_tracker.atcoder_handle": atcoderHandleInput.value.trim(),
+        "upsolve_tracker.codechef_handle": codechefHandleInput.value.trim(),
+        "upsolve_tracker.auto_export": autoExportCheckbox.checked,
       }),
       saveCredentials(apiKeyInput.value.trim(), apiSecretInput.value.trim()),
     ]);

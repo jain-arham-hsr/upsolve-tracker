@@ -10,11 +10,11 @@ import { platformIcon } from "../platform-icons.js";
 import { collectPendingProblems } from "../../pending-problems.js";
 
 const BUCKET_SIZE = 100;
-const SCOPE_KEY = "cf_trainer.stats_scope";
+const SCOPE_KEY = "upsolve_tracker.stats_scope";
 
 /** Per-platform: a 1600–1900 span means nothing on AtCoder, where a third of
  *  rated problems sit below 800. */
-const rangeKeyFor = (scope) => `cf_trainer.tag_rating_range.${scope || "all"}`;
+const rangeKeyFor = (scope) => `upsolve_tracker.tag_rating_range.${scope || "all"}`;
 
 /**
  * Overview bins by solve probability rather than rating, because rating buckets
@@ -514,4 +514,4 @@ function collectRatings(pending) {
   return { ratings, unrated };
 }
 
-customElements.define("cf-stats-view", StatsView);
+customElements.define("upsolve-stats-view", StatsView);

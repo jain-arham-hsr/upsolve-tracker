@@ -84,17 +84,17 @@ export const loadCredentials = async () => ({
 export async function getPlatformSetup() {
   const [settings, { apiKey, apiSecret }] = await Promise.all([
     chrome.storage.local.get([
-      "cf_trainer.handle",
-      "cf_trainer.atcoder_handle",
-      "cf_trainer.codechef_handle",
+      "upsolve_tracker.handle",
+      "upsolve_tracker.atcoder_handle",
+      "upsolve_tracker.codechef_handle",
     ]),
     loadCredentials(),
   ]);
 
   return {
-    codeforces: Boolean(settings["cf_trainer.handle"] && apiKey && apiSecret),
-    atcoder: Boolean(settings["cf_trainer.atcoder_handle"]),
-    codechef: Boolean(settings["cf_trainer.codechef_handle"]),
+    codeforces: Boolean(settings["upsolve_tracker.handle"] && apiKey && apiSecret),
+    atcoder: Boolean(settings["upsolve_tracker.atcoder_handle"]),
+    codechef: Boolean(settings["upsolve_tracker.codechef_handle"]),
   };
 }
 

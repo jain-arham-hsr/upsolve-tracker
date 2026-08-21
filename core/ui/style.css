@@ -82,16 +82,16 @@ body {
 }
 
 /* --- Web Component Layout Fix --- */
-cf-app {
+upsolve-app {
   display: flex;
   flex-direction: column;
   flex: 1;
   width: 100%;
 }
 
-cf-queue-view,
-cf-contest-list,
-cf-stats-view {
+upsolve-queue-view,
+upsolve-contest-list,
+upsolve-stats-view {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -555,11 +555,11 @@ cf-stats-view {
    Without min-height: 0 a flex item refuses to shrink below its content, so
    the lists grow past the panel instead of scrolling inside it. `.view-container`
    carries the same rule in its own block. */
-cf-app,
+upsolve-app,
 #router-outlet,
-cf-queue-view,
-cf-contest-list,
-cf-stats-view {
+upsolve-queue-view,
+upsolve-contest-list,
+upsolve-stats-view {
   min-height: 0;
 }
 
