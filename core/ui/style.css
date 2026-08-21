@@ -1350,11 +1350,16 @@ cf-stats-view {
   border-bottom: none;
 }
 
+/* Width comes from the widest code in this contest (set as --index-ch by
+   contest-list.js), so every name starts at the same x. In a monospace face
+   1ch is exactly one character. */
 .compact-index {
   font-family: "JetBrains Mono", "Courier New", monospace;
   font-size: 0.68rem;
   color: var(--text-muted);
   flex-shrink: 0;
+  width: calc(var(--index-ch, 3) * 1ch);
+  text-align: right;
 }
 
 .compact-name {

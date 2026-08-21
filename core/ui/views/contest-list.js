@@ -404,6 +404,127 @@ export class ContestList extends HTMLElement {
    * hiding it here would make the contest look shorter than it is.
    */
   renderProblems(contest, platform, userRatings) {
+    const pending = collectPendingProblems([contest])
+      .map((entry) => toProblemRow(entry, userRatings))
+      .sort(compareQueueItems);
+
+    // A fully solved contest is dropped from storage by the refresh, so this
+    // should not happen — but an empty box would read as a broken expansion.
+    if (pending.length === 0) {
+      return `<div class="contest-problems">
+        <div class="muted contest-problems-empty">Nothing pending here.</div>
+      </div>`;
+    }
+
+    // Size the index column to the widest code in *this* contest, so the names
+    // start at one x. Codeforces indices are single letters and align by
+    // accident; CodeChef's are words of varying length (MODSUB, TREECNT7,
+    // UPDQS) and left every row ragged. Only the renderer knows the longest,
+    // and it differs per contest, so CSS cannot work it out alone.
+    const widest = Math.max(...pending.map((row) => String(row.index ?? "").length));
+
+    return `<div class="contest-problems" style="--index-ch: ${widest}">${pending
+      .map((row) => renderProblemRow(row, { compact: true }))
+      .join("")}</div>`;
+  }
+
+  async renderQueue() {
+    const [allContests, userRatings] = await Promise.all([
+      LocalDB.getTrackedContests(),
+      getEffectiveRatings(),
+    ]);
+
+    if (allContests.length === 0) {
+      this.countLabel.textContent = "Nothing queued";
+      this.container.innerHTML = `<div class="muted">No contests in queue.</div>`;
+      return;
+    }
+
+    const contests = allContests
+      .filter((contest) => matchesFilter(contest, this.filter))
+      .sort(byStartTimeDesc);
+
+    // Says "8 of 14" only when a filter is actually hiding something.
+    this.countLabel.textContent =
+      contests.length === allContests.length
+        ? `${allContests.length} contest${allContests.length === 1 ? "" : "s"}`
+        : `${contests.length} of ${allContests.length} contests`;
+
+    if (contests.length === 0) {
+      this.container.innerHTML = `<div class="muted">Nothing matches that filter.</div>`;
+      return;
+    }
+
+    // The removal dialog needs the record behind a row, and the row only
+    // carries its key.
+    this.contestsByKey = new Map(contests.map((c) => [contestKey(c), c]));
+
+    this.container.innerHTML = contests
+      .map((contest) => this.renderContest(contest, userRatings))
+      .join("");
+  }
+
+  renderContest(contest, userRatings) {
+    const platform = platformOf(contest);
+    const key = contestKey(contest);
+    const isOpen = this.expanded.has(key);
+
+    // Scraped names carry stray newlines/indentation from the CF page.
+    const rawName = contest.name?.replace(/\s+/g, " ").trim();
+    const name = escapeHtml(rawName || `Contest ${contest.id}`);
+    const safeKey = escapeHtml(key);
+
+    // No chevron: the expansion itself is the indicator. aria-expanded carries
+    // it for anything that can't see the difference.
+    return `
+      <div class="contest-item" data-key="${safeKey}">
+        <div class="contest-head">
+          <button type="button" class="contest-row" data-toggle-key="${safeKey}"
+                  aria-expanded="${isOpen}">
+            <span class="contest-name">${name}</span>
+            <span class="contest-tags">
+              ${platformIcon(platform.id, platform.shortLabel)}
+              <span class="contest-id">#${escapeHtml(String(contest.id))}</span>
+              <span class="contest-type ${platform.badgeClass(contest)}">${platform.subtypeLabel(contest)}</span>
+            </span>
+          </button>
+          <button type="button" class="contest-menu-btn" data-menu-key="${safeKey}"
+                  aria-haspopup="menu" aria-expanded="${this.openMenuKey === key}"
+                  title="More">⋮</button>
+          ${this.openMenuKey === key ? this.renderMenu(platform, contest, safeKey) : ""}
+        </div>
+        ${isOpen ? this.renderProblems(contest, platform, userRatings) : ""}
+      </div>`;
+  }
+
+  renderMenu(platform, contest, safeKey) {
+    return `
+      <div class="row-menu" role="menu">
+        <button type="button" class="row-menu-item" role="menuitem"
+                data-open-url="${escapeHtml(platform.contestUrl(contest))}">
+          Open contest ↗
+        </button>
+        <button type="button" class="row-menu-item is-danger" role="menuitem"
+                data-remove-key="${safeKey}">
+          Remove from queue
+        </button>
+      </div>`;
+  }
+
+  /**
+   * What this contest still owes the queue.
+   *
+   * Rendered with the queue's own row renderer in its compact form, so the two
+   * cannot disagree about ordering or about what a row says. Positions are
+   * omitted — the queue's numbering is global and would mislead here — and so
+   * are the platform mark and contest code, which the header above already
+   * carries.
+   *
+   * Deliberately scoped to this contest rather than deduplicated against the
+   * others: a problem shared with another division really is in both, and
+   * hiding it here would make the contest look shorter than it is.
+   */
+  renderProblems(contest, platform, userRatings) {
     const rows = collectPendingProblems([contest])
       .map((pending) => toProblemRow(pending, userRatings))
       .sort(compareQueueItems)
