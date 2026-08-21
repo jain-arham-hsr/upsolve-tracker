@@ -20,6 +20,16 @@
     Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo,
     Consolas, monospace;
+
+  --mark-size: 14px;
+  --rating-size: 0.8rem;
+
+  /* Where digit ink sits, as a fraction of font-size above the baseline.
+     Measured off the mono stack with canvas actualBoundingBox metrics:
+     ascent 0.7290em, descent 0.0142em, so the ink band centres at
+     (0.7290 - 0.0142) / 2. Digits have no descenders, which is why centring
+     their *box* against a mark leaves the mark visibly low. */
+  --digit-ink-center: 0.357;
 }
 
 /* --- Global & App Layout --- */
@@ -329,20 +339,33 @@ cf-stats-view {
   color: #9a9a9a;
 }
 
-/* Optical, not geometric. The boxes centre exactly, but digits have no
-   descenders so their ink sits in the upper part of the line box while the
-   mark fills its own — leaving the mark about 2px low. Measured, not judged
-   by eye. */
+/* Seats the mark on the digits' ink centre by construction, not by a tuned
+   nudge. The line is baseline-aligned, so a replaced element's bottom edge
+   lands on the text baseline — putting the mark's centre --mark-size/2 above
+   it. The digits' ink centre is --digit-ink-center * --rating-size above it.
+   The difference is the correction, and it stays right if either the mark or
+   the rating changes size. The previous -2px was tuned against Courier New's
+   metrics and silently drifted when the font stack was fixed. */
 .meta-line .platform-icon {
-  transform: translateY(-2px);
+  transform: translateY(
+    calc(var(--mark-size) / 2 - var(--digit-ink-center) * var(--rating-size))
+  );
 }
 
-/* Each meta row pairs two values so the block stays two lines tall. */
+/* Each meta row pairs two values so the block stays two lines tall.
+   Baseline rather than centre: it is what makes the mark's alignment derivable
+   from font metrics (see .meta-line .platform-icon). */
 .meta-line {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: flex-end;
   gap: 6px;
+}
+
+/* The chance is one value and the mark+rating another, so they should not be
+   evenly spaced. 6px of gap plus this keeps the pair tight and the split wide. */
+.meta-line .solve-chance {
+  margin-right: 6px;
 }
 
 /* The rating, in its own platform's units. Tinted by that platform's band via
@@ -350,7 +373,8 @@ cf-stats-view {
    shared scale — the comparison the ordering model exists to avoid. */
 .rating {
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  /* Shared with --digit-ink-center's offset maths — do not inline this. */
+  font-size: var(--rating-size);
   font-weight: 600;
 }
 
@@ -1023,13 +1047,15 @@ cf-stats-view {
 
 /* --- Platform filter chips (Queue and Contests) --- */
 
+/* Sits inside .view-meta, at the right end of the count line — it is a
+   qualifier on that count, not a row of its own, and giving it one cost a
+   whole line of a panel this narrow. The padding and bottom margin it used
+   to need as a standalone row therefore go. */
 .list-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  padding: 0 10px;
-  margin-bottom: 16px;
   flex-shrink: 0;
   /* Anchors the filter panel, which is absolute so opening it never reflows
      the rows beneath. */
@@ -1252,7 +1278,9 @@ cf-stats-view {
 .filter-panel {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
+  /* Right-anchored: the button now sits at the right end of the count line,
+     and a left-anchored panel would open off the edge of the side panel. */
+  right: 0;
   z-index: 20;
   min-width: 190px;
   padding: 6px;

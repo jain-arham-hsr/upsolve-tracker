@@ -101,3 +101,35 @@ test("every font-family goes through the two stack variables", () => {
     assert.ok(!/Courier/.test(declaration), `Courier is not a fallback: ${declaration}`);
   }
 });
+
+test("the platform mark's alignment is derived, not a tuned pixel value", () => {
+  // This offset has drifted twice: once when the mark's size changed, once when
+  // the font stack was fixed and Courier New's metrics stopped applying. It is
+  // now computed from --mark-size and --digit-ink-center, so it survives both.
+  // A raw px translate here means someone re-tuned it by eye.
+  const rule = css.match(/\.meta-line \.platform-icon \{([^}]*)\}/);
+  assert.ok(rule, ".meta-line .platform-icon must exist");
+
+  const body = rule[1];
+  assert.ok(body.includes("var(--mark-size)"), "offset must scale with the mark");
+  assert.ok(body.includes("var(--digit-ink-center)"), "offset must use the ink metric");
+  assert.ok(body.includes("var(--rating-size)"), "offset must use the rating size");
+  assert.ok(
+    !/translateY\(\s*-?[\d.]+px/.test(body),
+    "no hardcoded px translate — derive it",
+  );
+
+  // Baseline alignment is what makes the offset derivable: it puts the mark's
+  // bottom edge on the text baseline, which is the reference the maths assumes.
+  const line = css.match(/\.meta-line \{([^}]*)\}/);
+  assert.match(line[1], /align-items:\s*baseline/);
+
+  // The rating must keep using the same size constant the offset is computed
+  // from, or the two drift apart silently.
+  const rating = css.match(/\.rating \{([^}]*)\}/);
+  assert.ok(rating[1].includes("var(--rating-size)"), ".rating must use --rating-size");
+
+  for (const name of ["--mark-size", "--rating-size", "--digit-ink-center"]) {
+    assert.ok(css.includes(`${name}:`), `${name} must be defined`);
+  }
+});
