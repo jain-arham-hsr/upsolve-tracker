@@ -21,7 +21,7 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jain-arham-hsr/cf-trainer.git"
+    "url": "https://github.com/jain-arham-hsr/upsolve-tracker.git"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.4.0",

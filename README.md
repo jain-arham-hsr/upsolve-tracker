@@ -48,7 +48,7 @@ single claim this design denies.
 
 ## Install
 
-1. Download `cf-trainer-chrome-vX.Y.zip` from the [Releases page](https://github.com/jain-arham-hsr/cf-trainer/releases) and unzip it.
+1. Download `upsolve-tracker-chrome-vX.Y.zip` from the [Releases page](https://github.com/jain-arham-hsr/upsolve-tracker/releases) and unzip it.
 2. Open `chrome://extensions` and turn on **Developer mode** (top right).
 3. Click **Load unpacked** and select the unzipped folder.
 4. Click the extension icon to open the side panel.

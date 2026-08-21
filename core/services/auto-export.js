@@ -6,10 +6,15 @@
  */
 import { loadDirHandle } from "./secure-store.js";
 
-// Deliberately unchanged by the rebrand. Writing to a new name would leave
-// the existing backup behind as a stale file, and anyone restoring from that
-// one later would silently lose everything added since.
-export const BACKUP_FILENAME = "cf_trainer_backup.json";
+export const BACKUP_FILENAME = "upsolve_tracker_backup.json";
+
+// The name this wrote to before the rebrand. Renaming alone would leave that
+// file sitting in the export directory, frozen at the moment of the rename and
+// looking like a perfectly good backup — restoring from it later would silently
+// lose everything added since. So the first successful write under the new name
+// deletes it. That ordering matters: the old file is only given up once its
+// replacement is on disk.
+const LEGACY_BACKUP_FILENAME = "cf_trainer_backup.json";
 
 /**
  * Tests the directory handle immediately. If Chrome locked it after a restart,
@@ -67,10 +72,31 @@ export async function writeBackup(dirHandle) {
     await writable.write(json);
     await writable.close();
 
+    await retireLegacyBackup(dirHandle);
+
     console.log("[Auto-Export] Backup written to", dirHandle.name);
     return true;
   } catch (error) {
     console.warn("[Auto-Export] Failed to write backup:", error.message);
     return false;
+  }
+}
+
+/**
+ * Removes the pre-rebrand backup, once a current one exists beside it.
+ *
+ * Absence is the normal case — anyone who set up auto-export after the rename
+ * never had one — so NotFoundError is not worth reporting. Any other failure is
+ * logged and swallowed: a leftover file is untidy, but the backup itself
+ * succeeded and that is what the caller is waiting on.
+ */
+async function retireLegacyBackup(dirHandle) {
+  try {
+    await dirHandle.removeEntry(LEGACY_BACKUP_FILENAME);
+    console.log("[Auto-Export] Removed the pre-rebrand backup");
+  } catch (error) {
+    if (error.name !== "NotFoundError") {
+      console.warn("[Auto-Export] Could not remove the old backup:", error.message);
+    }
   }
 }

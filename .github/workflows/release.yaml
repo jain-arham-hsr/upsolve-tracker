@@ -38,7 +38,7 @@ jobs:
       - name: Zip the extension
         run: |
           cd dist/chrome
-          zip -r ../../cf-trainer-chrome-v${{ steps.version.outputs.version }}.zip .
+          zip -r ../../upsolve-tracker-chrome-v${{ steps.version.outputs.version }}.zip .
 
       - name: Delete existing release and tag (if any)
         env:
@@ -60,22 +60,22 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Release ${{ steps.version.outputs.tag }}
           body: |
-            ## cf-trainer ${{ steps.version.outputs.tag }}
+            ## Upsolve Tracker ${{ steps.version.outputs.tag }}
 
             Built from commit ${{ github.sha }} by @${{ github.actor }}.
 
             ### Installation
-            1. Download `cf-trainer-chrome-v${{ steps.version.outputs.version }}.zip`
+            1. Download `upsolve-tracker-chrome-v${{ steps.version.outputs.version }}.zip`
             2. Unzip it
             3. Open Chrome → `chrome://extensions` → Enable **Developer mode**
             4. Click **Load unpacked** and select the unzipped folder
-          files: cf-trainer-chrome-v${{ steps.version.outputs.version }}.zip
+          files: upsolve-tracker-chrome-v${{ steps.version.outputs.version }}.zip
           draft: false
           prerelease: false
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cf-trainer-chrome-v${{ steps.version.outputs.version }}
+          name: upsolve-tracker-chrome-v${{ steps.version.outputs.version }}
           path: dist/chrome/
           retention-days: 30

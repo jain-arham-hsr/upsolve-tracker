@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-The extension is **Upsolve Tracker** (the repo directory is still `cf-trainer`). It covers Codeforces, AtCoder and CodeChef. Internal identifiers were deliberately *not* renamed: storage keys keep the `cf_trainer.*` prefix and custom elements the `cf-` prefix, because renaming them means migrating live user data for no visible benefit and a failed migration silently loses someone's queue. `BACKUP_FILENAME` is unchanged for the same reason — writing to a new name would strand the existing backup, and restoring from that stale file later would lose everything added since.
+The extension is **Upsolve Tracker**; the repo and directory were renamed to match. It covers Codeforces, AtCoder and CodeChef. Internal identifiers were deliberately *not* renamed: storage keys keep the `cf_trainer.*` prefix and custom elements the `cf-` prefix, because renaming them means migrating live user data for no visible benefit and a failed migration silently loses someone's queue. `BACKUP_FILENAME` **did** change, to `upsolve_tracker_backup.json`, but only because the stranding problem is handled rather than accepted: writing to a new name would otherwise leave `cf_trainer_backup.json` in the export directory, frozen at the moment of the rename and looking like a perfectly good backup. `writeBackup()` deletes it — *after* the new file is on disk, never before, so a failed write can never leave the directory with no backup at all. A missing legacy file is the normal case for anyone who set up auto-export after the rename and is not treated as an error. `tests/auto-export.test.js` pins all three cases.
 
 ## Commands
 
