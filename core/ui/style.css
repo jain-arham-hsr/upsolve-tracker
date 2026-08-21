@@ -30,6 +30,11 @@
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo,
     Consolas, monospace;
 
+  /* Default mark size, used by every mark outside the queue's meta block:
+     the contest list, the filter, the add banner, the stats ring. The queue
+     overrides both of these on .meta-line rather than changing them here —
+     :root drives .platform-icon everywhere, so shrinking it globally shrank
+     marks in four other places. */
   --mark-size: 14px;
   --rating-size: 0.8rem;
   --title-size: 0.85rem;
@@ -365,10 +370,10 @@ cf-stats-view {
 .source {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.63rem;
   font-weight: 500;
-  line-height: 14px;
-  padding: 2px 7px;
+  line-height: 12px;
+  padding: 2px 6px;
   border-radius: 4px;
   background-color: rgba(255, 255, 255, 0.06);
   color: #9a9a9a;
@@ -391,6 +396,12 @@ cf-stats-view {
    Baseline rather than centre: it is what makes the mark's alignment derivable
    from font metrics (see .meta-line .platform-icon). */
 .meta-line {
+  /* Scoped down from the defaults. Both the mark's size and the offset that
+     seats it read --mark-size, so overriding it here resizes and re-seats in
+     one move — the alignment stays within 0.1px of the digits' ink, verified
+     by pixel measurement at 14, 13, 12 and 11px. */
+  --mark-size: 11px;
+  --rating-size: 0.7rem;
   display: flex;
   align-items: baseline;
   justify-content: flex-end;
@@ -421,7 +432,7 @@ cf-stats-view {
    so it leads. An em dash here means a rating is missing, not a hard problem. */
 .solve-chance {
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: var(--rating-size);
   font-weight: 700;
   color: var(--text-title);
 }
@@ -429,9 +440,13 @@ cf-stats-view {
 /* Which site a row came from. The mark carries it; the text chip is only a
    fallback for a platform that has no icon yet. */
 .platform-icon {
-  /* 14. The AtCoder mark is drawn to survive it — see platform-icons.js. */
-  width: 14px;
-  height: 14px;
+  /* Driven by --mark-size (14px), which the alignment maths also reads. These
+     were two independent literals until a resize test proved they could drift:
+     shrinking the assumed size without shrinking the real one walked the mark
+     1.5px off the digits' ink. The AtCoder mark is drawn to survive 14px —
+     see platform-icons.js. */
+  width: var(--mark-size);
+  height: var(--mark-size);
   flex-shrink: 0;
   display: block;
 }
