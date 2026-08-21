@@ -6,6 +6,15 @@
   --panel-bg: #1e1e1e;
   --text-main: #ffffff;
   --text-muted: #888888;
+
+  /* The top of a list row's ladder. Deliberately below --text-main: a row's
+     primary value at #fff is the loudest thing on a near-black panel, and at
+     weight 600 it glares. Everything that leads a row uses this — the contest
+     name, the problem title, the solve chance, an untinted rating — so no row
+     has one element brighter than its neighbours for no reason. Codeforces'
+     tinted ratings are the exception, because there the colour carries the
+     site's own meaning. */
+  --text-title: #dedede;
   --border-color: #333333;
   --accent-color: #f0f0f0;
   --accent-hover: #ffffff;
@@ -313,6 +322,7 @@ cf-stats-view {
 .problem-title {
   font-weight: 600;
   font-size: 1rem;
+  color: var(--text-title);
   /* The meta block below is two lines with a badge of its own, so it needs
      clear separation from the title rather than the 6px that read as one
      paragraph. Matters most on a title that wraps, where the second line
@@ -399,7 +409,7 @@ cf-stats-view {
   font-family: var(--font-mono);
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-title);
 }
 
 /* Which site a row came from. The mark carries it; the text chip is only a
@@ -654,12 +664,9 @@ cf-stats-view {
   line-height: var(--title-line);
   font-weight: 600;
   letter-spacing: 0.1px;
-  /* Not pure white. This row has no other bright element — unlike the queue,
-     where a tinted rating and the solve chance share the top of the ladder —
-     so #fff at 600 made the title the loudest thing on the page by a wide
-     margin. #dedede still leads the ladder it sits in: id badge #c2c2c2,
-     count line and flags dimmer again. */
-  color: #dedede;
+  /* Leads its row's ladder without glaring: id badge #c2c2c2 below it, then
+     the count line and subtype flags dimmer again. */
+  color: var(--text-title);
   width: 100%;
   overflow-wrap: anywhere;
   display: flex;
@@ -1018,8 +1025,11 @@ cf-stats-view {
   background-color: #6e7681;
 }
 
+/* A rating on a platform with no rank colours of its own. Level with the row's
+   other leading values rather than brighter than them — at --text-main it
+   out-shone the problem title beside it. */
 .tone-neutral {
-  color: var(--text-main);
+  color: var(--text-title);
 }
 
 /* The same palette as text, for a rating number in the queue. */
