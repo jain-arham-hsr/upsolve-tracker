@@ -63,3 +63,13 @@ test("the scroll containers still declare their own overflow", () => {
   assert.match(rule[0], /overflow-y:\s*auto/);
   assert.match(rule[0], /flex:\s*1/);
 });
+
+test("the compact rows still borrow the container's columns", () => {
+  // Column widths must come from the grid, not from `ch`. Sizing the code
+  // column in character units left CodeChef's eight-character codes in a box
+  // 0.2px wider than the text needed, and any font the user actually has
+  // pushes that over — the codes then paint underneath the names.
+  assert.match(css, /\.contest-problems \{[\s\S]*?display: grid/);
+  assert.match(css, /\.problem-row\.is-compact \{[\s\S]*?grid-template-columns: subgrid/);
+  assert.ok(!/--index-ch/.test(css), "the ch-based sizing should be gone");
+});

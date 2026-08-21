@@ -416,14 +416,11 @@ export class ContestList extends HTMLElement {
       </div>`;
     }
 
-    // Size the index column to the widest code in *this* contest, so the names
-    // start at one x. Codeforces indices are single letters and align by
-    // accident; CodeChef's are words of varying length (MODSUB, TREECNT7,
-    // UPDQS) and left every row ragged. Only the renderer knows the longest,
-    // and it differs per contest, so CSS cannot work it out alone.
-    const widest = Math.max(...pending.map((row) => String(row.index ?? "").length));
-
-    return `<div class="contest-problems" style="--index-ch: ${widest}">${pending
+    // Column widths come from CSS: the container is a grid and each row
+    // borrows its columns with `subgrid`, so the names line up whatever the
+    // codes are. Measuring the widest code here and sizing in `ch` was tried
+    // and is too fragile — see the note in style.css.
+    return `<div class="contest-problems">${pending
       .map((row) => renderProblemRow(row, { compact: true }))
       .join("")}</div>`;
   }

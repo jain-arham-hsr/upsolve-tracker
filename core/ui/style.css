@@ -1341,29 +1341,38 @@ cf-stats-view {
 /* --- Compact rows, for a contest's expansion ---
    One line each, and deliberately quieter than the contest title above them:
    full-size problem names competed with it for the eye, and every row repeated
-   the platform mark and contest code the header already shows. */
+   the platform mark and contest code the header already shows.
+
+   The container owns the columns and each row borrows them with `subgrid`, so
+   every name starts at one x however long the codes are. Sizing the code
+   column in `ch` was tried and is too fragile: `ch` is the width of "0" in
+   whichever font actually resolves, which left eight characters of CodeChef
+   code in a box 0.2px wider than the text needed. Content-sized columns make
+   no font assumption at all, and the row stays a real element, so it keeps its
+   hover and its whole-row click target. */
+.contest-problems {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content max-content;
+}
+
 .problem-row.is-compact {
-  display: flex;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: baseline;
   gap: 8px;
   padding: 7px 16px 7px 22px;
   border-bottom: none;
 }
 
-/* Width comes from the widest code in this contest (set as --index-ch by
-   contest-list.js), so every name starts at the same x. In a monospace face
-   1ch is exactly one character. */
 .compact-index {
   font-family: "JetBrains Mono", "Courier New", monospace;
   font-size: 0.68rem;
   color: var(--text-muted);
-  flex-shrink: 0;
-  width: calc(var(--index-ch, 3) * 1ch);
   text-align: right;
 }
 
 .compact-name {
-  flex: 1;
   min-width: 0;
   font-size: 0.8rem;
   font-weight: 500;
@@ -1378,15 +1387,13 @@ cf-stats-view {
   font-size: 0.72rem;
   font-weight: 700;
   color: var(--text-main);
-  flex-shrink: 0;
+  text-align: right;
 }
 
 .compact-rating {
   font-family: "JetBrains Mono", "Courier New", monospace;
   font-size: 0.72rem;
   font-weight: 600;
-  flex-shrink: 0;
-  min-width: 30px;
   text-align: right;
 }
 
@@ -1395,6 +1402,7 @@ cf-stats-view {
 }
 
 .contest-problems-empty {
+  grid-column: 1 / -1;
   padding: 10px 22px;
   font-size: 0.78rem;
 }
