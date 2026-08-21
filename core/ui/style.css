@@ -298,7 +298,10 @@ cf-stats-view {
 .problem-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  /* 7, not more: the badge gained an edge of its own, so 4px had it crowding
+     the rating. Past 8 it stops reading as part of the same block and starts
+     belonging to the row beneath. */
+  gap: 7px;
   font-size: 0.85rem;
   color: var(--text-muted);
 }
