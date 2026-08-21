@@ -185,13 +185,6 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
 }
 
 /**
- * Codeforces identity is configured, not ambient: `user.status` and `user.info`
- * query by the stored handle, so who is signed into codeforces.com in this
- * browser is irrelevant.
- */
-export const identityIsAmbient = false;
-
-/**
  * Confirms the stored handle is a real account, and returns it along with the
  * rating — both come from the one `user.info` call, so verifying costs nothing
  * beyond what fetching the rating already did.

@@ -14,12 +14,14 @@
  *    one account's history, and pointing a platform at a different handle
  *    leaves every old mark in place forever.
  *
- * A mismatch means different things depending on where the identity comes
- * from, which is why adapters declare `identityIsAmbient`:
+ * Every platform has a handle you enter in Settings, and that handle is the
+ * authority. Adapters check it before reading anything: Codeforces and AtCoder
+ * confirm it exists, CodeChef additionally confirms the browser is signed in as
+ * that account, since its API answers for whoever holds the cookie.
  *
- *  - **Ambient** (CodeChef): the user did not ask for this. Refuse.
- *  - **Configured** (Codeforces, AtCoder): the user edited the handle
- *    deliberately. Adopt it, and drop that platform's stale solved flags.
+ * What is left here is the *other* question — has that handle changed since the
+ * solved flags were derived? If so they belong to the previous account and have
+ * to go, or the queue keeps hiding problems this account has never solved.
  */
 const IDENTITY_KEY = "cf_trainer.platform_identity";
 
@@ -46,18 +48,17 @@ export async function setStoredIdentity(platformId, username) {
 }
 
 /**
- * Compares a freshly verified account against the one this queue belongs to.
+ * Compares the handle the solved flags were derived from against the one now
+ * configured.
  *
- * Pure, so the decision is testable without storage or a network: the whole
- * failure mode is taking the wrong branch here.
+ * Pure, so the decision is testable without storage or a network.
  *
- * @returns {"first-use"|"match"|"changed"|"intruder"}
+ * @returns {"first-use"|"match"|"changed"}
  */
-export function classifyIdentity({ stored, current, isAmbient }) {
+export function classifyIdentity({ stored, current }) {
   if (!current) throw new Error("classifyIdentity needs a verified account");
   if (!stored) return "first-use";
-  if (stored === current) return "match";
-  return isAmbient ? "intruder" : "changed";
+  return stored === current ? "match" : "changed";
 }
 
 /**
@@ -88,38 +89,20 @@ export function clearSolvedForPlatform(contests, platformId, defaultPlatformId) 
 export const IDENTITY_STORAGE_KEY = IDENTITY_KEY;
 
 /**
- * Reconciles a freshly verified account against the one this queue belongs to,
- * and records the new one.
+ * Records the handle the solved flags are now derived from, and reports
+ * whether it changed.
  *
  * Does **not** clear solved flags — the caller does that, because the sync
  * already holds the contests in memory while the add path does not, and
  * writing storage twice would be worse than passing the verdict back.
  *
  * @returns {"first-use"|"match"|"changed"} what happened.
- * @throws on an ambient mismatch — someone else is signed in, and their solves
- *   must not be written here.
  */
-export async function settleIdentity(platform, adapter, identity) {
+export async function settleIdentity(platform, identity) {
   const stored = await getStoredIdentity(platform.id);
-  const verdict = classifyIdentity({
-    stored,
-    current: identity.username,
-    isAmbient: adapter.identityIsAmbient,
-  });
+  const verdict = classifyIdentity({ stored, current: identity.username });
 
   if (verdict === "match") return verdict;
-
-  if (verdict === "intruder") {
-    const error = new Error(
-      `Signed in to ${platform.label} as ${identity.username}, but this queue belongs to ` +
-        `${stored}. Sign back in as ${stored}, or switch the account in Settings.`,
-    );
-    // Flagged so callers can tell "someone else is signed in" — which must
-    // always stop the operation — from "this platform isn't set up", which
-    // merely means solved status can't be read.
-    error.isIdentityMismatch = true;
-    throw error;
-  }
 
   await setStoredIdentity(platform.id, identity.username);
   return verdict;

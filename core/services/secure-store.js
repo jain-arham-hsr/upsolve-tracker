@@ -76,21 +76,25 @@ export const loadCredentials = async () => ({
 /**
  * Which platforms are configured well enough to read solved history.
  *
- * Requirements differ: Codeforces needs a handle plus a signed key pair,
- * AtCoder needs only a handle, and CodeChef needs nothing at all — it reads
- * the signed-in user straight from the page. CodeChef is therefore left out
- * here, since whether it works depends on a live session rather than on
- * anything that was configured.
+ * Every platform needs a handle, and that handle is what its contests are
+ * added against. Codeforces additionally needs a signed key pair. CodeChef's
+ * handle is also what the browser session gets checked against, since its API
+ * answers for whoever is signed in rather than for a handle we ask about.
  */
 export async function getPlatformSetup() {
   const [settings, { apiKey, apiSecret }] = await Promise.all([
-    chrome.storage.local.get(["cf_trainer.handle", "cf_trainer.atcoder_handle"]),
+    chrome.storage.local.get([
+      "cf_trainer.handle",
+      "cf_trainer.atcoder_handle",
+      "cf_trainer.codechef_handle",
+    ]),
     loadCredentials(),
   ]);
 
   return {
     codeforces: Boolean(settings["cf_trainer.handle"] && apiKey && apiSecret),
     atcoder: Boolean(settings["cf_trainer.atcoder_handle"]),
+    codechef: Boolean(settings["cf_trainer.codechef_handle"]),
   };
 }
 

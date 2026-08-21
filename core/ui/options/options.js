@@ -7,11 +7,11 @@ import {
 } from "../../services/secure-store.js";
 import { CodeforcesService } from "../../services/codeforces-service.js";
 import * as codechefAdapter from "../../platforms/codechef/adapter.js";
-import { getStoredIdentity } from "../../services/platform-identity.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const handleInput = document.getElementById("cf-handle");
   const atcoderHandleInput = document.getElementById("atcoder-handle");
+  const codechefHandleInput = document.getElementById("codechef-handle");
   const apiKeyInput = document.getElementById("api-key");
   const apiSecretInput = document.getElementById("api-secret");
 
@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     chrome.storage.local.get([
       "cf_trainer.handle",
       "cf_trainer.atcoder_handle",
+      "cf_trainer.codechef_handle",
       "cf_trainer.auto_export",
     ]),
     loadCredentials(),
@@ -47,6 +48,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     handleInput.value = storageResult["cf_trainer.handle"];
   if (storageResult["cf_trainer.atcoder_handle"])
     atcoderHandleInput.value = storageResult["cf_trainer.atcoder_handle"];
+  if (storageResult["cf_trainer.codechef_handle"])
+    codechefHandleInput.value = storageResult["cf_trainer.codechef_handle"];
   if (credentials.apiKey) apiKeyInput.value = credentials.apiKey;
   if (credentials.apiSecret) apiSecretInput.value = credentials.apiSecret;
 
@@ -138,6 +141,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       chrome.storage.local.set({
         "cf_trainer.handle": handleInput.value.trim(),
         "cf_trainer.atcoder_handle": atcoderHandleInput.value.trim(),
+        "cf_trainer.codechef_handle": codechefHandleInput.value.trim(),
         "cf_trainer.auto_export": autoExportCheckbox.checked,
       }),
       saveCredentials(apiKeyInput.value.trim(), apiSecretInput.value.trim()),
@@ -156,12 +160,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   // worth showing plainly: the dangerous state is being signed in as someone
   // else, which otherwise looks exactly like a normal sync.
   await renderCodeChefStatus();
+  codechefHandleInput.addEventListener("change", () => renderCodeChefStatus());
 
   async function renderCodeChefStatus() {
     const setStatus = (text, ok) => {
       codechefStatus.textContent = text;
       codechefStatus.classList.toggle("failure", ok === false);
     };
+
+    const handle = codechefHandleInput.value.trim();
+    if (!handle) {
+      setStatus("");
+      return;
+    }
 
     let session;
     try {
@@ -171,36 +182,23 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    const pinned = await getStoredIdentity("codechef");
-
     if (!session.signedIn) {
+      setStatus(`Signed out — sign in as ${handle} at codechef.com to sync.`, false);
+      return;
+    }
+
+    // The state this check exists for. CodeChef answers for whoever holds the
+    // session cookie, so a mismatch means the next sync would read somebody
+    // else's solved problems.
+    if (session.signedInAs !== handle) {
       setStatus(
-        pinned
-          ? `Signed out. This queue belongs to ${pinned} — sign in at codechef.com to sync.`
-          : "Signed out. Sign in at codechef.com and reopen this page.",
+        `✕ Signed in as ${session.signedInAs}, not ${handle}. Syncing is paused until they match.`,
         false,
       );
       return;
     }
 
     const rating = session.rating == null ? "unrated" : `rating ${session.rating}`;
-
-    if (!pinned) {
-      setStatus(`Signed in as ${session.username} — ${rating}.`, true);
-      return;
-    }
-
-    if (pinned === session.username) {
-      setStatus(`✓ This queue belongs to ${session.username} — ${rating}.`, true);
-      return;
-    }
-
-    // The state the identity check exists for. Say what will happen, not just
-    // that something is wrong.
-    setStatus(
-      `✕ Signed in as ${session.username}, but this queue belongs to ${pinned}. ` +
-        `CodeChef syncing is paused until you sign back in as ${pinned}.`,
-      false,
-    );
+    setStatus(`✓ Signed in as ${handle} — ${rating}.`, true);
   }
 });

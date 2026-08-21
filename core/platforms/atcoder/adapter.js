@@ -153,13 +153,6 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
 }
 
 /**
- * AtCoder identity is configured, not ambient: kenkoooo is queried by handle
- * and the profile fetch omits credentials, so the browser session plays no
- * part.
- */
-export const identityIsAmbient = false;
-
-/**
  * Confirms the stored handle exists, and reads the rating from the same page.
  *
  * A handle that does not exist yields no solved problems, which looks exactly

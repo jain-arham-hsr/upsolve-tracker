@@ -1,11 +1,12 @@
 /**
  * Whose data the queue is reading.
  *
- * Every failure guarded here is silent. Writing another account's solves looks
- * like a normal sync; refusing without saying so looks like a normal sync;
- * keeping the old account's flags after a handle change looks like a queue
- * that is simply shorter than you remembered. None of them announce
- * themselves, so none of them can be left to manual checking.
+ * The handle in Settings is the authority; adapters check it before reading
+ * anything (see adapter-identity.test.js). What is tested here is the other
+ * half: whether that handle has *changed* since the solved flags were derived,
+ * because flags from a previous account keep hiding problems this one has
+ * never solved — and a queue that is quietly shorter than you remember
+ * announces nothing.
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -37,72 +38,36 @@ const {
   IDENTITY_STORAGE_KEY,
 } = await import("../core/services/platform-identity.js");
 
-const configured = { identityIsAmbient: false };
-const ambient = { identityIsAmbient: true };
 const platform = (id, label) => ({ id, label });
 
 beforeEach(() => stubChrome());
 
-test("a first run adopts whatever account verified", () => {
-  assert.equal(classifyIdentity({ stored: null, current: "me", isAmbient: false }), "first-use");
-  assert.equal(classifyIdentity({ stored: null, current: "me", isAmbient: true }), "first-use");
+test("a first run adopts whatever handle verified", () => {
+  assert.equal(classifyIdentity({ stored: null, current: "me" }), "first-use");
 });
 
-test("the same account is a match regardless of where identity comes from", () => {
-  assert.equal(classifyIdentity({ stored: "me", current: "me", isAmbient: true }), "match");
-  assert.equal(classifyIdentity({ stored: "me", current: "me", isAmbient: false }), "match");
+test("the same handle is a match", () => {
+  assert.equal(classifyIdentity({ stored: "me", current: "me" }), "match");
 });
 
-test("a mismatch means different things depending on where identity comes from", () => {
-  // Ambient: nobody asked for this — someone else is signed into the browser.
-  assert.equal(classifyIdentity({ stored: "me", current: "them", isAmbient: true }), "intruder");
-  // Configured: the user edited the handle in Settings, deliberately.
-  assert.equal(classifyIdentity({ stored: "me", current: "them", isAmbient: false }), "changed");
+test("a different handle means the flags belong to the old account", () => {
+  assert.equal(classifyIdentity({ stored: "me", current: "them" }), "changed");
 });
 
 test("classifying without a verified account is a programming error, not a default", () => {
-  assert.throws(() => classifyIdentity({ stored: "me", current: null, isAmbient: true }));
-});
-
-test("an intruder is refused, and the pin is left alone", async () => {
-  // The whole data-loss bug: their solves must not be written here, and the
-  // queue must still belong to the original account afterwards.
-  stubChrome({ [IDENTITY_STORAGE_KEY]: { codechef: "me" } });
-
-  await assert.rejects(
-    () => settleIdentity(platform("codechef", "CodeChef"), ambient, { username: "them" }),
-    /belongs to me/,
-  );
-  assert.equal(await getStoredIdentity("codechef"), "me");
-});
-
-test("the intruder error is flagged, so callers can tell it from being unconfigured", async () => {
-  // Adding a contest tolerates an unconfigured platform, but must never
-  // tolerate someone else being signed in.
-  stubChrome({ [IDENTITY_STORAGE_KEY]: { codechef: "me" } });
-
-  const error = await settleIdentity(
-    platform("codechef", "CodeChef"), ambient, { username: "them" },
-  ).then(() => null, (e) => e);
-
-  assert.ok(error, "should have thrown");
-  assert.equal(error.isIdentityMismatch, true);
+  assert.throws(() => classifyIdentity({ stored: "me", current: null }));
 });
 
 test("a deliberately changed handle is adopted", async () => {
   stubChrome({ [IDENTITY_STORAGE_KEY]: { codeforces: "old" } });
 
-  const verdict = await settleIdentity(
-    platform("codeforces", "Codeforces"), configured, { username: "new" },
-  );
+  const verdict = await settleIdentity(platform("codeforces", "Codeforces"), { username: "new" });
   assert.equal(verdict, "changed");
   assert.equal(await getStoredIdentity("codeforces"), "new");
 });
 
 test("first use records the account", async () => {
-  const verdict = await settleIdentity(
-    platform("atcoder", "AtCoder"), configured, { username: "me" },
-  );
+  const verdict = await settleIdentity(platform("atcoder", "AtCoder"), { username: "me" });
   assert.equal(verdict, "first-use");
   assert.equal(await getStoredIdentity("atcoder"), "me");
 });

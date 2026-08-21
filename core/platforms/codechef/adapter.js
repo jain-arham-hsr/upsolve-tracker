@@ -21,16 +21,32 @@ const NOT_RATED = new Set([-1, 9999]);
 /** Setter handles and contest codes get tagged alongside real topics. */
 const TAG_NOISE = /^(?:start|cook|ltime|snck)\d+$|_adm$/i;
 
+export const HANDLE_KEY = "cf_trainer.codechef_handle";
+
+/**
+ * The handle you declared, plus whoever the browser is actually signed in as.
+ *
+ * Both, because they can differ — and that difference is the whole point: the
+ * configured handle says who this queue belongs to, and the session says whose
+ * solved status the API is about to hand back.
+ */
 export async function createSession() {
-  const html = await getDashboardHtml();
-  const session = extractSession(html);
+  const [settings, html] = await Promise.all([
+    chrome.storage.local.get(HANDLE_KEY),
+    getDashboardHtml(),
+  ]);
 
   // extractSession returns null both when signed out and when the page shape
   // has changed. Either way the caller must not read an empty solved list as
   // "nothing solved".
-  return session
-    ? { ...session, signedIn: true }
-    : { username: null, rating: null, signedIn: false };
+  const page = extractSession(html);
+
+  return {
+    handle: settings[HANDLE_KEY],
+    signedInAs: page?.username ?? null,
+    rating: page?.rating ?? null,
+    signedIn: Boolean(page?.username),
+  };
 }
 
 export async function fetchContestRecord({
@@ -180,12 +196,10 @@ function cleanTags(detail, contestCode) {
  */
 export async function fetchSolvedKeys(session, contests, onProgress = () => {}) {
   const keys = new Set();
-  if (!session?.signedIn) {
-    // Signed out, every contest reports an empty solved list — which reads as
-    // "nothing solved" and would resurrect the whole queue. Refuse instead, so
-    // the caller isolates the failure and leaves existing flags alone.
-    throw new Error("Not signed in to CodeChef, so solved status can't be read.");
-  }
+  // Signed out — or signed in as somebody else — every contest reports a
+  // solved list that is empty or not yours. Refuse, so the caller isolates the
+  // failure and leaves existing flags alone.
+  await verifyIdentity(session);
 
   for (const [index, contest] of contests.entries()) {
     onProgress(`Checking CodeChef contest ${index + 1} of ${contests.length}…`);
@@ -242,29 +256,41 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
 }
 
 /**
- * CodeChef identity is **ambient**: it comes from the browser session rather
- * than from anything configured. That is why a mismatch is treated as an
- * intruder and refused, instead of being adopted the way an edited handle is.
- */
-export const identityIsAmbient = true;
-
-/**
- * The signed-in account, from the bootstrap object createSession already read
- * — no extra request.
+ * Checks the browser is signed in as the account this queue is for.
  *
- * @throws when signed out. Signing out is indistinguishable from having solved
- *   nothing (`problemsstats.solved` is simply empty), so this has to fail
- *   rather than let a caller read that as "nothing solved".
+ * Unlike the other two, CodeChef's data comes back for whoever holds the
+ * session cookie rather than for a handle we ask about. So the configured
+ * handle is the authority, and the session is checked against it.
+ *
+ * @throws when no handle is configured, when signed out, or — the dangerous
+ *   one — when signed in as somebody else. Signing out is indistinguishable
+ *   from having solved nothing, since `problemsstats.solved` is simply empty,
+ *   so none of these may fall through to a caller.
  */
 export async function verifyIdentity(session) {
-  if (!session?.signedIn || !session.username) {
+  if (!session?.handle) {
+    throw new Error("No CodeChef handle set. Add one in Settings.");
+  }
+
+  if (!session.signedIn) {
     throw new Error(
-      "Not signed in to CodeChef. Open codechef.com, sign in, and try again.",
+      `Not signed in to CodeChef. Sign in as ${session.handle} at codechef.com.`,
     );
   }
 
+  if (session.signedInAs !== session.handle) {
+    const error = new Error(
+      `Signed in to CodeChef as ${session.signedInAs}, but this queue is for ` +
+        `${session.handle}. Sign in as ${session.handle}, or change the handle in Settings.`,
+    );
+    // Flagged so callers can tell "the wrong account is signed in" — which
+    // must always stop the operation — from "this platform isn't set up".
+    error.isIdentityMismatch = true;
+    throw error;
+  }
+
   return {
-    username: session.username,
+    username: session.handle,
     rating: typeof session.rating === "number" ? session.rating : null,
   };
 }

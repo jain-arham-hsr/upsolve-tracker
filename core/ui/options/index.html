@@ -14,7 +14,8 @@
 
     <p class="intro">
       Upsolve Tracker needs read-only access to your accounts to see which problems you've
-      solved. Codeforces requires an API key pair; AtCoder needs only a handle. Your key
+      solved. Codeforces requires an API key pair; AtCoder and CodeChef need only a handle.
+      Each platform's handle is required before you can add its contests. Your key
       and secret are stored in this browser only — they're used to sign requests to
       codeforces.com and are never sent anywhere else. They're also kept out of the JSON
       backup on purpose.
@@ -45,19 +46,21 @@
     <div class="form-group">
       <label for="atcoder-handle">AtCoder Handle</label>
       <p class="help-text">
-        Optional. AtCoder needs no key — the handle alone is enough to read which
-        problems you've solved. Leave blank if you don't use AtCoder.
+        No key needed — the handle alone reads which problems you've solved.
+        Required before you can add an AtCoder contest.
       </p>
       <input type="text" id="atcoder-handle" placeholder="e.g., tourist" spellcheck="false" />
     </div>
 
     <div class="form-group">
-      <label>CodeChef</label>
+      <label for="codechef-handle">CodeChef Handle</label>
       <p class="help-text">
-        Nothing to enter. CodeChef tells us who you are from your browser session,
-        so solved status is read from whichever account is signed in at codechef.com.
+        No key needed. CodeChef answers for whoever is signed in at codechef.com,
+        so this handle is what that session gets checked against — if they don't
+        match, syncing stops rather than reading somebody else's solves.
       </p>
-      <div id="codechef-status" class="status-text">Checking…</div>
+      <input type="text" id="codechef-handle" placeholder="e.g., jain_arham_hsr" spellcheck="false" />
+      <div id="codechef-status" class="status-text"></div>
     </div>
 
     <div class="form-group">

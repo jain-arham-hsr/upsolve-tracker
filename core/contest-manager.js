@@ -86,7 +86,7 @@ export async function processNewContest(url, onProgress = () => {}) {
 
 /**
  * Confirms whose account this is before any user-specific data is read, and
- * records the rating while it is at it.
+ * records the rating while it is at it. Refuses if the platform has no handle.
  *
  * Both facts come from one call, so this costs a single request — and on
  * CodeChef none at all, since the bootstrap object was already fetched to
@@ -97,23 +97,13 @@ export async function processNewContest(url, onProgress = () => {}) {
  * for every solve chance until the first sync.
  */
 async function establishIdentity(platform, adapter, session) {
-  let identity;
-  let verdict;
-
-  try {
-    identity = await adapter.verifyIdentity(session);
-    verdict = await settleIdentity(platform, adapter, identity);
-  } catch (error) {
-    // Someone else being signed in must stop the add: this platform's solved
-    // status is about to be read, and their marks would be written here.
-    if (error.isIdentityMismatch) throw error;
-
-    // Anything else means the platform simply is not set up — no AtCoder
-    // handle, say. You should still be able to track the contest; you just
-    // will not get solved status until it is configured.
-    console.warn(`[Contest Manager] ${platform.label} identity unavailable:`, error.message);
-    return;
-  }
+  // Fatal on purpose. You cannot add a platform's contest without its handle:
+  // the contest would go in unmarked, its solved problems would never clear,
+  // and it would look like the sync was merely slow. On CodeChef it is
+  // stronger still — adding reads problemsstats, so the wrong account signed
+  // in would write their solves onto a contest you just added.
+  const identity = await adapter.verifyIdentity(session);
+  const verdict = await settleIdentity(platform, identity);
 
   if (verdict === "changed") {
     // Stale flags belong to the previous account. Unlike the refresh, nothing

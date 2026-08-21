@@ -115,7 +115,7 @@ async function syncPlatforms(trackedContests, onProgress) {
       // byte. Everything below writes to `solved` or to a rating the queue
       // orders by, and both are effectively permanent once wrong.
       const identity = await adapter.verifyIdentity(session);
-      const verdict = await settleIdentity(platform, adapter, identity);
+      const verdict = await settleIdentity(platform, identity);
 
       if (verdict === "changed") {
         // The stored flags are a cache of the *old* account's history; leaving

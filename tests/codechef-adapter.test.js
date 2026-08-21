@@ -184,18 +184,24 @@ test("a parent contest with no known rating names the divisions instead of guess
 });
 
 test("signed out, solved status refuses rather than reporting nothing solved", async () => {
-  stub({ signedIn: false });
-  const { createSession } = await import("../core/platforms/codechef/adapter.js");
-  const session = await createSession();
-  assert.equal(session.signedIn, false);
-
   await assert.rejects(
-    () => fetchSolvedKeys(session, [{ id: "START252D" }]),
+    () => fetchSolvedKeys({ handle: "me", signedIn: false }, [{ id: "START252D" }]),
     /Not signed in/,
   );
 });
 
+test("the wrong account signed in refuses before reading a single contest", async () => {
+  await assert.rejects(
+    () => fetchSolvedKeys(
+      { handle: "me", signedIn: true, signedInAs: "someone_else" },
+      [{ id: "START252D" }],
+    ),
+    /Signed in to CodeChef as someone_else/,
+  );
+});
+
 test("solved keys are gathered per contest, since there is no per-user endpoint", async () => {
-  const keys = await fetchSolvedKeys({ signedIn: true }, [{ id: "START252D" }]);
+  const session = { handle: "me", signedIn: true, signedInAs: "me" };
+  const keys = await fetchSolvedKeys(session, [{ id: "START252D" }]);
   assert.deepEqual([...keys], ["codechef:IOI7"]);
 });
