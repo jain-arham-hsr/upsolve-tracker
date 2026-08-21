@@ -303,19 +303,23 @@ cf-stats-view {
   color: var(--text-muted);
 }
 
-/* Which contest this came from — the same mono as the id badge on the Contests
-   tab, so one value looks the same in both places. Mono rather than sans
-   because the chance and the rating directly above it are mono too, which left
-   a sans line the odd one out inside its own block. What made this look wrong
-   before was Courier New, not the monospacing.
+/* Which contest this came from, as a badge rather than loose text — every other
+   secondary value in the panel sits in a pill, so a bare string floating at the
+   end of the row was the one thing without an edge. Same fill and mono as the
+   id badge on the Contests tab, so one value reads the same in both places.
 
-   Dimmed and a notch smaller, though: it is the least important thing in the
-   row, and at #d4d4d4 it rendered brighter than the rating it sits under. */
+   Dimmed and small: it is the least important thing in the row, and at #d4d4d4
+   it rendered brighter than the rating directly above it. */
 .source {
+  display: inline-block;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: #8f8f8f;
+  font-size: 0.72rem;
   font-weight: 500;
+  line-height: 14px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.06);
+  color: #9a9a9a;
 }
 
 /* Optical, not geometric. The boxes centre exactly, but digits have no
