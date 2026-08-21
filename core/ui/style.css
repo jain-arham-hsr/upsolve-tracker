@@ -945,7 +945,7 @@ cf-stats-view {
 .hist-count {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-main);
+  color: var(--text-title);
   min-width: 16px;
   flex-shrink: 0;
 }
@@ -994,7 +994,7 @@ cf-stats-view {
 
 .tag-name {
   font-size: 0.8rem;
-  color: var(--text-main);
+  color: var(--text-title);
   overflow-wrap: anywhere;
 }
 
@@ -1173,10 +1173,14 @@ cf-stats-view {
   border-color: var(--text-muted);
 }
 
+/* Selected reads as a lift, not an inversion. A solid --accent-color block was
+   the loudest thing on the panel — the same pattern the dialog's default
+   Cancel button had — and nothing else in the app inverts to signal state: the
+   tab bar brightens its label and underlines it. */
 .filter-chip.is-on {
-  background-color: var(--accent-color);
-  border-color: var(--accent-color);
-  color: var(--bg-color);
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: #555;
+  color: var(--text-title);
 }
 
 /* --- Contextual add banner ---
@@ -1252,7 +1256,9 @@ cf-stats-view {
   font-family: var(--font-mono);
   font-size: 19px;
   font-weight: 700;
-  fill: var(--text-main);
+  /* fill, not color — this is SVG text. --text-title for the same reason every
+     other leading value uses it. */
+  fill: var(--text-title);
 }
 
 .ring-caption {
@@ -1290,7 +1296,7 @@ cf-stats-view {
 /* Names and counts wear text tokens, not the series colour — the swatch and
    the mark beside them carry identity. */
 .ring-legend-name {
-  color: var(--text-main);
+  color: var(--text-title);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
