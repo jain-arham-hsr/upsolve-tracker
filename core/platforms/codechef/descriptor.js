@@ -128,6 +128,9 @@ export const codechef = {
    */
 
   capabilities: {
+    // Tags come back with each problem, mixed with the setter's handle and
+    // the contest code; cleanTags strips those.
+    publishesTags: true,
     // Difficulty and tags appear only on the per-problem endpoint — absent
     // from every bulk and contest-level response, even when logged in.
     bulkProblemData: false,

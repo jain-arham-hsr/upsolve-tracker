@@ -14,8 +14,10 @@ import { escapeHtml } from "./escape-html.js";
 import { platformIcon } from "./platform-icons.js";
 
 const SIZE = 100;
-const RADIUS = 40;
-const STROKE = 13;
+const RADIUS = 42;
+/* ~20px of band at the 220px the plot is capped to. 13 was drawn for the
+   old 104px ring and 7 was for a full-width one; both are wrong here. */
+const STROKE = 9;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 /** A surface-coloured gap between segments, so adjacent fills stay separable. */
@@ -52,29 +54,41 @@ export function renderPlatformRing(slices) {
     .join("");
 
   // Counts sit in the legend as text too, so the chart is never the only way
-  // to read them.
+  // to read them — and the legend rows are the Overview's navigation. A
+  // platform panel is a child of this page rather than a peer of it, so it is
+  // reached by drilling in from the thing that names the platforms, not by a
+  // fourth chip sitting alongside "Overview" as though they were the same kind
+  // of view.
   const legend = present
     .map(
       ({ platform, count }) => `
-      <li class="ring-legend-row">
-        <span class="ring-swatch" style="background-color: ${platform.chartColor}"></span>
-        ${platformIcon(platform.id, platform.shortLabel)}
-        <span class="ring-legend-name">${escapeHtml(platform.label)}</span>
-        <span class="ring-legend-count">${count}</span>
+      <li>
+        <button type="button" class="ring-legend-row" data-scope="${escapeHtml(platform.id)}">
+          <span class="ring-swatch" style="background-color: ${platform.chartColor}"></span>
+          ${platformIcon(platform.id, platform.shortLabel)}
+          <span class="ring-legend-name">${escapeHtml(platform.label)}</span>
+          <span class="ring-legend-count">${count}</span>
+          <span class="ring-legend-chev" aria-hidden="true">\u203a</span>
+        </button>
       </li>`,
     )
     .join("");
 
+  // The total and caption are HTML centred over the chart, not SVG <text>.
+  // SVG text scales with the viewBox, so once the ring went full width they
+  // rendered at ~60px and ~28px — larger than anything else in the panel.
   return `
     <div class="ring-figure">
-      <svg class="ring-chart" viewBox="0 0 ${SIZE} ${SIZE}" role="img"
-           aria-label="Pending problems by platform">
-        <g transform="rotate(-90 ${SIZE / 2} ${SIZE / 2})">${arcs}</g>
-        <text class="ring-total" x="${SIZE / 2}" y="${SIZE / 2 - 2}"
-              text-anchor="middle" dominant-baseline="middle">${total}</text>
-        <text class="ring-caption" x="${SIZE / 2}" y="${SIZE / 2 + 11}"
-              text-anchor="middle" dominant-baseline="middle">pending</text>
-      </svg>
+      <div class="ring-plot">
+        <svg class="ring-chart" viewBox="0 0 ${SIZE} ${SIZE}" role="img"
+             aria-label="Pending problems by platform">
+          <g transform="rotate(-90 ${SIZE / 2} ${SIZE / 2})">${arcs}</g>
+        </svg>
+        <div class="ring-centre">
+          <div class="ring-total">${total}</div>
+          <div class="ring-caption">pending</div>
+        </div>
+      </div>
       <ul class="ring-legend">${legend}</ul>
     </div>`;
 }

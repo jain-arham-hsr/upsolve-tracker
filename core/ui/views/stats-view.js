@@ -46,7 +46,7 @@ export class StatsView extends HTMLElement {
     this.ring = this.querySelector("#stats-ring");
     this.ringSection = this.querySelector("#ring-section");
     this.tagsSection = this.querySelector("#tags-section");
-    this.scopeChips = this.querySelector("#stats-scope-chips");
+    this.nav = this.querySelector("#stats-nav");
     this.spreadTitle = this.querySelector("#spread-title");
     this.rangeBox = this.querySelector("#tag-range");
     this.rangeMin = this.querySelector("#tag-range-min");
@@ -58,14 +58,17 @@ export class StatsView extends HTMLElement {
     const stored = await chrome.storage.local.get({ [SCOPE_KEY]: "" });
     this.scope = stored[SCOPE_KEY];
 
-    this.renderScopeChips();
-    this.scopeChips.addEventListener("click", async (event) => {
-      const chip = event.target.closest("[data-scope]");
-      if (!chip) return;
+    this.renderNav();
 
-      this.scope = chip.dataset.scope;
+    // Two entry points into the same transition: drilling in from a legend row
+    // on the Overview, and the back link on a platform panel. Delegated on the
+    // view because both are re-rendered on every pass.
+    this.addEventListener("click", async (event) => {
+      const target = event.target.closest("[data-scope]");
+      if (!target) return;
+
+      this.scope = target.dataset.scope;
       await chrome.storage.local.set({ [SCOPE_KEY]: this.scope });
-      this.renderScopeChips();
       await this.render();
     });
 
@@ -84,27 +87,28 @@ export class StatsView extends HTMLElement {
    * One chip per platform that actually has contests queued, plus Overview.
    * A single-platform user sees no chips at all rather than three inert ones.
    */
-  renderScopeChips() {
-    const present = this.presentPlatforms ?? [];
-    if (present.length === 0) {
-      this.scopeChips.innerHTML = "";
+  /**
+   * The Overview carries no navigation of its own — its ring legend is the
+   * navigation. A platform panel gets a back link and a header naming what you
+   * drilled into, which is what a chip row could never say: that this page is
+   * one level down rather than one of four siblings.
+   */
+  renderNav() {
+    if (!this.scope) {
+      this.nav.innerHTML = "";
       return;
     }
 
-    // Icons and full names, matching every other row in the panel. The label
-    // is escaped but the mark is static markup, so they interpolate separately.
-    const chip = (scope, label, mark = "") =>
-      `<button type="button" class="filter-chip${
-        this.scope === scope ? " is-on" : ""
-      }" data-scope="${escapeHtml(scope)}">${mark}${escapeHtml(label)}</button>`;
-
-    this.scopeChips.innerHTML =
-      chip("", "Overview") +
-      present
-        .map((platform) =>
-          chip(platform.id, platform.label, platformIcon(platform.id, platform.shortLabel)),
-        )
-        .join("");
+    // No count here: the summary line directly above already reads
+    // "240 pending · median 1600 · 3 unrated" once scoped. This header's job is
+    // to name what you drilled into.
+    const platform = getPlatform(this.scope);
+    this.nav.innerHTML = `
+      <button type="button" class="stats-back" data-scope="">\u2039 Overview</button>
+      <div class="stats-scope-head">
+        ${platformIcon(platform.id, platform.shortLabel)}
+        <span class="stats-scope-name">${escapeHtml(platform.label)}</span>
+      </div>`;
   }
 
   async render() {
@@ -120,7 +124,7 @@ export class StatsView extends HTMLElement {
     // A scope whose contests have all been solved away falls back to Overview
     // rather than showing an empty panel with no explanation.
     if (this.scope && !platformIds.has(this.scope)) this.scope = "";
-    this.renderScopeChips();
+    this.renderNav();
 
     this.contests = this.scope
       ? allContests.filter((contest) => platformOf(contest).id === this.scope)
@@ -140,15 +144,22 @@ export class StatsView extends HTMLElement {
     // none at all — so pooling them produces an authoritative-looking chart
     // built from incompatible lists. Tags live in the per-platform panels only.
     const scoped = Boolean(this.scope);
-    this.tagsSection.classList.toggle("hidden", !scoped);
+    // A platform that publishes no tags gets no tag section at all — heading,
+    // coverage line and rating range included. Rendering the frame and then
+    // explaining it is empty is worse than not raising the subject: it looks
+    // like a load that failed. Asked of the registry, not of the platform id.
+    const hasTags = scoped && getPlatform(this.scope).capabilities.publishesTags !== false;
+    this.tagsSection.classList.toggle("hidden", !hasTags);
     this.ringSection.classList.toggle("hidden", scoped);
 
     if (scoped) {
       this.spreadTitle.textContent = "RATING SPREAD";
       this.renderHistogram(ratings, getPlatform(this.scope));
-      this.renderCoverage();
-      this.syncRangeControls(ratings);
-      this.renderTags();
+      if (hasTags) {
+        this.renderCoverage();
+        this.syncRangeControls(ratings);
+        this.renderTags();
+      }
     } else {
       this.ring.innerHTML = renderPlatformRing(
         this.presentPlatforms.map((platform) => ({
@@ -394,13 +405,11 @@ export class StatsView extends HTMLElement {
   }
 
   /**
-   * AtCoder has no tags at all — not "none yet", none published, ever. Saying
-   * so beats an empty chart that looks like a loading failure.
+   * Only reached on a platform that does publish tags — one that doesn't has
+   * no tag section at all (see capabilities.publishesTags). So this is about a
+   * queue that happens to have none, not a platform that never will.
    */
   noTagsMessage(range) {
-    if (this.scope === "atcoder") {
-      return "AtCoder doesn't publish problem tags, so there's nothing to chart here.";
-    }
     return range
       ? "No tagged problems in that rating range."
       : "No tags on the pending problems.";

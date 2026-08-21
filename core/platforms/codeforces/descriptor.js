@@ -156,6 +156,9 @@ export const codeforces = {
   },
 
   capabilities: {
+    // problemset.problems carries tags. Gyms sit outside CF's taxonomy and
+    // are usually bare, but the vocabulary exists, so the section belongs.
+    publishesTags: true,
     // problemset.problems covers every official problem in one request.
     bulkProblemData: true,
     // contest.list / contest.list?gym=true.

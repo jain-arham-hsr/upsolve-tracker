@@ -125,6 +125,10 @@ export const atcoder = {
    */
 
   capabilities: {
+    // AtCoder publishes no problem tags at all — not "none yet", none ever.
+    // The stats panel drops its whole tag section rather than heading an
+    // empty one, which reads as a failed load.
+    publishesTags: false,
     // AtCoder Problems publishes difficulty for every rated contest.
     bulkProblemData: true,
     bulkStartTimes: true,

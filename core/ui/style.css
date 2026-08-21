@@ -1233,40 +1233,64 @@ cf-stats-view {
 
 /* --- Overview ring: where the backlog sits, by platform --- */
 
+/* Stacked, not side by side: the ring runs the full width of the panel and the
+   legend sits under it. */
 .ring-figure {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 4px 0 12px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 0 4px;
+}
+
+/* Positioning context for the centre text, which is HTML rather than SVG
+   <text> so it keeps its own size whatever the ring's is. */
+.ring-plot {
+  position: relative;
+  width: 100%;
+  /* Capped and centred. Left to fill the panel it read as disproportionate —
+     a 340px circle above a three-row legend. */
+  max-width: 220px;
+  margin: 0 auto;
 }
 
 .ring-chart {
-  width: 104px;
-  height: 104px;
-  flex-shrink: 0;
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
-/* Rounded data-ends, and a surface-coloured seam so adjacent fills stay
-   separable without a border. */
+.ring-centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+/* Butt caps. Round ones bulge past the arc's own span, which both overran the
+   2px seam the renderer leaves between segments and made a 2-problem slice
+   render as a lozenge wider than its share. The seam alone separates them. */
 .ring-arc {
-  stroke-linecap: round;
+  stroke-linecap: butt;
 }
 
 .ring-total {
   font-family: var(--font-mono);
-  font-size: 19px;
+  font-size: 26px;
   font-weight: 700;
-  /* fill, not color — this is SVG text. --text-title for the same reason every
-     other leading value uses it. */
-  fill: var(--text-title);
+  line-height: 1;
+  color: var(--text-title);
 }
 
 .ring-caption {
   font-family: var(--font-sans);
-  font-size: 8px;
-  letter-spacing: 0.5px;
+  font-size: 9px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
-  fill: var(--text-muted);
+  color: var(--text-muted);
 }
 
 .ring-legend {
@@ -1279,12 +1303,68 @@ cf-stats-view {
   min-width: 0;
 }
 
+/* A button, because it navigates: the legend is the Overview's way into a
+   platform panel. Styled as a row rather than a control so the Overview still
+   reads as a chart with a key beneath it. */
 .ring-legend-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 0.78rem;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 4px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--row-separator);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
 }
+
+.ring-legend-row:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.ring-legend li:last-child .ring-legend-row {
+  border-bottom: none;
+}
+
+.ring-legend-chev {
+  color: #5a5a5a;
+  font-size: 15px;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+/* --- Drilled-into a platform --- */
+.stats-back {
+  background: none;
+  border: none;
+  padding: 0 0 8px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.stats-back:hover {
+  color: var(--text-title);
+}
+
+.stats-scope-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.stats-scope-name {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-title);
+}
+
 
 .ring-swatch {
   width: 9px;
