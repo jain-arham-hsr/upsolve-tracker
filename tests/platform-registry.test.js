@@ -149,5 +149,8 @@ test("only Codeforces hashes its contest id", () => {
   assert.equal(label("codeforces", { id: 692934 }), "#692934");
   assert.equal(label("codeforces", { id: 2225 }), "#2225");
   assert.equal(label("atcoder", { id: "abc466" }), "abc466");
-  assert.equal(label("codechef", { id: "START252D" }), "START252D");
+  // The division comes off: the same problem runs in all four, so naming one
+  // overstates which contest the row is. The stored id keeps it.
+  assert.equal(label("codechef", { id: "START252D" }), "START252");
+  assert.equal(label("codechef", { id: "LTIME108" }), "LTIME108");
 });

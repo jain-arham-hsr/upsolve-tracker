@@ -100,9 +100,15 @@ export const codechef = {
     return [];
   },
 
-  /** Already a code, not a number — no "#" needed to say so. */
+  /**
+   * Already a code, not a number — no "#" needed to say so. The division
+   * suffix comes off for the same reason it does in sourceLabel: the same
+   * problem runs in every division of a Starters, so naming one division
+   * overstates which contest a row belongs to. The stored id keeps it, since
+   * that is what the URL and the problem list need.
+   */
   contestIdLabel(contest) {
-    return String(contest.id);
+    return withoutDivision(contest.id);
   },
 
   /** CodeChef's star bands: 7★ from 2500, down to 1★ below 1400. */
