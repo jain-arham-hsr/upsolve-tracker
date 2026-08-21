@@ -1,5 +1,4 @@
 import templateHtml from "./contest-list.html?raw";
-import { processNewContest } from "../../contest-manager.js";
 import { LocalDB } from "../../services/storage.js";
 import {
   BACKUP_FILENAME,
@@ -9,98 +8,74 @@ import {
 import { byStartTimeDesc } from "../../start-time-service.js";
 import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
+import {
+  platformOf,
+  matchesFilter,
+  contestKey,
+  DEFAULT_PLATFORM_ID,
+} from "../../platforms/registry.js";
+import { collectPendingProblems } from "../../pending-problems.js";
+import { getEffectiveRatings } from "../../services/user-ratings.js";
+import { toProblemRow, renderProblemRow } from "../problem-row.js";
+import { compareQueueItems } from "../../queue-order.js";
+import { bindDismiss } from "../dismissable.js";
+import { platformIcon } from "../platform-icons.js";
+import {
+  loadFilter,
+  renderFilterControl,
+  bindFilterControl,
+} from "../platform-filter.js";
 
-const FILTER_KEY = "cf_trainer.contest_filter";
-
-/** How long the remove button must be held. Drives the fill animation too. */
-const HOLD_MS = 700;
+/** Which contests are expanded, persisted because the view is rebuilt on
+ *  every tab switch — in-memory state would collapse each time you glanced at
+ *  the Queue. */
+const EXPANDED_KEY = "cf_trainer.expanded_contests";
 
 
 export class ContestList extends HTMLElement {
   constructor() {
     super();
-    this.boundCheckActiveTab = this.checkActiveTab.bind(this);
-    this.boundTabUpdatedHandler = (tabId, changeInfo, tab) => {
-      if (changeInfo.url || changeInfo.status === "complete") {
-        this.checkActiveTab();
-      }
-    };
-    this.currentValidUrl = null;
-    this.filter = "ALL";
-    this.hold = null;
-    this.boundCancelHold = () => this.cancelHold();
+    this.filter = [];
+    this.expanded = new Set();
+    this.openMenuKey = null;
+    this.dismissMenu = null;
   }
 
   async connectedCallback() {
     this.innerHTML = templateHtml;
 
     // UI References
-    this.btnAddContest = this.querySelector("#btn-add-contest");
     this.container = this.querySelector("#contest-items");
     this.btnExport = this.querySelector("#btn-export");
     this.btnImport = this.querySelector("#btn-import");
     this.fileInput = this.querySelector("#import-file-input");
     this.alertDiv = this.querySelector("#contest-alert");
-    this.filterSelect = this.querySelector("#contest-filter");
     this.countLabel = this.querySelector("#contest-count");
+    this.modal = this.querySelector("#remove-modal");
+    this.modalName = this.querySelector("#remove-modal-name");
+    this.modalCancel = this.querySelector("#remove-cancel");
 
-    this.btnAddContest.disabled = true;
-    this.btnAddContest.setAttribute("data-tooltip", "Checking current page...");
+    this.modalCard = this.querySelector(".modal-card");
+    this.modalCancel.addEventListener("click", () => this.closeModal());
+    this.querySelector("#remove-confirm").addEventListener("click", () =>
+      this.confirmRemove(),
+    );
 
     // The view is destroyed on every navigation, so the choice is persisted
     // rather than kept on the instance.
-    const filterSetting = await chrome.storage.local.get({
-      [FILTER_KEY]: "ALL",
-    });
-    this.filter = filterSetting[FILTER_KEY];
-    this.filterSelect.value = this.filter;
+    this.filter = await loadFilter();
+    this.filterControl = this.querySelector("#contest-filter");
+    this.renderFilter();
 
-    this.filterSelect.addEventListener("change", async () => {
-      this.filter = this.filterSelect.value;
-      await chrome.storage.local.set({ [FILTER_KEY]: this.filter });
-      await this.renderQueue();
-    });
-
-    await this.renderQueue();
-
-    this.btnAddContest.addEventListener("click", async () => {
-      if (this.currentValidUrl) {
-        // 1. Instantly test/prompt and store the unlocked handle
-        const activeDirHandle = await verifyExportPermission();
-
-        this.btnAddContest.textContent = "Fetching...";
-        this.btnAddContest.disabled = true;
-        this.alertDiv.classList.add("hidden");
-
-        try {
-          // 2. Run the slow Codeforces API logic, reporting each stage
-          await processNewContest(this.currentValidUrl, (message) =>
-            this.reportStatus(message),
-          );
-          await this.renderQueue();
-
-          // 3. Write using the exact handle we just unlocked
-          if (activeDirHandle && !(await writeBackup(activeDirHandle))) {
-            this.showInlineAlert(
-              "Added to Queue, but Auto-Export failed to write the file.",
-            );
-          }
-
-          this.btnAddContest.textContent = "✓ Added";
-          this.btnAddContest.disabled = true;
-          this.btnAddContest.setAttribute(
-            "data-tooltip",
-            "Contest added successfully!",
-          );
-        } catch (error) {
-          this.showInlineAlert(error.message);
-          this.btnAddContest.textContent = "+ Add Contest";
-          this.btnAddContest.disabled = false;
-        } finally {
-          this.reportStatus(null);
-        }
-      }
-    });
+    bindFilterControl(
+      this.filterControl,
+      () => this.filter,
+      async (next) => {
+        this.filter = next;
+        this.renderFilter();
+        await this.renderQueue();
+      },
+    );
 
     // Management Actions
     this.btnExport.addEventListener("click", async () => {
@@ -141,68 +116,133 @@ export class ContestList extends HTMLElement {
     });
 
     // Delegated so the handlers outlive each renderQueue() rewrite.
-    this.container.addEventListener("pointerdown", (e) => this.startHold(e));
-    // pointerleave doesn't bubble, so catch it on the way down.
-    this.container.addEventListener(
-      "pointerleave",
-      (e) => {
-        if (this.hold && e.target === this.hold.button) this.cancelHold();
-      },
-      true,
-    );
-    // Releasing anywhere aborts, including outside the panel.
-    document.addEventListener("pointerup", this.boundCancelHold);
-    document.addEventListener("pointercancel", this.boundCancelHold);
+    // Expansion is persisted for the same reason the filter is: this view is
+    // destroyed and rebuilt on every tab switch.
+    const stored = await chrome.storage.local.get({ [EXPANDED_KEY]: [] });
+    this.expanded = new Set(stored[EXPANDED_KEY]);
 
-    this.checkActiveTab();
-    chrome.tabs.onActivated.addListener(this.boundCheckActiveTab);
-    chrome.tabs.onUpdated.addListener(this.boundTabUpdatedHandler);
+    this.container.addEventListener("click", (event) => this.onListClick(event));
+
+    await this.renderQueue();
   }
 
   /**
-   * Deleting is a hold rather than a click, so a stray press does nothing at
-   * all — no dialog to dismiss, no state changed.
+   * One delegated handler, because the list is re-rendered wholesale and
+   * per-row listeners would have to be rebound every time.
    */
-  startHold(event) {
-    if (event.button !== 0) return; // Left button / primary touch only
-    const button = event.target.closest(".contest-delete");
-    if (!button) return;
+  async onListClick(event) {
+    const menuBtn = event.target.closest("[data-menu-key]");
+    if (menuBtn) {
+      // Must not also toggle the accordion underneath it.
+      event.stopPropagation();
+      await this.toggleMenu(menuBtn.dataset.menuKey);
+      return;
+    }
 
-    event.preventDefault(); // Suppress focus ring, text selection and drag
-    this.cancelHold();
+    const openLink = event.target.closest("[data-open-url]");
+    if (openLink) {
+      window.open(openLink.dataset.openUrl, "_blank", "noopener");
+      await this.closeMenu();
+      return;
+    }
 
-    button.style.animationDuration = `${HOLD_MS}ms`;
-    button.classList.add("holding");
+    const removeBtn = event.target.closest("[data-remove-key]");
+    if (removeBtn) {
+      const key = removeBtn.dataset.removeKey;
+      await this.closeMenu();
+      this.askToRemove(key);
+      return;
+    }
 
-    this.hold = {
-      button,
-      contestId: button.dataset.id,
-      timer: setTimeout(() => this.completeHold(), HOLD_MS),
-    };
+    const row = event.target.closest("[data-toggle-key]");
+    if (row) await this.toggleExpanded(row.dataset.toggleKey);
   }
 
-  cancelHold() {
-    if (!this.hold) return;
-    clearTimeout(this.hold.timer);
-    this.hold.button.classList.remove("holding");
-    this.hold = null;
+  async toggleExpanded(key) {
+    if (this.expanded.has(key)) {
+      this.expanded.delete(key);
+    } else {
+      this.expanded.add(key);
+    }
+
+    await chrome.storage.local.set({ [EXPANDED_KEY]: [...this.expanded] });
+    await this.renderQueue();
   }
 
-  async completeHold() {
-    if (!this.hold) return;
-    const { contestId } = this.hold;
-    this.cancelHold();
+  async toggleMenu(key) {
+    const next = this.openMenuKey === key ? null : key;
+    await this.closeMenu();
 
-    await LocalDB.removeTrackedContest(contestId);
+    if (!next) return;
+    this.openMenuKey = next;
     await this.renderQueue();
 
-    // Storage changed, so the backup has to follow. Still inside the
-    // activation window opened by the pointerdown that began the hold.
+    // Same dismiss behaviour as the filter dropdown, rather than a second
+    // implementation that differs in one of the three cases.
+    const item = this.container.querySelector(`[data-key="${CSS.escape(next)}"]`);
+    if (item) this.dismissMenu = bindDismiss(item, () => this.closeMenu());
+  }
+
+  async closeMenu() {
+    this.dismissMenu?.();
+    this.dismissMenu = null;
+
+    if (this.openMenuKey === null) return;
+    this.openMenuKey = null;
+    await this.renderQueue();
+  }
+
+  /**
+   * Removal asks first. That replaces the 700 ms hold as the thing standing
+   * between a stray press and a deleted contest — and it is a better guard,
+   * because it says what is about to happen instead of relying on a timer.
+   */
+  askToRemove(key) {
+    const contest = this.contestsByKey?.get(key);
+    if (!contest) return;
+
+    const name = contest.name?.replace(/\s+/g, " ").trim() || `Contest ${contest.id}`;
+    // Marked like the row it was opened from, so the dialog visibly names the
+    // same contest rather than restating its title in isolation. innerHTML,
+    // so the name has to be escaped — it is scraped.
+    const platform = platformOf(contest);
+    this.modalName.innerHTML =
+      `${platformIcon(platform.id, platform.shortLabel)}<span>${escapeHtml(name)}</span>`;
+    this.modal.classList.remove("hidden");
+    this.pendingRemoval = { key, contest };
+
+    // Backdrop click and Escape both dismiss. Reusing the popover helper means
+    // Escape works wherever focus happens to be, which a listener on this view
+    // did not.
+    this.dismissModal = bindDismiss(this.modalCard, () => this.closeModal());
+    this.modalCancel.focus();
+  }
+
+  closeModal() {
+    this.dismissModal?.();
+    this.dismissModal = null;
+    this.modal.classList.add("hidden");
+    this.pendingRemoval = null;
+  }
+
+  async confirmRemove() {
+    const pending = this.pendingRemoval;
+    this.closeModal();
+    if (!pending) return;
+
+    const { contest } = pending;
+    await LocalDB.removeTrackedContest(
+      contest.platform ?? DEFAULT_PLATFORM_ID,
+      contest.id,
+    );
+    this.expanded.delete(pending.key);
+    await chrome.storage.local.set({ [EXPANDED_KEY]: [...this.expanded] });
+    await this.renderQueue();
+
+    // Storage changed, so the backup has to follow it or the exported JSON
+    // drifts from what the panel shows.
     const dirHandle = await verifyExportPermission();
     if (dirHandle) await writeBackup(dirHandle);
-
-    // Re-enables "+ Add Contest" if the removed contest is the open tab.
-    await this.checkActiveTab();
   }
 
   /**
@@ -266,8 +306,17 @@ export class ContestList extends HTMLElement {
     }, 6000);
   }
 
+  renderFilter() {
+    if (this.filterControl) {
+      this.filterControl.innerHTML = renderFilterControl(this.filter);
+    }
+  }
+
   async renderQueue() {
-    const allContests = await LocalDB.getTrackedContests();
+    const [allContests, userRatings] = await Promise.all([
+      LocalDB.getTrackedContests(),
+      getEffectiveRatings(),
+    ]);
 
     if (allContests.length === 0) {
       this.countLabel.textContent = "Nothing queued";
@@ -275,126 +324,136 @@ export class ContestList extends HTMLElement {
       return;
     }
 
-    const contests = (
-      this.filter === "ALL"
-        ? [...allContests]
-        : allContests.filter(
-            (contest) => (contest.type ?? "").toUpperCase() === this.filter,
-          )
-    ).sort(byStartTimeDesc);
+    const contests = allContests
+      .filter((contest) => matchesFilter(contest, this.filter))
+      .sort(byStartTimeDesc);
 
     // Says "8 of 14" only when a filter is actually hiding something.
     this.countLabel.textContent =
       contests.length === allContests.length
-        ? `${allContests.length} contest${allContests.length === 1 ? "" : "s"}`
-        : `${contests.length} of ${allContests.length} contests`;
+        ? `${allContests.length} contest${allContests.length === 1 ? "" : "s"} tracking`
+        : `${contests.length} of ${allContests.length} contests tracking`;
 
     if (contests.length === 0) {
-      const label = this.filter === "OFFICIAL" ? "official" : "gym";
-      this.container.innerHTML = `<div class="muted">No ${label} contests in queue.</div>`;
+      this.container.innerHTML = `<div class="muted">Nothing matches that filter.</div>`;
       return;
     }
 
+    // The removal dialog needs the record behind a row, and the row only
+    // carries its key.
+    this.contestsByKey = new Map(contests.map((c) => [contestKey(c), c]));
+
     this.container.innerHTML = contests
-      .map((contest) => {
-        const isOfficial = contest.type === "OFFICIAL";
-        const path = isOfficial ? "contest" : "gym";
-        const label = isOfficial ? "Official" : "Gym";
-        const typeClass = isOfficial ? "type-official" : "type-gym";
-        const url = `https://codeforces.com/${path}/${contest.id}`;
-
-        // Scraped names carry stray newlines/indentation from the CF page.
-        const rawName = contest.name?.replace(/\s+/g, " ").trim();
-        const name = escapeHtml(rawName || `Contest ${contest.id}`);
-
-        // The button has to sit outside the anchor: nesting it would make
-        // every press navigate to Codeforces.
-        return `
-        <div class="contest-item">
-          <a href="${url}" target="_blank" class="contest-row">
-            <span class="contest-name">${name}</span>
-            <span class="contest-tags">
-              <span class="contest-id">#${contest.id}</span>
-              <span class="contest-type ${typeClass}">${label}</span>
-            </span>
-          </a>
-          <button type="button" class="contest-delete"
-                  data-id="${escapeHtml(contest.id)}"
-                  title="Hold to remove from queue">✕</button>
-        </div>
-      `;
-      })
+      .map((contest) => this.renderContest(contest, userRatings))
       .join("");
   }
 
-  disconnectedCallback() {
-    this.cancelHold();
-    document.removeEventListener("pointerup", this.boundCancelHold);
-    document.removeEventListener("pointercancel", this.boundCancelHold);
-    chrome.tabs.onActivated.removeListener(this.boundCheckActiveTab);
-    chrome.tabs.onUpdated.removeListener(this.boundTabUpdatedHandler);
+  renderContest(contest, userRatings) {
+    const platform = platformOf(contest);
+    const key = contestKey(contest);
+    const isOpen = this.expanded.has(key);
+
+    // Scraped names carry stray newlines/indentation from the CF page.
+    const rawName = contest.name?.replace(/\s+/g, " ").trim();
+    const name = escapeHtml(rawName || `Contest ${contest.id}`);
+    const safeKey = escapeHtml(key);
+
+    // The platform mark leads the name rather than sitting in the pill row: it
+    // says which site this contest is from, which belongs with its title, not
+    // among the id and type pills.
+    //
+    // No chevron: the expansion itself is the indicator. aria-expanded carries
+    // it for anything that can't see the difference.
+    return `
+      <div class="contest-item" data-key="${safeKey}">
+        <div class="contest-head">
+          <button type="button" class="contest-row" data-toggle-key="${safeKey}"
+                  aria-expanded="${isOpen}">
+            <span class="contest-name">
+              ${platformIcon(platform.id, platform.shortLabel)}
+              <span>${name}</span>
+            </span>
+            <span class="contest-tags">
+              ${platform
+                .contestFlags(contest)
+                .map((flag) => `<span class="contest-flag">${escapeHtml(flag)}</span>`)
+                .join("")}
+              <span class="contest-id">${escapeHtml(platform.contestIdLabel(contest))}</span>
+            </span>
+          </button>
+          <button type="button" class="contest-menu-btn" data-menu-key="${safeKey}"
+                  aria-haspopup="menu" aria-expanded="${this.openMenuKey === key}"
+                  title="More">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <circle cx="8" cy="3" r="1.6"></circle>
+              <circle cx="8" cy="8" r="1.6"></circle>
+              <circle cx="8" cy="13" r="1.6"></circle>
+            </svg>
+          </button>
+          ${this.openMenuKey === key ? this.renderMenu(platform, contest, safeKey) : ""}
+        </div>
+        ${isOpen ? this.renderProblems(contest, platform, userRatings) : ""}
+      </div>`;
   }
 
-  async checkActiveTab() {
-    this.currentValidUrl = null;
-    this.btnAddContest.disabled = true;
-    this.btnAddContest.textContent = "+ Add Contest";
-    this.btnAddContest.setAttribute("data-tooltip", "Checking current page...");
+  renderMenu(platform, contest, safeKey) {
+    return `
+      <div class="row-menu" role="menu">
+        <button type="button" class="row-menu-item" role="menuitem"
+                data-open-url="${escapeHtml(platform.contestUrl(contest))}">
+          Open contest ↗
+        </button>
+        <button type="button" class="row-menu-item is-danger" role="menuitem"
+                data-remove-key="${safeKey}">
+          Remove from queue
+        </button>
+      </div>`;
+  }
 
-    try {
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        lastFocusedWindow: true,
-      });
+  /**
+   * What this contest still owes the queue.
+   *
+   * Rendered with the queue's own row renderer in its compact form, so the two
+   * cannot disagree about ordering or about what a row says. Positions are
+   * omitted — the queue's numbering is global and would mislead here — and so
+   * are the platform mark and contest code, which the header above already
+   * carries.
+   *
+   * Deliberately scoped to this contest rather than deduplicated against the
+   * others: a problem shared with another division really is in both, and
+   * hiding it here would make the contest look shorter than it is.
+   */
+  renderProblems(contest, platform, userRatings) {
+    const pending = collectPendingProblems([contest])
+      .map((entry) => toProblemRow(entry, userRatings))
+      .sort(compareQueueItems);
 
-      if (tab && tab.url) {
-        const cfRegex =
-          /^https?:\/\/(www\.)?codeforces\.com\/(contest|gym)\/(\d+)/i;
-        const match = tab.url.match(cfRegex);
-
-        if (match) {
-          const contestId = match[3];
-          this.currentValidUrl = tab.url;
-
-          const contests = await LocalDB.getTrackedContests();
-          const isAlreadyTracked = contests.some(
-            (c) => c.id.toString() === contestId,
-          );
-
-          if (isAlreadyTracked) {
-            this.btnAddContest.disabled = true;
-            this.btnAddContest.textContent = "✓ Added";
-            this.btnAddContest.setAttribute(
-              "data-tooltip",
-              "Contest is already in your queue.",
-            );
-          } else {
-            this.btnAddContest.disabled = false;
-            this.btnAddContest.setAttribute(
-              "data-tooltip",
-              "Add this contest to the queue",
-            );
-          }
-        } else {
-          this.btnAddContest.setAttribute(
-            "data-tooltip",
-            "Must be on a CF contest or gym page.",
-          );
-        }
-      } else {
-        this.btnAddContest.setAttribute(
-          "data-tooltip",
-          "Navigate to a CF page first.",
-        );
-      }
-    } catch (error) {
-      console.error("Tab check failed:", error);
-      this.btnAddContest.setAttribute(
-        "data-tooltip",
-        "Error checking tab context.",
-      );
+    // A fully solved contest is dropped from storage by the refresh, so this
+    // should not happen — but an empty box would read as a broken expansion.
+    if (pending.length === 0) {
+      return `<div class="contest-problems">
+        <div class="muted contest-problems-empty">Nothing pending here.</div>
+      </div>`;
     }
+
+    // Column widths come from CSS: the container is a grid and each row
+    // borrows its columns with `subgrid`, so the names line up whatever the
+    // codes are. Measuring the widest code here and sizing in `ch` was tried
+    // and is too fragile — see the note in style.css.
+    return `<div class="contest-problems">${pending
+      .map((row) => renderProblemRow(row, { compact: true }))
+      .join("")}</div>`;
   }
+
+  disconnectedCallback() {
+    // The dismiss listeners are on document, so they outlive this view unless
+    // torn down here.
+    this.dismissMenu?.();
+    this.dismissMenu = null;
+    this.dismissModal?.();
+    this.dismissModal = null;
+  }
+
 }
 
 customElements.define("cf-contest-list", ContestList);

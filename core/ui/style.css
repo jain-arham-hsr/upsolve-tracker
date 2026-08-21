@@ -6,20 +6,70 @@
   --panel-bg: #1e1e1e;
   --text-main: #ffffff;
   --text-muted: #888888;
+
+  /* The top of a list row's ladder. Deliberately below --text-main: a row's
+     primary value at #fff is the loudest thing on a near-black panel, and at
+     weight 600 it glares. Everything that leads a row uses this — the contest
+     name, the problem title, the solve chance, an untinted rating — so no row
+     has one element brighter than its neighbours for no reason. Codeforces'
+     tinted ratings are the exception, because there the colour carries the
+     site's own meaning. */
+  --text-title: #dedede;
   --border-color: #333333;
   --accent-color: #f0f0f0;
   --accent-hover: #ffffff;
+
+  /* Nothing here is bundled or linked, so these render as their fallbacks on
+     almost every machine — measured, not assumed: "JetBrains Mono" and
+     "Courier New" produce identical text widths, which is what a fallback
+     looks like. The tail therefore has to be a face worth reading. It used to
+     land on Courier New, whose thin wide strokes are what made the panel's
+     numbers look sharp and made bold-vs-medium read as two families. */
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo,
+    Consolas, monospace;
+
+  /* Default mark size, used by every mark outside the queue's meta block:
+     the contest list, the filter, the add banner, the stats ring. The queue
+     overrides both of these on .meta-line rather than changing them here —
+     :root drives .platform-icon everywhere, so shrinking it globally shrank
+     marks in four other places. */
+  --mark-size: 14px;
+  --rating-size: 0.8rem;
+  /* Shared by both list views. These had drifted into eight separate literals
+     — padding, separator, title size and four badge properties — which is what
+     made the two tabs feel like different products rather than two views of
+     one thing. */
+  --row-pad-y: 14px;
+  --row-pad-x: 16px;
+  --row-separator: #2a2a2a;
+  --title-size: 0.875rem;
+  --title-line: 1.35;
+  --badge-size: 10px;
+  --badge-ink: #c2c2c2;
+  --badge-fill: rgba(255, 255, 255, 0.08);
+
+  /* system-ui's own metrics, as fractions of font-size, measured with canvas:
+     the font bounding box (0.9700 / 0.2100) locates the baseline inside a line
+     box, and the ink band (ascent 0.7261, descent 0.0120) locates the visible
+     centre above it. Together they seat a mark on a title's first line without
+     a tuned nudge — see .contest-name .platform-icon. */
+  --sans-fb-ascent: 0.97;
+  --sans-fb-descent: 0.21;
+  --sans-ink-center: 0.357;
+
+  /* Where digit ink sits, as a fraction of font-size above the baseline.
+     Measured off the mono stack with canvas actualBoundingBox metrics:
+     ascent 0.7290em, descent 0.0142em, so the ink band centres at
+     (0.7290 - 0.0142) / 2. Digits have no descenders, which is why centring
+     their *box* against a mark leaves the mark visibly low. */
+  --digit-ink-center: 0.357;
 }
 
 /* --- Global & App Layout --- */
 body {
-  font-family:
-    "Inter",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
+  font-family: var(--font-sans);
   background-color: var(--bg-color);
   color: var(--text-main);
   margin: 0;
@@ -208,11 +258,15 @@ cf-stats-view {
   flex-direction: column;
 }
 
+/* Also previously three competing blocks; this is their computed result. */
 .view-container {
   display: flex;
   flex-direction: column;
   flex: 1;
-  padding-top: 20px; /* Top padding only, list handles the rest */
+  min-height: 0; /* Respect the window height rather than growing past it */
+  height: 100%;
+  box-sizing: border-box;
+  padding: 16px;
 }
 
 /* --- View Meta Line --- */
@@ -239,14 +293,21 @@ cf-stats-view {
   padding-bottom: 20px;
 }
 
+/* Contest rows only — the queue has never carried this gap. */
+#contest-items {
+  margin-bottom: 12px;
+}
+
 /* --- Problem List Items --- */
 .problem-row {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 16px;
-  padding: 16px 20px; /* Edge-to-edge padding */
-  border-bottom: 1px solid var(--border-color);
+  /* 8, not 16: the index ends in a period, which already reads as a break, so
+     16px left the number looking detached from the title it numbers. */
+  gap: 8px;
+  padding: var(--row-pad-y) var(--row-pad-x);
+  border-bottom: 1px solid var(--row-separator);
   text-decoration: none;
   color: inherit;
   transition: background-color 0.15s ease; /* Animate the background highlight */
@@ -261,11 +322,17 @@ cf-stats-view {
 }
 
 .problem-index {
-  font-family: "Courier New", Courier, monospace;
+  font-family: var(--font-mono);
   font-weight: bold;
   font-size: 0.9rem;
   color: var(--text-muted);
-  min-width: 24px;
+  /* Wide enough for three digits and right-aligned, so every title starts at
+     the same x. At min-width 24px the box fitted "01." but grew for "146.",
+     which walked the title 8.7px right the moment the queue passed 99 —
+     measured, and invisible until you scrolled that far. A four-digit queue
+     would shift again, but 245 problems is already an unusual backlog. */
+  min-width: 36px;
+  text-align: right;
   margin-top: 2px; /* Visual alignment with the title */
 }
 
@@ -277,39 +344,175 @@ cf-stats-view {
 
 .problem-title {
   font-weight: 600;
-  font-size: 1rem;
-  margin-bottom: 6px;
+  /* Same treatment as the contest name, half a step larger: this is the sole
+     primary element of its view, and the row carries more padding around it.
+     Long titles like "Bowser's Castle (Medium Version)" now hold one line at
+     panel width. Not tied to any alignment maths — the row's mark is seated
+     against --rating-size, not this. */
+  font-size: var(--title-size);
+  letter-spacing: 0.1px;
+  color: var(--text-title);
+  /* The meta block below is two lines with a badge of its own, so it needs
+     clear separation from the title rather than the 6px that read as one
+     paragraph. Matters most on a title that wraps, where the second line
+     otherwise runs straight into the rating. */
+  margin-bottom: 11px;
 }
 
 .problem-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  /* 7, not more: the badge gained an edge of its own, so 4px had it crowding
+     the rating. Past 8 it stops reading as part of the same block and starts
+     belonging to the row beneath. */
+  gap: 7px;
   font-size: 0.85rem;
   color: var(--text-muted);
 }
 
+/* Which contest this came from, as a badge rather than loose text — every other
+   secondary value in the panel sits in a pill, so a bare string floating at the
+   end of the row was the one thing without an edge. Same fill and mono as the
+   id badge on the Contests tab, so one value reads the same in both places.
+
+   Dimmed and small: it is the least important thing in the row, and at #d4d4d4
+   it rendered brighter than the rating directly above it. */
 .source {
-  font-family: "Courier New", Courier, monospace;
-  font-size: 0.85rem;
-  color: #d4d4d4; /* High contrast for readability */
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--badge-size);
   font-weight: 500;
+  line-height: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: var(--badge-fill);
+  color: var(--badge-ink);
+}
+
+/* Seats the mark on the digits' ink centre by construction, not by a tuned
+   nudge. The line is baseline-aligned, so a replaced element's bottom edge
+   lands on the text baseline — putting the mark's centre --mark-size/2 above
+   it. The digits' ink centre is --digit-ink-center * --rating-size above it.
+   The difference is the correction, and it stays right if either the mark or
+   the rating changes size. The previous -2px was tuned against Courier New's
+   metrics and silently drifted when the font stack was fixed. */
+.meta-line .platform-icon {
+  transform: translateY(
+    calc(var(--mark-size) / 2 - var(--digit-ink-center) * var(--rating-size))
+  );
+}
+
+/* Each meta row pairs two values so the block stays two lines tall.
+   Baseline rather than centre: it is what makes the mark's alignment derivable
+   from font metrics (see .meta-line .platform-icon). */
+.meta-line {
+  /* Scoped down from the defaults. Both the mark's size and the offset that
+     seats it read --mark-size, so overriding it here resizes and re-seats in
+     one move — the alignment stays within 0.1px of the digits' ink, verified
+     by pixel measurement at 14, 13, 12 and 11px. */
+  --mark-size: 11px;
+  --rating-size: 0.7rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* The chance is one value and the mark+rating another, so they should not be
+   evenly spaced. 6px of gap plus this keeps the pair tight and the split wide. */
+.meta-line .solve-chance {
+  margin-right: 6px;
+}
+
+/* The rating, in its own platform's units. Tinted by that platform's band via
+   .tone-*, since an untinted "1500" beside an untinted "1757" reads as one
+   shared scale — the comparison the ordering model exists to avoid. */
+.rating {
+  font-family: var(--font-mono);
+  /* Shared with --digit-ink-center's offset maths — do not inline this. */
+  font-size: var(--rating-size);
+  font-weight: 600;
+}
+
+.rating.is-unrated {
+  color: var(--text-muted);
+}
+
+/* How likely you are to solve it — the value the queue is actually sorted by,
+   so it leads. An em dash here means a rating is missing, not a hard problem. */
+.solve-chance {
+  font-family: var(--font-mono);
+  font-size: var(--rating-size);
+  font-weight: 700;
+  color: var(--text-title);
+}
+
+/* Which site a row came from. The mark carries it; the text chip is only a
+   fallback for a platform that has no icon yet. */
+.platform-icon {
+  /* Driven by --mark-size (14px), which the alignment maths also reads. These
+     were two independent literals until a resize test proved they could drift:
+     shrinking the assumed size without shrinking the real one walked the mark
+     1.5px off the digits' ink. The AtCoder mark is drawn to survive 14px —
+     see platform-icons.js. */
+  width: var(--mark-size);
+  height: var(--mark-size);
+  flex-shrink: 0;
+  display: block;
+}
+
+.platform-chip {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
+}
+
+/* Marks a low-confidence published difficulty rather than passing it off as
+   measured. AtCoder flags about 11% of its models this way. */
+.rating-flag {
+  color: var(--text-muted);
+  font-weight: 700;
+  cursor: help;
 }
 
 /* --- Contest List Items --- */
+/* One declaration. This was previously spread across five blocks that each
+   overrode the last, so editing any one of them appeared to do nothing —
+   which matters, because the row is about to be rebuilt. Values here are the
+   computed result of that cascade, unchanged. */
 .contest-row {
+  /* A button rather than an anchor: clicking a row expands it in place now,
+     and opening the contest site moved into the row's menu. */
   display: flex;
-  align-items: center;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+  text-align: left;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border-color);
-  font-family: "Courier New", Courier, monospace;
-  color: var(--text-main);
-  transition: background-color 0.15s ease;
+  gap: 8px;
+  /* Even padding: only the *title* has to clear the menu button, and it takes
+     that inset itself (see .contest-name). Reserving 36px on the whole row
+     stranded the badges a menu-button's width short of the edge. */
+  padding: var(--row-pad-y) var(--row-pad-x);
+  border-bottom: 1px solid var(--row-separator);
+  font-family: var(--font-mono);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
 .contest-row:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: #222;
 }
 
 .contest-row:last-child {
@@ -348,19 +551,18 @@ cf-stats-view {
   padding: 20px;
 }
 
-/* --- The Flexbox Scrolling Fix --- */
+/* --- The Flexbox Scrolling Fix ---
+   Without min-height: 0 a flex item refuses to shrink below its content, so
+   the lists grow past the panel instead of scrolling inside it. `.view-container`
+   carries the same rule in its own block. */
 cf-app,
 #router-outlet,
 cf-queue-view,
 cf-contest-list,
-cf-stats-view,
-.view-container {
-  min-height: 0; /* Forces containers to respect the height of the window */
+cf-stats-view {
+  min-height: 0;
 }
 
-/* --- Additional Styles for Contest List --- */
-
-/* New List Header Alignment */
 /* Outline Button Variation */
 .btn.outline {
   background-color: transparent;
@@ -372,35 +574,6 @@ cf-stats-view,
 .btn.outline:hover {
   background-color: rgba(255, 255, 255, 0.05);
   border-color: #666;
-}
-
-/* Contest Row Restyling */
-.contest-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* Badges for Contest Types */
-.contest-type {
-  font-family: "Inter", sans-serif;
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  font-weight: 700;
-  padding: 3px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.5px;
-}
-
-.type-official {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #e0e0e0;
-}
-
-.type-gym {
-  background-color: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
 }
 
 /* --- Disabled Button State --- */
@@ -454,22 +627,7 @@ cf-stats-view,
 }
 
 /* Ensure the parent fills the side panel and organizes children */
-.view-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  box-sizing: border-box;
-  padding: 16px; /* Adjust based on your current padding */
-}
-
 /* Make the list fill the available space and scroll */
-#contest-items {
-  flex: 1;
-  overflow-y: auto;
-  margin-bottom: 12px;
-  /* Custom scrollbar to keep it looking clean */
-}
-
 #contest-items::-webkit-scrollbar {
   width: 4px;
 }
@@ -497,10 +655,13 @@ cf-stats-view,
   padding: 8px 0;
   border-radius: 4px;
   cursor: pointer;
-  font-family: "JetBrains Mono", monospace; /* Consistent with CF vibe */
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  /* Sans, sentence case: these are actions, not identifiers. Mono and caps
+     made them read as labels for something rather than buttons, and the panel
+     otherwise reserves mono for ids and numbers. Matches the dialog's Cancel
+     and Remove, which are the only other real buttons here. */
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8rem;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
@@ -526,39 +687,53 @@ cf-stats-view,
 }
 
 /* Ensure the anchor behaves like the previous div row */
-.contest-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 10px;
-  border-bottom: 1px solid #2a2a2a;
-  text-decoration: none; /* Remove default underline */
-  color: inherit; /* Inherit text color from theme */
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.contest-row:hover {
-  background-color: #222;
-  cursor: pointer;
-}
-
 /* Rows stack the full name above its meta pills, so names never truncate */
-.contest-row {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 14px 10px;
-}
-
 .contest-name {
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 0.9rem;
-  font-weight: 500;
-  line-height: 1.35;
-  color: var(--text-main);
+  /* Clears the absolutely-positioned menu button, which overlaps this line
+     only. The badge row below it is free to use the full width.
+     border-box, or width:100% plus the padding overflows the row and the
+     inset does nothing — box-sizing is not global in this stylesheet. */
+  box-sizing: border-box;
+  padding-right: 28px;
+  font-family: var(--font-sans);
+  /* Smaller but heavier than it was at 0.9rem/500: crisper against the badge
+     row, and long Codeforces titles wrap one line less often. Size and
+     line-height are shared with the mark's offset maths — don't inline them. */
+  font-size: var(--title-size);
+  line-height: var(--title-line);
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  /* Leads its row's ladder without glaring: id badge #c2c2c2 below it, then
+     the count line and subtype flags dimmer again. */
+  color: var(--text-title);
   width: 100%;
   overflow-wrap: anywhere;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The mark aligns with the *first* line of the title, not the centre of a
+   wrapped one. In a long list the eye runs down the left edge, and centring
+   would move each mark by however long its title happens to be — encoding
+   nothing, and making that edge ragged. A list marker does not re-centre when
+   its text wraps either.
+
+   Derived, not tuned — the same treatment the queue's marks got, because the
+   old "+0.8px" was calibrated against one font-size and silently went stale
+   when the title was restyled. Reading down from the top of the first line
+   box: half-leading is (L - A - D)/2, the baseline is A below that, and the
+   ink centre sits --sans-ink-center above the baseline. Collecting terms
+   leaves L/2 + (A - D)/2 - inkCentre, times the font size, less half a mark. */
+.contest-name .platform-icon {
+  margin-top: calc(
+    var(--title-size) *
+      (
+        var(--title-line) / 2 + (var(--sans-fb-ascent) - var(--sans-fb-descent)) /
+          2 - var(--sans-ink-center)
+      ) - var(--mark-size) / 2
+  );
 }
 
 /* Pill group, sitting under the name against the right edge. align-self
@@ -571,33 +746,55 @@ cf-stats-view,
   flex-shrink: 0;
 }
 
-/* Ensure the tags don't inherit the link's hover state incorrectly */
+/* Shared metrics only. Careful: this is a grouped selector list — dropping the
+   last one takes the whole rule with it (see the flexbox-scrolling comment). */
 .contest-id,
-.contest-type {
-  font-size: 10px;
+.contest-flag {
+  font-size: var(--badge-size);
+  /* Pinned, so the two boxes match: Inter and JetBrains Mono resolve different
+     normal line-heights at 10px, which left the id a pixel short of the flag. */
+  line-height: 12px;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 4px;
   text-transform: uppercase;
-  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+
+/* A box, but a soft one: a faint fill rather than an outline, because a 1px
+   border is a hard edge at this size and reads sharper than anything inside it.
+   Semibold too — at 500 the 10px caps came out spindly, and thin strokes are
+   the other half of what read as "sharp". It stays quieter than the id through
+   dimmer ink and a weaker fill, not through a lighter weight. */
+.contest-flag {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: #6b6b6b;
+  background-color: rgba(255, 255, 255, 0.055);
 }
 
 .contest-id {
-  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-family: var(--font-mono);
+  font-weight: bold;
+  background-color: var(--badge-fill);
+  color: var(--badge-ink);
+}
+
+/* Fallback chip for a platform with no mark yet. */
+.contest-platform {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: bold;
   letter-spacing: 0.5px;
-  background-color: rgba(255, 255, 255, 0.06);
-  color: var(--text-muted);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
 }
 
 /* --- Hold-to-Remove --- */
 
 /* Registered so the conic-gradient below is animatable at all; a plain
    custom property would jump from 0% to 100% instead of sweeping. */
-@property --hold-progress {
-  syntax: "<percentage>";
-  initial-value: 0%;
-  inherits: false;
-}
-
 .contest-item {
   position: relative;
 }
@@ -608,69 +805,8 @@ cf-stats-view,
   background-color: #222;
 }
 
-.contest-delete {
-  --hold-progress: 0%;
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  font-family: inherit;
-  font-size: 11px;
-  line-height: 1;
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease, color 0.15s ease;
-  background: conic-gradient(
-    rgba(239, 83, 80, 0.85) var(--hold-progress),
-    rgba(255, 255, 255, 0.07) 0
-  );
-}
-
-.contest-item:hover .contest-delete,
-.contest-delete:focus-visible {
-  opacity: 1;
-}
-
-.contest-delete:hover {
-  color: var(--text-main);
-}
-
-.contest-delete.holding {
-  color: #fff;
-  /* Duration is set from JS so it always matches the hold timer. */
-  animation: holdFill linear forwards;
-}
-
-@keyframes holdFill {
-  from {
-    --hold-progress: 0%;
-  }
-  to {
-    --hold-progress: 100%;
-  }
-}
-
 /* Keep the name and pills clear of the button */
-.contest-row {
-  padding-right: 36px;
-}
-
 /* --- Filter Toolbar --- */
-.list-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  margin-bottom: 16px;
-  flex-shrink: 0;
-}
-
 .filter-label {
   font-size: 0.65rem;
   text-transform: uppercase;
@@ -679,45 +815,10 @@ cf-stats-view,
   color: var(--text-muted);
 }
 
-.filter-select {
-  flex: 1;
-  appearance: none;
-  -webkit-appearance: none;
-  background-color: transparent;
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 6px 28px 6px 10px;
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    background-color 0.2s ease;
 
-  /* Custom chevron, since the native one can't be themed */
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6' fill='none' stroke='%23888888' stroke-width='1.5'><path d='M1 1l4 4 4-4'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 10px 6px;
-}
 
-.filter-select:hover {
-  border-color: #666;
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.filter-select:focus {
-  outline: none;
-  border-color: #666;
-}
 
 /* The dropdown list itself renders outside the panel's theme */
-.filter-select option {
-  background-color: var(--panel-bg);
-  color: var(--text-main);
-}
 
 /* --- Stats View --- */
 #stats-body {
@@ -777,8 +878,13 @@ cf-stats-view,
   padding: 3px 0;
 }
 
+/* Overview labels read "75-90%", so they need more room than a bucket number. */
+.hist-label.wide {
+  min-width: 52px;
+}
+
 .hist-label {
-  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
   min-width: 30px;
@@ -802,9 +908,9 @@ cf-stats-view,
 }
 
 .hist-count {
-  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-main);
+  color: var(--text-title);
   min-width: 16px;
   flex-shrink: 0;
 }
@@ -815,23 +921,90 @@ cf-stats-view,
 
 /* --- Tag Frequency --- */
 .tag-range {
+  margin: 10px 0 4px;
+}
+
+.range-head {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
-.filter-select.compact {
-  padding: 5px 24px 5px 8px;
-  font-size: 0.75rem;
-  background-position: right 8px center;
+.range-values {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--text-title);
 }
 
-.tag-range-sep {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  flex-shrink: 0;
+/* Two inputs stacked on one track. The inputs themselves take no pointer
+   events — only their thumbs do — so the lower one stays grabbable through
+   the upper one everywhere except where a thumb actually is. */
+.range-slider {
+  position: relative;
+  height: 18px;
 }
+
+.range-track,
+.range-fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.range-track {
+  left: 0;
+  right: 0;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.range-fill {
+  background-color: rgba(255, 255, 255, 0.32);
+}
+
+.range-input {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  background: none;
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: none;
+}
+
+.range-input:focus {
+  outline: none;
+}
+
+.range-input::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #dedede;
+  border: 2px solid var(--panel-bg);
+  cursor: grab;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.range-input::-webkit-slider-thumb:active {
+  cursor: grabbing;
+}
+
+.range-input:focus-visible::-webkit-slider-thumb {
+  border-color: var(--text-title);
+}
+
+
 
 .tag-range-caption {
   font-size: 0.7rem;
@@ -853,12 +1026,12 @@ cf-stats-view,
 
 .tag-name {
   font-size: 0.8rem;
-  color: var(--text-main);
+  color: var(--text-title);
   overflow-wrap: anywhere;
 }
 
 .tag-count {
-  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
   flex-shrink: 0;
@@ -878,27 +1051,79 @@ cf-stats-view,
   border-radius: 2px;
 }
 
-/* Codeforces rank colours, lightened for the dark panel */
+/* Rank colours, lightened for the dark panel. Defined once as variables so a
+   histogram bar (background) and a rating number (text) cannot drift apart.
+   These mean *rank on that platform* — each descriptor supplies its own
+   thresholds, since a Codeforces 1600 and an AtCoder 1600 are not the same
+   band. Deliberately not reused for the solve-chance chart, where the same
+   ramp would read as a verdict rather than as information. */
+:root {
+  --band-gray: #9e9e9e;
+  --band-green: #4caf50;
+  --band-cyan: #26c6da;
+  --band-blue: #5c85ff;
+  --band-violet: #c77dff;
+  --band-orange: #ffa726;
+  --band-red: #ef5350;
+}
+
 .band-gray {
-  background-color: #9e9e9e;
+  background-color: var(--band-gray);
 }
 .band-green {
-  background-color: #4caf50;
+  background-color: var(--band-green);
 }
 .band-cyan {
-  background-color: #26c6da;
+  background-color: var(--band-cyan);
 }
 .band-blue {
-  background-color: #5c85ff;
+  background-color: var(--band-blue);
 }
 .band-violet {
-  background-color: #c77dff;
+  background-color: var(--band-violet);
 }
 .band-orange {
-  background-color: #ffa726;
+  background-color: var(--band-orange);
 }
 .band-red {
-  background-color: #ef5350;
+  background-color: var(--band-red);
+}
+
+/* Platforms with no rank scheme of their own. Codeforces is the only one whose
+   colours mean something to a reader; borrowing them elsewhere would import a
+   meaning that does not transfer. */
+.band-neutral {
+  background-color: #6e7681;
+}
+
+/* A rating on a platform with no rank colours of its own. Level with the row's
+   other leading values rather than brighter than them — at --text-main it
+   out-shone the problem title beside it. */
+.tone-neutral {
+  color: var(--text-title);
+}
+
+/* The same palette as text, for a rating number in the queue. */
+.tone-gray {
+  color: var(--band-gray);
+}
+.tone-green {
+  color: var(--band-green);
+}
+.tone-cyan {
+  color: var(--band-cyan);
+}
+.tone-blue {
+  color: var(--band-blue);
+}
+.tone-violet {
+  color: var(--band-violet);
+}
+.tone-orange {
+  color: var(--band-orange);
+}
+.tone-red {
+  color: var(--band-red);
 }
 
 /* --- First-run Setup Prompt --- */
@@ -937,4 +1162,606 @@ cf-stats-view,
   text-align: center;
   font-weight: 500;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* --- Platform filter chips (Queue and Contests) --- */
+
+/* Sits inside .view-meta, at the right end of the count line — it is a
+   qualifier on that count, not a row of its own, and giving it one cost a
+   whole line of a panel this narrow. The padding and bottom margin it used
+   to need as a standalone row therefore go. */
+.list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  /* Anchors the filter panel, which is absolute so opening it never reflows
+     the rows beneath. */
+  position: relative;
+}
+
+
+
+
+
+/* --- Contextual add banner ---
+   Sits above the tab bar so the offer to add a contest is visible from any
+   view, and only appears when the active browser tab is actually on one. */
+
+.add-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background-color: var(--panel-bg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.add-banner.hidden {
+  display: none;
+}
+
+.add-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.add-banner-verb {
+  flex-shrink: 0;
+}
+
+.add-banner-text strong {
+  font-family: var(--font-mono);
+  color: var(--text-main);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-banner .btn {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+}
+
+
+/* --- Overview ring: where the backlog sits, by platform --- */
+
+/* Stacked, not side by side: the ring runs the full width of the panel and the
+   legend sits under it. */
+.ring-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 0 4px;
+}
+
+/* Positioning context for the centre text, which is HTML rather than SVG
+   <text> so it keeps its own size whatever the ring's is. */
+.ring-plot {
+  position: relative;
+  width: 100%;
+  /* Capped and centred. Left to fill the panel it read as disproportionate —
+     a 340px circle above a three-row legend. */
+  max-width: 220px;
+  margin: 0 auto;
+}
+
+.ring-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.ring-centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+/* Butt caps. Round ones bulge past the arc's own span, which both overran the
+   2px seam the renderer leaves between segments and made a 2-problem slice
+   render as a lozenge wider than its share. The seam alone separates them. */
+.ring-arc {
+  stroke-linecap: butt;
+}
+
+.ring-total {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-title);
+}
+
+.ring-caption {
+  font-family: var(--font-sans);
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ring-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* A button, because it navigates: the legend is the Overview's way into a
+   platform panel. Styled as a row rather than a control so the Overview still
+   reads as a chart with a key beneath it. */
+.ring-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 4px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--row-separator);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.ring-legend-row:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.ring-legend li:last-child .ring-legend-row {
+  border-bottom: none;
+}
+
+.ring-legend-chev {
+  color: #5a5a5a;
+  font-size: 15px;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+/* --- Drilled-into a platform --- */
+.stats-back {
+  background: none;
+  border: none;
+  padding: 0 0 8px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.stats-back:hover {
+  color: var(--text-title);
+}
+
+.stats-scope-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.stats-scope-name {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-title);
+}
+
+
+.ring-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Names and counts wear text tokens, not the series colour — the swatch and
+   the mark beside them carry identity. */
+.ring-legend-name {
+  color: var(--text-title);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ring-legend-count {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* --- Solve-chance bands: one hue, light to dark ---
+   An ordinal ramp, not the rank colours. Reusing green-through-red there put
+   most of a normal queue in a "red" band, which reads as a verdict on the
+   reader rather than as a count of hard problems. Steps come from the blue
+   ramp and stop at 600, so the darkest still clears the surface. */
+/* Sequential, one hue, light to dark — see the note above about why this is
+   not the rank colours. The hue is aqua rather than blue because blue is
+   now AtCoder's identity colour on the ring directly above this chart, and
+   a magnitude band sharing a colour with a platform reads as if it means
+   that platform. Every step sits at least 19.6 dE from all three identity
+   colours; lightness is strictly decreasing. */
+.chance-1 {
+  background-color: #a3f2cc;
+}
+.chance-2 {
+  background-color: #59dda7;
+}
+.chance-3 {
+  background-color: #2ac08a;
+}
+.chance-4 {
+  background-color: #209d70;
+}
+.chance-5 {
+  background-color: #2d795a;
+}
+.chance-6 {
+  background-color: #325947;
+}
+
+/* --- Platform filter dropdown ---
+   Replaced a chip row that grew with every platform and competed for width
+   with the very list it filters. One control stays one line however many
+   platforms exist. */
+
+.filter-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.filter-button:hover,
+.filter-button[aria-expanded="true"] {
+  color: var(--text-main);
+  border-color: var(--text-muted);
+}
+
+.filter-summary {
+  white-space: nowrap;
+}
+
+.filter-caret {
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+.filter-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  /* Right-anchored: the button now sits at the right end of the count line,
+     and a left-anchored panel would open off the edge of the side panel. */
+  right: 0;
+  z-index: 20;
+  min-width: 190px;
+  padding: 6px;
+  border-radius: 8px;
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  background-color: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  text-align: left;
+}
+
+.filter-row:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+}
+
+.filter-row[aria-pressed="true"] {
+  color: var(--text-main);
+}
+
+.filter-check {
+  width: 11px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--accent-color);
+}
+
+.filter-row-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Contest row: menu, expansion, removal dialog --- */
+
+.contest-head {
+  position: relative;
+}
+
+/* Replaces the hold-to-delete ✕. One button, and the destructive action sits
+   behind it rather than one press from every row. */
+.contest-menu-btn {
+  position: absolute;
+  top: 8px;
+  right: 4px;
+  /* 28, up from 24: this is the row's only control and it was under the 24px
+     minimum for a comfortable pointer target. */
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Visible at rest rather than hover-only. A control nobody can see until
+     they happen to hover the right row may as well not exist — and it is the
+     only way to open or remove a contest. */
+  opacity: 0.5;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.contest-item:hover .contest-menu-btn,
+.contest-item:hover .contest-menu-btn,
+.contest-menu-btn:hover,
+.contest-menu-btn:focus-visible,
+.contest-menu-btn[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.contest-menu-btn:hover,
+.contest-menu-btn[aria-expanded="true"] {
+  color: var(--text-main);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.row-menu {
+  position: absolute;
+  top: 32px;
+  right: 6px;
+  z-index: 30;
+  min-width: 168px;
+  padding: 5px;
+  border-radius: 8px;
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
+.row-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  text-align: left;
+}
+
+.row-menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+}
+
+.row-menu-item.is-danger:hover {
+  background-color: rgba(239, 83, 80, 0.14);
+  color: #ef5350;
+}
+
+/* The expansion. No chevron — this appearing is the indicator. */
+.contest-problems {
+  border-bottom: 1px solid #2a2a2a;
+  padding: 2px 0 8px;
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+/* --- Compact rows, for a contest's expansion ---
+   One line each, and deliberately quieter than the contest title above them:
+   full-size problem names competed with it for the eye, and every row repeated
+   the platform mark and contest code the header already shows.
+
+   The container owns the columns and each row borrows them with `subgrid`, so
+   every name starts at one x however long the codes are. Sizing the code
+   column in `ch` was tried and is too fragile: `ch` is the width of "0" in
+   whichever font actually resolves, which left eight characters of CodeChef
+   code in a box 0.2px wider than the text needed. Content-sized columns make
+   no font assumption at all, and the row stays a real element, so it keeps its
+   hover and its whole-row click target. */
+.contest-problems {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content max-content;
+}
+
+.problem-row.is-compact {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 16px 7px 22px;
+  border-bottom: none;
+}
+
+.compact-index {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.compact-name {
+  min-width: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-chance {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-main);
+  text-align: right;
+}
+
+.compact-rating {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.compact-rating.is-unrated {
+  color: var(--text-muted);
+}
+
+.contest-problems-empty {
+  grid-column: 1 / -1;
+  padding: 10px 22px;
+  font-size: 0.78rem;
+}
+
+/* --- Removal confirmation --- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 300px;
+  padding: 16px;
+  border-radius: 10px;
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.6);
+}
+
+.modal-title {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 12px;
+}
+
+/* The contest being removed, in the same badge language the list uses for a
+   contest id — it names a record, so it should look like one. Carries its
+   platform mark for the same reason the row does: the dialog should visibly
+   name the row it was opened from. */
+.modal-body strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: bold;
+  line-height: 12px;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.06);
+  color: #c2c2c2;
+  margin-bottom: 10px;
+}
+
+/* Same construction as the queue's mark: bottom edge on the baseline, pushed
+   down by half the mark less the ink centre. See .meta-line .platform-icon. */
+.modal-body strong .platform-icon {
+  width: 12px;
+  height: 12px;
+  transform: translateY(calc(6px - var(--digit-ink-center) * 0.72rem));
+}
+
+.modal-body .help-text {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* Was undefined, so Cancel fell through to the browser's default button —
+   a white block that was the loudest thing in a dialog about deleting
+   something. Quiet by default; the destructive action is the coloured one. */
+.btn.secondary {
+  background-color: transparent;
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  font-weight: 500;
+}
+
+.btn.secondary:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: #555;
+}
+
+.btn.danger {
+  background-color: #ef5350;
+  color: #1a1a1a;
+}
+
+.btn.danger:hover {
+  background-color: #f4706d;
 }

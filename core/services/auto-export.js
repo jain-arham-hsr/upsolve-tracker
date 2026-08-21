@@ -6,6 +6,9 @@
  */
 import { loadDirHandle } from "./secure-store.js";
 
+// Deliberately unchanged by the rebrand. Writing to a new name would leave
+// the existing backup behind as a stale file, and anyone restoring from that
+// one later would silently lose everything added since.
 export const BACKUP_FILENAME = "cf_trainer_backup.json";
 
 /**

@@ -4,11 +4,14 @@ import {
   clearDirHandle,
   saveCredentials,
   loadCredentials,
-} from "../../services/secure-store";
+} from "../../services/secure-store.js";
 import { CodeforcesService } from "../../services/codeforces-service.js";
+import * as codechefAdapter from "../../platforms/codechef/adapter.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const handleInput = document.getElementById("cf-handle");
+  const atcoderHandleInput = document.getElementById("atcoder-handle");
+  const codechefHandleInput = document.getElementById("codechef-handle");
   const apiKeyInput = document.getElementById("api-key");
   const apiSecretInput = document.getElementById("api-secret");
 
@@ -16,6 +19,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const folderInfo = document.getElementById("folder-info");
   const folderStatus = document.getElementById("folder-status");
   const chooseFolderBtn = document.getElementById("choose-folder-btn");
+
+  const codechefStatus = document.getElementById("codechef-status");
 
   const saveBtn = document.getElementById("save-btn");
   const saveMsg = document.getElementById("save-msg");
@@ -29,13 +34,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   // JOB 1: LOAD EXISTING SETTINGS
   // ==========================================
   const [storageResult, credentials, dirHandle] = await Promise.all([
-    chrome.storage.local.get(["cf_trainer.handle", "cf_trainer.auto_export"]),
+    chrome.storage.local.get([
+      "cf_trainer.handle",
+      "cf_trainer.atcoder_handle",
+      "cf_trainer.codechef_handle",
+      "cf_trainer.auto_export",
+    ]),
     loadCredentials(),
     loadDirHandle(),
   ]);
 
   if (storageResult["cf_trainer.handle"])
     handleInput.value = storageResult["cf_trainer.handle"];
+  if (storageResult["cf_trainer.atcoder_handle"])
+    atcoderHandleInput.value = storageResult["cf_trainer.atcoder_handle"];
+  if (storageResult["cf_trainer.codechef_handle"])
+    codechefHandleInput.value = storageResult["cf_trainer.codechef_handle"];
   if (credentials.apiKey) apiKeyInput.value = credentials.apiKey;
   if (credentials.apiSecret) apiSecretInput.value = credentials.apiSecret;
 
@@ -126,6 +140,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     await Promise.all([
       chrome.storage.local.set({
         "cf_trainer.handle": handleInput.value.trim(),
+        "cf_trainer.atcoder_handle": atcoderHandleInput.value.trim(),
+        "cf_trainer.codechef_handle": codechefHandleInput.value.trim(),
         "cf_trainer.auto_export": autoExportCheckbox.checked,
       }),
       saveCredentials(apiKeyInput.value.trim(), apiSecretInput.value.trim()),
@@ -134,4 +150,55 @@ document.addEventListener("DOMContentLoaded", async () => {
     saveMsg.classList.remove("hidden");
     setTimeout(() => saveMsg.classList.add("hidden"), 2500);
   });
+
+  // ==========================================
+  // JOB 5: WHOSE CODECHEF ACCOUNT IS THIS?
+  // ==========================================
+  //
+  // CodeChef is the one platform whose identity is ambient — it comes from the
+  // browser session rather than anything typed here. That makes it the one
+  // worth showing plainly: the dangerous state is being signed in as someone
+  // else, which otherwise looks exactly like a normal sync.
+  await renderCodeChefStatus();
+  codechefHandleInput.addEventListener("change", () => renderCodeChefStatus());
+
+  async function renderCodeChefStatus() {
+    const setStatus = (text, ok) => {
+      codechefStatus.textContent = text;
+      codechefStatus.classList.toggle("failure", ok === false);
+    };
+
+    const handle = codechefHandleInput.value.trim();
+    if (!handle) {
+      setStatus("");
+      return;
+    }
+
+    let session;
+    try {
+      session = await codechefAdapter.createSession();
+    } catch {
+      setStatus("Couldn't reach codechef.com to check.", false);
+      return;
+    }
+
+    if (!session.signedIn) {
+      setStatus(`Signed out — sign in as ${handle} at codechef.com to sync.`, false);
+      return;
+    }
+
+    // The state this check exists for. CodeChef answers for whoever holds the
+    // session cookie, so a mismatch means the next sync would read somebody
+    // else's solved problems.
+    if (session.signedInAs !== handle) {
+      setStatus(
+        `✕ Signed in as ${session.signedInAs}, not ${handle}. Syncing is paused until they match.`,
+        false,
+      );
+      return;
+    }
+
+    const rating = session.rating == null ? "unrated" : `rating ${session.rating}`;
+    setStatus(`✓ Signed in as ${handle} — ${rating}.`, true);
+  }
 });

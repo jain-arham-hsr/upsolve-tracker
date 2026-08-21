@@ -1,93 +1,155 @@
-import { CodeforcesService } from "./services/codeforces-service.js";
+/**
+ * Re-syncs the queue against what the user has actually solved.
+ */
 import { LocalDB } from "./services/storage.js";
-import { loadCredentials } from "./services/secure-store.js";
-import { syncOfficialProblemData } from "./problemset-sync.js";
-import { syncStartTimes } from "./start-time-service.js";
+import {
+  listPlatforms,
+  platformOf,
+  contestsOnPlatform,
+  DEFAULT_PLATFORM_ID,
+} from "./platforms/registry.js";
+import { getAdapter } from "./platforms/adapters.js";
+import { storeFetchedRatings } from "./services/user-ratings.js";
+import {
+  settleIdentity,
+  clearSolvedForPlatform,
+} from "./services/platform-identity.js";
 
 /**
- * Fetches all accepted submissions for a user and returns them as a Set
- * of "contestId-index" keys for fast lookup.
- * @param {CodeforcesService} cfService
- * @param {string} handle
- * @returns {Promise<Set<string>>}
+ * Reconciles local contest data with each platform's submission history.
+ * Updates the 'solved' status for individual problems and removes contests
+ * that are 100% completed.
+ *
+ * @returns {Promise<{removed: Object[], failures: Object[]}>} contests dropped
+ *   for being fully solved, and any platform that refused to sync. Failures
+ *   are returned rather than only logged: refusing silently looks the same to
+ *   the user as corrupting silently.
  */
-export async function buildSolvedKeys(cfService, handle) {
-  const submissions = await cfService.getUserStatus(handle);
-  return new Set(
-    submissions
-      .filter((s) => s.verdict === "OK")
-      .map((s) => `${s.problem.contestId}-${s.problem.index}`),
+export async function updateSolvedStatus(onProgress = () => {}) {
+  const trackedContests = await LocalDB.getTrackedContests();
+
+  const { solvedKeys, ratings, failures, anySucceeded } = await syncPlatforms(
+    trackedContests,
+    onProgress,
   );
+
+  // Only platforms that actually answered. A failed lookup must leave the
+  // previous rating in place, not blank it and re-sort the queue.
+  await storeFetchedRatings(ratings);
+
+  // Every platform failed — usually an unconfigured extension or an outage.
+  // Returning before the write keeps a bad sync from touching storage at all.
+  if (!anySucceeded) return { removed: [], failures };
+
+  onProgress("Updating your queue…");
+  const { kept, removed } = applySolvedStatus(trackedContests, solvedKeys);
+
+  await LocalDB.saveTrackedContests(kept);
+
+  return { removed, failures };
 }
 
 /**
- * Reconciles local contest data with Codeforces submission history.
- * Updates the 'solved' status for individual problems and removes
- * contests that are 100% completed.
- * * @returns {Promise<Object[]>} List of {type, id} for contests removed.
+ * Marks solved problems and splits off contests that are now complete.
+ *
+ * Pure, and separated out because it is the step that would fail quietly:
+ * clearing a solved flag, or dropping a contest that isn't finished, both look
+ * like ordinary behaviour until the queue is wrong.
+ *
+ * @returns {{kept: object[], removed: {type: string, id: string}[]}}
  */
-export async function updateSolvedStatus(onProgress = () => {}) {
-  // 1. Fetch credentials from storage
-  const [storageSettings, { apiKey, apiSecret }] = await Promise.all([
-    chrome.storage.local.get("cf_trainer.handle"),
-    loadCredentials(),
-  ]);
+export function applySolvedStatus(contests, solvedKeys) {
+  const kept = [];
+  const removed = [];
 
-  const handle = storageSettings["cf_trainer.handle"];
-
-  // Exit if credentials haven't been set up yet
-  if (!handle || !apiKey || !apiSecret) {
-    console.warn("[Progress Manager] Missing API credentials. Skipping sync.");
-    return [];
-  }
-
-  // 2. Initialize service and fetch solved keys
-  const cfService = new CodeforcesService(apiKey, apiSecret);
-  onProgress("Checking your submissions…");
-  const solvedKeys = await buildSolvedKeys(cfService, handle);
-
-  // 3. Update the Queue
-  const trackedContests = await LocalDB.getTrackedContests();
-
-  // Fill in metadata for contests still missing it. Both no-op once every
-  // contest is resolved, so they usually cost nothing.
-  await syncOfficialProblemData(cfService, trackedContests, onProgress);
-  await syncStartTimes(cfService, trackedContests, onProgress);
-
-  onProgress("Updating your queue…");
-  const updatedContests = [];
-  const removedDetails = [];
-
-  for (const contest of trackedContests) {
+  for (const contest of contests) {
     let allSolved = true;
+    const platform = platformOf(contest);
 
-    // Update the 'solved' boolean for every problem in the contest
     contest.problems.forEach((prob) => {
-      // Check if problem is in the latest "OK" submissions
-      if (solvedKeys.has(`${contest.id}-${prob.index}`)) {
+      // `solved` is only ever set true, never cleared. That stickiness is
+      // load-bearing: a platform that answers with an empty solved list —
+      // because the user is logged out, say — must not resurrect problems
+      // they have already finished.
+      if (solvedKeys.has(platform.solvedKey(contest, prob))) {
         prob.solved = true;
       }
 
-      // If any problem remains unsolved, the contest isn't finished
-      if (!prob.solved) {
-        allSolved = false;
-      }
+      if (!prob.solved) allSolved = false;
     });
 
     if (allSolved) {
-      // Contest is finished: Capture details for the UI alert and exclude from update
-      removedDetails.push({
-        type: contest.type === "OFFICIAL" ? "Official contest" : "Gym contest",
-        id: contest.id,
-      });
+      removed.push({ type: platform.contestLabel(contest), id: contest.id });
     } else {
-      // Contest still has pending problems: Keep it in the list
-      updatedContests.push(contest);
+      kept.push(contest);
     }
   }
 
-  // 4. Persist the updated state to Local Storage
-  await LocalDB.saveTrackedContests(updatedContests);
+  return { kept, removed };
+}
 
-  return removedDetails;
+/**
+ * Asks every platform that has contests tracked for its solved history, your
+ * rating there, and any metadata it owes.
+ *
+ * Failures are isolated per platform: one site being down or unconfigured
+ * must not stop the others syncing, and must never clear anything.
+ */
+async function syncPlatforms(trackedContests, onProgress) {
+  const solvedKeys = new Set();
+  const ratings = {};
+  const failures = [];
+  let anySucceeded = false;
+
+  for (const platform of listPlatforms()) {
+    const mine = contestsOnPlatform(trackedContests, platform.id);
+    if (mine.length === 0) continue;
+
+    const adapter = getAdapter(platform.id);
+    if (!adapter) continue;
+
+    try {
+      const session = await adapter.createSession();
+
+      // Establish *whose* data this is before reading a single user-specific
+      // byte. Everything below writes to `solved` or to a rating the queue
+      // orders by, and both are effectively permanent once wrong.
+      const identity = await adapter.verifyIdentity(session);
+      const verdict = await settleIdentity(platform, identity);
+
+      if (verdict === "changed") {
+        // The stored flags are a cache of the *old* account's history; leaving
+        // them would keep hiding problems this account has never solved.
+        const cleared = clearSolvedForPlatform(
+          trackedContests,
+          platform.id,
+          DEFAULT_PLATFORM_ID,
+        );
+        console.warn(
+          `[Progress Manager] ${platform.label} account changed to ${identity.username}; ` +
+            `cleared ${cleared} stale solved flag(s).`,
+        );
+      }
+
+      const keys = await adapter.fetchSolvedKeys(session, mine, onProgress);
+      keys.forEach((key) => solvedKeys.add(key));
+
+      // Verified in the same call as the identity, so no extra request.
+      ratings[platform.id] = identity.rating;
+
+      // Fill in metadata for contests still missing it. Handed only this
+      // platform's contests, since these match on bare contest ids.
+      await adapter.syncMetadata?.(session, mine, onProgress);
+
+      anySucceeded = true;
+    } catch (error) {
+      // Isolated: one platform failing must not stop the others, and must
+      // leave every flag exactly as it found it. Surfaced rather than only
+      // logged — a silent refusal reads the same as a silent corruption.
+      console.warn(`[Progress Manager] ${platform.label} sync failed:`, error.message);
+      failures.push({ platform: platform.label, message: error.message });
+    }
+  }
+
+  return { solvedKeys, ratings, failures, anySucceeded };
 }

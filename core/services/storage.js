@@ -2,6 +2,8 @@
  * services/storage.js
  * A clean wrapper for chrome.storage.local
  */
+import { contestKey, makeContestKey } from "../platforms/registry.js";
+
 export class LocalDB {
   // ==========================================
   // 1. TRACKED CONTESTS (The Static Data)
@@ -25,13 +27,19 @@ export class LocalDB {
   }
 
   /**
-   * Adds a single contest (with its fetched ratings) to the storage.
-   * Uses an 'Upsert' logic to prevent duplicate contest IDs.
+   * Adds a single contest to storage, replacing any existing record for the
+   * same contest.
+   *
+   * Identity is platform + id, not id alone: Codeforces contest 1000 and a
+   * CodeChef contest "1000" are different contests, and keying on the bare id
+   * would have one silently overwrite the other. Records written before
+   * platforms existed key as Codeforces (see registry.js).
    */
   static async addTrackedContest(newContest) {
     const contests = await this.getTrackedContests();
+    const key = contestKey(newContest);
 
-    const existingIndex = contests.findIndex((c) => c.id === newContest.id);
+    const existingIndex = contests.findIndex((c) => contestKey(c) === key);
     if (existingIndex >= 0) {
       contests[existingIndex] = newContest; // Overwrite if it already exists
     } else {
@@ -44,11 +52,15 @@ export class LocalDB {
   /**
    * Drops a contest from the queue. Ids are compared as strings because
    * imported backups can carry them as numbers.
+   *
+   * @param {string} platformId
+   * @param {string|number} contestId
    */
-  static async removeTrackedContest(contestId) {
+  static async removeTrackedContest(platformId, contestId) {
     const contests = await this.getTrackedContests();
+    const key = makeContestKey(platformId, contestId);
     await this.saveTrackedContests(
-      contests.filter((contest) => String(contest.id) !== String(contestId)),
+      contests.filter((contest) => contestKey(contest) !== key),
     );
   }
 

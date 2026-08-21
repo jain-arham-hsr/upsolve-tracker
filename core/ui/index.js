@@ -7,6 +7,11 @@ import {
   writeBackup,
 } from "../services/auto-export.js";
 import { hasCompleteSetup } from "../services/secure-store.js";
+import { processNewContest } from "../contest-manager.js";
+import { LocalDB } from "../services/storage.js";
+import { matchContestUrl, findTrackedContest } from "../platforms/registry.js";
+import { escapeHtml } from "./escape-html.js";
+import { platformIcon } from "./platform-icons.js";
 
 // Inline so it inherits the header's colour and hover transition, which a
 // colour emoji would ignore. Knobs are filled with the header background so
@@ -33,11 +38,132 @@ export class CFApp extends HTMLElement {
     this.btnRefresh = this.querySelector("#btn-refresh");
     this.syncStatus = this.querySelector("#sync-status");
     this.tabBar = this.querySelector("#tab-bar");
+    this.addBanner = this.querySelector("#add-banner");
 
     this.btnSettings.innerHTML = SETTINGS_ICON;
 
     this.setupListeners();
+    this.watchActiveTab();
     this.navigate("cf-queue-view");
+  }
+
+  disconnectedCallback() {
+    chrome.tabs.onActivated.removeListener(this.boundCheckActiveTab);
+    chrome.tabs.onUpdated.removeListener(this.boundTabUpdated);
+  }
+
+  /**
+   * Adding a contest is a *contextual* action, not a navigational one — it is
+   * only ever possible when the active browser tab is on a contest page. So
+   * the offer lives in the shell, where it is visible from any view, rather
+   * than behind the Contests tab where it spent most of its life greyed out.
+   */
+  watchActiveTab() {
+    this.boundCheckActiveTab = () => this.checkActiveTab();
+    this.boundTabUpdated = (_tabId, changeInfo) => {
+      if (changeInfo.url || changeInfo.status === "complete") this.checkActiveTab();
+    };
+
+    chrome.tabs.onActivated.addListener(this.boundCheckActiveTab);
+    chrome.tabs.onUpdated.addListener(this.boundTabUpdated);
+
+    this.addBanner.addEventListener("click", (event) => {
+      if (event.target.closest("#btn-add-contest")) this.handleAddContest();
+    });
+
+    this.checkActiveTab();
+  }
+
+  async checkActiveTab() {
+    try {
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        lastFocusedWindow: true,
+      });
+
+      const match = tab?.url ? matchContestUrl(tab.url) : null;
+      if (!match) {
+        this.pendingContest = null;
+        this.addBanner.classList.add("hidden");
+        return;
+      }
+
+      // Matches the stored id or the one it was added from — a CodeChef
+      // parent resolves to a division, so /START252 is stored as START252D
+      // and a bare key comparison would offer to add it a second time.
+      const tracked = findTrackedContest(
+        await LocalDB.getTrackedContests(),
+        match.platform.id,
+        match.contestId,
+      );
+
+      this.pendingContest = { url: tab.url, match, tracked };
+      this.renderAddBanner();
+    } catch (error) {
+      console.error("Tab check failed:", error);
+      this.addBanner.classList.add("hidden");
+    }
+  }
+
+  renderAddBanner(state = {}) {
+    const pending = this.pendingContest;
+    if (!pending) return;
+
+    const { match, tracked } = pending;
+
+    // Name the contest actually stored, not the URL: landing on a CodeChef
+    // parent should say which division is tracked.
+    const shownId = tracked?.id ?? match.contestId;
+    const label = state.label ?? (tracked ? "\u2713 Added" : "Add");
+    const disabled = state.busy || tracked ? " disabled" : "";
+
+    this.addBanner.innerHTML = `
+      <span class="add-banner-text">
+        <span class="add-banner-verb">${tracked ? "Tracking" : "Add"}</span>
+        ${platformIcon(match.platform.id, match.platform.shortLabel)}
+        <strong>${escapeHtml(String(shownId))}</strong>
+      </span>
+      <button type="button" id="btn-add-contest" class="btn outline"${disabled}>${escapeHtml(label)}</button>`;
+    this.addBanner.classList.remove("hidden");
+  }
+
+  async handleAddContest() {
+    const pending = this.pendingContest;
+    if (!pending || pending.tracked) return;
+
+    // Unlock the export handle while the click is still fresh. A lapsed
+    // permission can only be re-prompted under user activation, which will not
+    // survive the network work below.
+    const dirHandle = await verifyExportPermission();
+
+    this.renderAddBanner({ busy: true, label: "Adding\u2026" });
+
+    try {
+      // The stored record comes back, which is what lets the banner name the
+      // resolved division rather than the parent code the URL carried.
+      const contest = await processNewContest(pending.url, (message) =>
+        message === null ? this.clearSyncStatus() : this.setSyncStatus(message),
+      );
+
+      pending.tracked = contest;
+      this.renderAddBanner();
+
+      if (dirHandle && !(await writeBackup(dirHandle))) {
+        this.setSyncStatus("Added, but auto-export failed to write the file.", {
+          sticky: true,
+        });
+      }
+
+      const currentView = this.routerOutlet.firstElementChild;
+      if (typeof currentView?.refreshData === "function") {
+        await currentView.refreshData();
+      }
+    } catch (error) {
+      this.setSyncStatus(error.message, { sticky: true });
+      this.renderAddBanner({ label: "Add" });
+    } finally {
+      this.clearSyncStatus();
+    }
   }
 
   setupListeners() {
@@ -71,7 +197,7 @@ export class CFApp extends HTMLElement {
     // button. Say so instead.
     if (!(await hasCompleteSetup())) {
       this.setSyncStatus(
-        "Add your handle and API key in Settings to sync.",
+        "Add a handle in Settings to sync.",
         { sticky: true },
       );
       this.clearSyncStatus();
@@ -90,8 +216,8 @@ export class CFApp extends HTMLElement {
 
     try {
       // 3. Run the sync logic, reporting each stage as it starts
-      const removedContests = await updateSolvedStatus((message) =>
-        this.setSyncStatus(message),
+      const { removed: removedContests, failures } = await updateSolvedStatus(
+        (message) => this.setSyncStatus(message),
       );
 
       // 4. The sync rewrites stored contests, so the backup has to follow it
@@ -105,6 +231,18 @@ export class CFApp extends HTMLElement {
       const currentView = this.routerOutlet.firstElementChild;
       if (currentView && typeof currentView.refreshData === "function") {
         await currentView.refreshData(removedContests);
+      }
+
+      // 6. Report a refusal *last*, so nothing overwrites it. A platform
+      // declining to sync — someone else signed into CodeChef, say — has to be
+      // seen: skipping it silently looks exactly like a successful sync, which
+      // was half the problem the identity check exists to fix. Reporting it
+      // earlier let "Writing backup…" clear it for precisely the users whose
+      // backup is at risk.
+      if (failures.length > 0) {
+        const [first] = failures;
+        const more = failures.length > 1 ? ` (+${failures.length - 1} more)` : "";
+        this.setSyncStatus(`${first.message}${more}`, { sticky: true });
       }
     } catch (error) {
       console.error("Refresh failed:", error);

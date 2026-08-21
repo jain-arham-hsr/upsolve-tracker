@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CF Trainer</title>
+  <title>Upsolve Tracker</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 
@@ -14,17 +14,22 @@
 
   <template id="tpl-app">
     <header class="app-header">
-      <div class="brand">CF TRAINER</div>
+      <div class="brand">UPSOLVE</div>
       <div class="controls">
         <button id="btn-refresh" class="icon-btn" title="Refresh solved status">
-          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-            <path d="M13.5 8a5.5 5.5 0 1 1-5.5-5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
-            <path d="M8 0.4l3 2.1-3 2.1z" fill="currentColor"></path>
+          <!-- One filled path, not a stroke plus a separate head: the head is part
+               of the same shape, so it seats on the arc's end at any size instead
+               of floating beside it the way the previous two attempts did. Nearly
+               a full turn, with the gap and the head both at the top. -->
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-8 8s3.57 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"></path>
           </svg>
         </button>
         <button id="btn-settings" class="icon-btn" title="Settings"></button>
       </div>
     </header>
+
+    <div id="add-banner" class="add-banner hidden"></div>
 
     <nav id="tab-bar" class="tab-bar">
       <button type="button" class="tab" data-view="cf-queue-view">Queue</button>

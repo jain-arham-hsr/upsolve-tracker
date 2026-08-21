@@ -1,4 +1,4 @@
-import { sampleParticipantHandles } from "./services/scraping-service";
+import { sampleParticipantHandles } from "./services/scraping-service.js";
 
 /**
  * A rating distribution the estimator can work from, as one or more strata.

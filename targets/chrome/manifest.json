@@ -1,10 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "CF Trainer",
-  "version": "1.4",
-  "description": "Systematically upsolve Codeforces contests.",
+  "name": "Upsolve Tracker",
+  "version": "2.0",
+  "description": "Systematically upsolve Codeforces, AtCoder and CodeChef contests.",
   "permissions": ["activeTab", "storage", "sidePanel"],
-  "host_permissions": ["*://*.codeforces.com/*"],
+  "host_permissions": [
+    "*://*.codeforces.com/*",
+    "*://*.atcoder.jp/*",
+    "*://kenkoooo.com/*",
+    "*://*.codechef.com/*"
+  ],
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -12,7 +17,7 @@
     "512": "icons/icon-512.png"
   },
   "action": {
-    "default_title": "Open CF Trainer",
+    "default_title": "Open Upsolve Tracker",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png"

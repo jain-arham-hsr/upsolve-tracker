@@ -1,7 +1,16 @@
 import templateHtml from "./queue-view.html?raw";
 import { LocalDB } from "../../services/storage.js";
-import { escapeHtml } from "../escape-html.js";
 import { hasCompleteSetup } from "../../services/secure-store.js";
+import { matchesFilter } from "../../platforms/registry.js";
+import { collectPendingProblems } from "../../pending-problems.js";
+import {
+  loadFilter,
+  renderFilterControl,
+  bindFilterControl,
+} from "../platform-filter.js";
+import { getEffectiveRatings } from "../../services/user-ratings.js";
+import { compareQueueItems } from "../../queue-order.js";
+import { toProblemRow, renderProblemRow } from "../problem-row.js";
 
 export class QueueView extends HTMLElement {
   constructor() {
@@ -22,6 +31,22 @@ export class QueueView extends HTMLElement {
     // Nothing here works without credentials, so say so up front rather than
     // letting the queue look merely empty.
     this.setupPrompt.classList.toggle("hidden", await hasCompleteSetup());
+
+    // Persisted, not held on the instance: the view is rebuilt on every tab
+    // switch. Shared with the Contests tab so the two agree.
+    this.filter = await loadFilter();
+    this.filterControl = this.querySelector("#queue-filter");
+    this.renderFilter();
+
+    bindFilterControl(
+      this.filterControl,
+      () => this.filter,
+      async (next) => {
+        this.filter = next;
+        this.renderFilter();
+        await this.renderQueue();
+      },
+    );
 
     await this.renderQueue();
   }
@@ -53,36 +78,33 @@ export class QueueView extends HTMLElement {
     }, 6000);
   }
 
+  renderFilter() {
+    if (this.filterControl) {
+      this.filterControl.innerHTML = renderFilterControl(this.filter ?? []);
+    }
+  }
+
   async renderQueue() {
-    const contests = await LocalDB.getTrackedContests();
-    const upsolveList = [];
+    const [allContests, userRatings] = await Promise.all([
+      LocalDB.getTrackedContests(),
+      getEffectiveRatings(),
+    ]);
 
-    // 1. Collect all unsolved problems
-    contests.forEach((contest) => {
-      const isOfficial =
-        contest.type && contest.type.toUpperCase() === "OFFICIAL";
-      const path = isOfficial ? "contest" : "gym";
+    // Shared with the Contests tab, so the two views agree on what's in scope.
+    const contests = allContests.filter((contest) =>
+      matchesFilter(contest, this.filter ?? []),
+    );
 
-      contest.problems.forEach((prob) => {
-        if (!prob.solved) {
-          upsolveList.push({
-            ...prob,
-            contestId: contest.id,
-            url: `https://codeforces.com/${path}/${contest.id}/problem/${prob.index}`,
-            sourceLabel: `${isOfficial ? "Contest" : "Gym"} ${contest.id}${prob.index}`,
-          });
-        }
-      });
-    });
+    // Deduplicated: the same problem belongs to several contests on AtCoder
+    // and CodeChef, so a flat walk would list it more than once.
+    const upsolveList = collectPendingProblems(contests)
+      .map((pending) => toProblemRow(pending, userRatings))
+      // Easiest first, by solve probability. See queue-order.js for why the
+      // rows without one split into two bands rather than one.
+      .sort(compareQueueItems);
 
-    // 2. Sort by rating (Ascending: easiest to hardest)
-    // Problems with null ratings are treated as 9999 to appear at the end.
-    upsolveList.sort((a, b) => (a.rating ?? 9999) - (b.rating ?? 9999));
-
-    // 3. Update the pending count
     this.countLabel.textContent = upsolveList.length;
 
-    // 4. Handle the Empty State
     if (upsolveList.length === 0) {
       this.container.innerHTML = `
         <div class="muted" style="margin-top: 40px;">
@@ -92,33 +114,8 @@ export class QueueView extends HTMLElement {
       return;
     }
 
-    // 5. Render the sorted list
     this.container.innerHTML = upsolveList
-      .map((prob, i) => {
-        const displayIndex = (i + 1).toString().padStart(2, "0");
-        const rating = prob.rating ? `Rating: ${prob.rating}` : "Rating: ???";
-
-        // Names and problem indices are scraped from Codeforces markup, and the
-        // index also feeds the href and the source label.
-        const name = escapeHtml(
-          prob.name?.replace(/\s+/g, " ").trim() || "Unknown Problem",
-        );
-        const url = escapeHtml(prob.url);
-        const sourceLabel = escapeHtml(prob.sourceLabel);
-
-        return `
-        <a href="${url}" target="_blank" class="problem-row">
-          <div class="problem-index">${displayIndex}.</div>
-          <div class="problem-content">
-            <div class="problem-title">${name}</div>
-            <div class="problem-meta">
-              <span class="rating">${rating}</span>
-              <span class="source">${sourceLabel}</span>
-            </div>
-          </div>
-        </a>
-      `;
-      })
+      .map((row, i) => renderProblemRow(row, { position: i + 1 }))
       .join("");
   }
 }
