@@ -303,13 +303,16 @@ cf-stats-view {
   color: var(--text-muted);
 }
 
-/* Which contest this came from. Sans, not mono: it is the one value on the row
-   that is mostly a word rather than a number, and setting "Official 2237C" in a
-   typewriter face made it the odd element in the panel. Dimmed and a notch
-   smaller too — it is the least important thing in the row, and at #d4d4d4 it
-   was brighter than the rating it sits under. */
+/* Which contest this came from — the same mono as the id badge on the Contests
+   tab, so one value looks the same in both places. Mono rather than sans
+   because the chance and the rating directly above it are mono too, which left
+   a sans line the odd one out inside its own block. What made this look wrong
+   before was Courier New, not the monospacing.
+
+   Dimmed and a notch smaller, though: it is the least important thing in the
+   row, and at #d4d4d4 it rendered brighter than the rating it sits under. */
 .source {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 0.8rem;
   color: #8f8f8f;
   font-weight: 500;
