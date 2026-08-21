@@ -120,7 +120,12 @@ export const codechef = {
    * three slots of the validated categorical theme rather than picked by eye;
    * the icons' own brand colours fail the chroma floor as fills.
    */
-  chartColor: "#d95926",
+  /* Chart slot — red, the nearest working hue to CodeChef's maroon, which
+     fails the chroma floor as a fill. Note this pair sits at CVD deutan
+     delta-E 6.2 against the yellow: inside the 6-8 band, which is legal only
+     because every swatch carries an icon, a full name and a count beside it.
+     Drop to #c0392b if that stops being true. */
+  chartColor: "#e34948",
 
   /**
    * **No rank colours.** CodeChef grades in stars, so painting its ratings on

@@ -137,7 +137,10 @@ export const codeforces = {
    * three slots of the validated categorical theme rather than picked by eye;
    * the icons' own brand colours fail the chroma floor as fills.
    */
-  chartColor: "#3987e5",
+  /* Chart slot — yellow. Not CF's brand blue: these three are a validated
+     categorical triple checked together against the dark surface, and blue
+     is AtCoder's slot here. Changing one means re-validating all three. */
+  chartColor: "#c98500",
 
   ratingBands: [
     { min: 2400, class: "band-red" },

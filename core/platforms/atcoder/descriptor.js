@@ -115,7 +115,9 @@ export const atcoder = {
    * three slots of the validated categorical theme rather than picked by eye;
    * the icons' own brand colours fail the chroma floor as fills.
    */
-  chartColor: "#199e70",
+  /* Chart slot — blue. AtCoder brands achromatically, so there is no brand
+     colour to take and the slot is free. */
+  chartColor: "#3987e5",
 
   /**
    * **No rank colours.** AtCoder has its own scheme, but the queue previously
