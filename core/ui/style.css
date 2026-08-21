@@ -606,10 +606,13 @@ cf-stats-view {
   padding: 8px 0;
   border-radius: 4px;
   cursor: pointer;
-  font-family: var(--font-mono); /* Consistent with CF vibe */
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  /* Sans, sentence case: these are actions, not identifiers. Mono and caps
+     made them read as labels for something rather than buttons, and the panel
+     otherwise reserves mono for ids and numbers. Matches the dialog's Cancel
+     and Remove, which are the only other real buttons here. */
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8rem;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
