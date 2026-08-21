@@ -4,11 +4,17 @@
  *
  * Drawn rather than bundled: the real logos are someone else's artwork, and
  * these have to stay legible at about 12px on a dark panel, which detailed
- * marks do not. Each one keeps the site's recognisable shape and colours —
- * Codeforces' three bars, AtCoder's letterform, CodeChef's toque.
+ * marks do not. Codeforces keeps its three bars; AtCoder is an AC monogram,
+ * which also happens to be the verdict you are chasing; CodeChef is its toque.
  *
- * AtCoder's is light-on-dark rather than the reverse: its branding is black on
- * white, and a #222 square on a #1e1e1e panel is close to invisible.
+ * **12px is the design constraint, not an afterthought.** An `@` was tried for
+ * AtCoder — "At"Coder, and a mark rather than a bare letter — but its inner
+ * detail collapses into a blob at that size. The toque likewise only stopped
+ * reading as a brown cloud once it sat on a plate: a pale hat against a solid
+ * ground has a silhouette, a lumpy brown shape on a dark panel does not.
+ *
+ * Both light-on-dark marks are inverted from their sites' branding, because a
+ * dark mark on the #1e1e1e panel is close to invisible.
  *
  * Inline SVG rather than image files so they inherit the panel's rendering and
  * cost no extra request.
@@ -25,18 +31,19 @@ const ICONS = {
   atcoder: `
     <svg viewBox="0 0 16 16" class="platform-icon" role="img" aria-label="AtCoder">
       <rect width="16" height="16" rx="3.5" fill="#F2F2F2" />
-      <path d="M4.1 12.4 L8 3.6 L11.9 12.4 M5.7 9.5 H10.3"
-            fill="none" stroke="#1C1D1D" stroke-width="1.7"
-            stroke-linecap="round" stroke-linejoin="round" />
+      <text x="8" y="8.4" font-family="Helvetica, Arial, sans-serif" font-size="10"
+            font-weight="700" fill="#1C1D1D" text-anchor="middle"
+            dominant-baseline="central" letter-spacing="-0.6">AC</text>
     </svg>`,
 
   codechef: `
     <svg viewBox="0 0 16 16" class="platform-icon" role="img" aria-label="CodeChef">
-      <path d="M4.2 9.2 C2 9.2 1 7.8 1 6.4 C1 4.9 2.3 3.9 3.7 4.2
-               C4.2 2.5 5.7 1.5 8 1.5 C10.3 1.5 11.8 2.5 12.3 4.2
-               C13.7 3.9 15 4.9 15 6.4 C15 7.8 14 9.2 11.8 9.2 Z"
-            fill="#956751" />
-      <rect x="4.2" y="9.6" width="7.6" height="4.6" rx="1.1" fill="#5B4638" />
+      <rect width="16" height="16" rx="3.5" fill="#7A5238" />
+      <circle cx="5.4" cy="6.2" r="2.1" fill="#F3E6DC" />
+      <circle cx="10.6" cy="6.2" r="2.1" fill="#F3E6DC" />
+      <circle cx="8" cy="5.2" r="2.5" fill="#F3E6DC" />
+      <rect x="4.7" y="8.2" width="6.6" height="3.9" rx="0.9" fill="#F3E6DC" />
+      <path d="M8 8.6v3" stroke="#7A5238" stroke-width="0.85" />
     </svg>`,
 };
 
