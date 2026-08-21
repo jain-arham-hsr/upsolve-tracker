@@ -7,18 +7,23 @@
  *
  *  - **Codeforces** — its three bars, yellow/blue/red with blue tallest,
  *    which is exactly what its favicon shows.
- *  - **AtCoder** — the shield from its heraldic crest. The full crest is a
- *    shield and globe flanked by two horses over a wordmark; only the shield
- *    silhouette survives being shrunk, and it is the distinctive part.
+ *  - **AtCoder** — the shield *and globe* from its heraldic crest. The full
+ *    crest adds two horses and a wordmark, which cannot survive shrinking.
+ *    The globe matters: a bare shield reads as a generic security badge.
  *  - **CodeChef** — `CC` on brown, which *is* its favicon, in its own colours
  *    (`#583722` / `#FAFAED`, sampled from it). A toque was drawn three times
  *    and read as a cloud, then a muffin, then a mushroom: at 12px a lobed
  *    crown over a band is food, whatever the intent.
  *
- * **12px is the design constraint, not an afterthought**, and vectors flatter
+ * **The rendered size is the design constraint**, and vectors flatter
  * themselves at 96px. Rasterise at the real size and magnify the pixels before
  * believing a mark works — that is what caught the `@` tried for AtCoder,
- * which is handsome large and a blob small.
+ * handsome large and a blob small.
+ *
+ * The marks render at **14px**, not 12. An outlined shield with a globe inside
+ * needs the room: at 12px the outline and the interior detail land on the same
+ * pixels and the whole thing greys out. Measured, not guessed — 16px is
+ * crisper still, but overpowers the 0.8rem text beside it.
  *
  * Light-on-dark marks are inverted from their sites' branding, because a dark
  * mark on the #1e1e1e panel is close to invisible.
@@ -37,8 +42,13 @@ const ICONS = {
 
   atcoder: `
     <svg viewBox="0 0 16 16" class="platform-icon" role="img" aria-label="AtCoder">
-      <path d="M8 1.4 13.6 3.4 V8.2 C13.6 11.4 8 14.6 8 14.6 S2.4 11.4 2.4 8.2 V3.4 Z"
-            fill="#F2F2F2" />
+      <rect width="16" height="16" rx="3" fill="#F7F7F5" />
+      <path d="M8 1.9 13.2 3.7 V8.6 C13.2 11.4 8 14.3 8 14.3 S2.8 11.4 2.8 8.6 V3.7 Z"
+            fill="#1C1D1D" />
+      <circle cx="8" cy="7.5" r="2.6" fill="none" stroke="#F7F7F5" stroke-width="1.15" />
+      <path d="M5.4 7.5h5.2" stroke="#F7F7F5" stroke-width="1.15" />
+      <ellipse cx="8" cy="7.5" rx="1.2" ry="2.6" fill="none" stroke="#F7F7F5"
+               stroke-width="1" />
     </svg>`,
 
   codechef: `
