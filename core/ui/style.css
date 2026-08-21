@@ -23,6 +23,17 @@
 
   --mark-size: 14px;
   --rating-size: 0.8rem;
+  --title-size: 0.85rem;
+  --title-line: 1.35;
+
+  /* system-ui's own metrics, as fractions of font-size, measured with canvas:
+     the font bounding box (0.9700 / 0.2100) locates the baseline inside a line
+     box, and the ink band (ascent 0.7261, descent 0.0120) locates the visible
+     centre above it. Together they seat a mark on a title's first line without
+     a tuned nudge — see .contest-name .platform-icon. */
+  --sans-fb-ascent: 0.97;
+  --sans-fb-descent: 0.21;
+  --sans-ink-center: 0.357;
 
   /* Where digit ink sits, as a fraction of font-size above the baseline.
      Measured off the mono stack with canvas actualBoundingBox metrics:
@@ -633,9 +644,13 @@ cf-stats-view {
   box-sizing: border-box;
   padding-right: 28px;
   font-family: var(--font-sans);
-  font-size: 0.9rem;
-  font-weight: 500;
-  line-height: 1.35;
+  /* Smaller but heavier than it was at 0.9rem/500: crisper against the badge
+     row, and long Codeforces titles wrap one line less often. Size and
+     line-height are shared with the mark's offset maths — don't inline them. */
+  font-size: var(--title-size);
+  line-height: var(--title-line);
+  font-weight: 600;
+  letter-spacing: 0.1px;
   color: var(--text-main);
   width: 100%;
   overflow-wrap: anywhere;
@@ -651,13 +666,20 @@ cf-stats-view {
    nothing, and making that edge ragged. A list marker does not re-centre when
    its text wraps either.
 
-   The offset centres it on the first line *box*, then drops it onto the ink.
-   Those are not the same: a line box includes descender space the text mostly
-   does not use, so box-centring left the mark 1.8px high. The extra 0.8px was
-   found by sweeping and measuring ink centres, not by eye — it lands within
-   half a pixel on every title. */
+   Derived, not tuned — the same treatment the queue's marks got, because the
+   old "+0.8px" was calibrated against one font-size and silently went stale
+   when the title was restyled. Reading down from the top of the first line
+   box: half-leading is (L - A - D)/2, the baseline is A below that, and the
+   ink centre sits --sans-ink-center above the baseline. Collecting terms
+   leaves L/2 + (A - D)/2 - inkCentre, times the font size, less half a mark. */
 .contest-name .platform-icon {
-  margin-top: calc((1.35em - 14px) / 2 + 0.8px);
+  margin-top: calc(
+    var(--title-size) *
+      (
+        var(--title-line) / 2 + (var(--sans-fb-ascent) - var(--sans-fb-descent)) /
+          2 - var(--sans-ink-center)
+      ) - var(--mark-size) / 2
+  );
 }
 
 /* Pill group, sitting under the name against the right edge. align-self
