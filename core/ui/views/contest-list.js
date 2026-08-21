@@ -202,7 +202,12 @@ export class ContestList extends HTMLElement {
     if (!contest) return;
 
     const name = contest.name?.replace(/\s+/g, " ").trim() || `Contest ${contest.id}`;
-    this.modalName.textContent = name;
+    // Marked like the row it was opened from, so the dialog visibly names the
+    // same contest rather than restating its title in isolation. innerHTML,
+    // so the name has to be escaped — it is scraped.
+    const platform = platformOf(contest);
+    this.modalName.innerHTML =
+      `${platformIcon(platform.id, platform.shortLabel)}<span>${escapeHtml(name)}</span>`;
     this.modal.classList.remove("hidden");
     this.pendingRemoval = { key, contest };
 
@@ -378,7 +383,13 @@ export class ContestList extends HTMLElement {
           </button>
           <button type="button" class="contest-menu-btn" data-menu-key="${safeKey}"
                   aria-haspopup="menu" aria-expanded="${this.openMenuKey === key}"
-                  title="More">⋮</button>
+                  title="More">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <circle cx="8" cy="3" r="1.6"></circle>
+              <circle cx="8" cy="8" r="1.6"></circle>
+              <circle cx="8" cy="13" r="1.6"></circle>
+            </svg>
+          </button>
           ${this.openMenuKey === key ? this.renderMenu(platform, contest, safeKey) : ""}
         </div>
         ${isOpen ? this.renderProblems(contest, platform, userRatings) : ""}
