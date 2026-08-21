@@ -221,7 +221,7 @@ P(solve) = 1 / (1 + 10^((difficulty − your_rating_on_that_platform) / 400))
 
 All three sites define difficulty as roughly the rating at which a contestant has a 50% chance in-contest — the same quantity `rating-estimator.js` searches for — so feeding a problem's difficulty and your rating *on the same platform* cancels the scale. It is common-person equating with one anchor, you: a poor way to build a general conversion table, a good way to order one person's practice.
 
-The queue displays **native ratings with the platform's mark beside them**, never a converted number, and shows the probability coarsely (`~72%`) because it is modelled. There is deliberately no "Rating:" label — the word implied one shared scale, which is the single claim this design denies. The number is tinted by its own platform's rank band (`.tone-*`, sharing the `--band-*` variables with the histogram bars), so adjacent rows from different sites cannot read as one axis.
+The queue displays **native ratings with the platform's mark beside them**, never a converted number, and shows the probability coarsely (`~72%`) because it is modelled. There is deliberately no "Rating:" label — the word implied one shared scale, which is the single claim this design denies. **Only Codeforces tints its rating numbers**, because only there do the colours carry the site's own established meaning — "cyan 1600" says something specific on Codeforces and nothing on CodeChef, which grades in stars. Platforms with no rank scheme of their own render `.tone-neutral`; the platform mark beside the number is what says whose scale you are reading. A descriptor opts in by defining `ratingBandClass`, and the shared code falls back to neutral when it is absent.
 
 `ui/problem-row.js` owns that markup for both the queue and the contest list — `toProblemRow()` builds the view model, `renderProblemRow()` renders it, and `position` is optional so a contest's expansion can omit the queue's global numbering. Duplicating it would let the two views drift.
 
@@ -240,7 +240,7 @@ Collapsing those would hide a missing *user* rating — which mis-sorts a whole 
 
 A scope selector switches between them, and **panels never mix platforms** — no chart bins numbers from different sites on one axis.
 
-- **Per-platform panels** show a native rating histogram in that platform's own units, coloured by its own `ratingBands` (AtCoder's scale runs negative; Codeforces' thresholds would paint the whole ABC range one colour), plus tags and the rating-range control.
+- **Per-platform panels** show a native rating histogram in that platform's own units, plus tags and the rating-range control. Only the Codeforces panel colours its bars by rank; the others use a single neutral fill, since the bar length already carries the magnitude and the colours would only import a foreign meaning.
 - **The overview** carries only what is genuinely comparable across sites: the platform ring, and the solve-chance histogram.
 
 **There is no tag chart on the overview.** Vocabularies do not match — Codeforces' `dfs and similar` versus CodeChef's `graphs`, and AtCoder publishes none at all — so pooling them produces an authoritative-looking chart built from incompatible lists. The per-platform panels state tag coverage outright ("tags cover 47% of these problems"), because an empty "graphs" bar otherwise reads as "I have no graph problems" rather than "half of this is untagged". The AtCoder panel says plainly that AtCoder publishes no tags.

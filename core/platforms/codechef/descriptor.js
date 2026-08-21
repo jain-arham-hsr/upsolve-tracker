@@ -116,21 +116,10 @@ export const codechef = {
    */
   chartColor: "#d95926",
 
-  ratingBands: [
-    { min: 2500, class: "band-red" },
-    { min: 2200, class: "band-orange" },
-    { min: 2000, class: "band-violet" },
-    { min: 1800, class: "band-blue" },
-    { min: 1600, class: "band-cyan" },
-    { min: 1400, class: "band-green" },
-    { min: -Infinity, class: "band-gray" },
-  ],
-
-  ratingBandClass(rating) {
-    return (
-      this.ratingBands.find((band) => rating >= band.min)?.class ?? "band-gray"
-    );
-  },
+  /**
+   * **No rank colours.** CodeChef grades in stars, so painting its ratings on
+   * Codeforces' scale imports a meaning that does not transfer.
+   */
 
   capabilities: {
     // Difficulty and tags appear only on the per-problem endpoint — absent

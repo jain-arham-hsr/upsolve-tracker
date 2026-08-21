@@ -904,6 +904,17 @@ cf-stats-view {
   background-color: var(--band-red);
 }
 
+/* Platforms with no rank scheme of their own. Codeforces is the only one whose
+   colours mean something to a reader; borrowing them elsewhere would import a
+   meaning that does not transfer. */
+.band-neutral {
+  background-color: #6e7681;
+}
+
+.tone-neutral {
+  color: var(--text-main);
+}
+
 /* The same palette as text, for a rating number in the queue. */
 .tone-gray {
   color: var(--band-gray);

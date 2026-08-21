@@ -24,11 +24,12 @@ export function toProblemRow({ contest, platform, problem }, userRatings) {
     url: platform.problemUrl(contest, problem),
     sourceLabel: platform.sourceLabel(contest, problem),
 
-    // The problem's rank band *on its own platform*. Each descriptor has its
-    // own thresholds — AtCoder's scale runs negative, so Codeforces' would
-    // paint the whole ABC range one colour.
+    // Only Codeforces tints its ratings, because only there do the colours
+    // carry the site's own established meaning. Painting a CodeChef number on
+    // Codeforces' scale would import a rank meaning that does not transfer, so
+    // platforms without their own scheme render neutral.
     tone:
-      problem.rating != null
+      problem.rating != null && platform.ratingBandClass
         ? platform.ratingBandClass(problem.rating).replace("band-", "tone-")
         : null,
 
@@ -57,7 +58,7 @@ export function renderProblemRow(row, { position } = {}) {
   // platforms, which is the one thing the ordering model denies — the mark
   // beside the number says whose scale it is instead.
   const ratingText = rated ? String(row.rating) : "???";
-  const tone = rated ? row.tone ?? "tone-gray" : "is-unrated";
+  const tone = rated ? (row.tone ?? "tone-neutral") : "is-unrated";
 
   // ~11% of AtCoder's models are flagged low-confidence; marking them beats
   // presenting an estimate as if it were measured.

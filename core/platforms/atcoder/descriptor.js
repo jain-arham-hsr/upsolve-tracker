@@ -118,21 +118,12 @@ export const atcoder = {
    */
   chartColor: "#199e70",
 
-  ratingBands: [
-    { min: 2800, class: "band-red" },
-    { min: 2400, class: "band-orange" },
-    { min: 2000, class: "band-violet" },
-    { min: 1600, class: "band-blue" },
-    { min: 1200, class: "band-cyan" },
-    { min: 800, class: "band-green" },
-    { min: -Infinity, class: "band-gray" },
-  ],
-
-  ratingBandClass(rating) {
-    return (
-      this.ratingBands.find((band) => rating >= band.min)?.class ?? "band-gray"
-    );
-  },
+  /**
+   * **No rank colours.** AtCoder has its own scheme, but the queue previously
+   * borrowed Codeforces' — which attaches Codeforces' meaning to an AtCoder
+   * number. "Cyan 1600" says something specific there and nothing here.
+   * Ratings render neutral instead; see problem-row.js.
+   */
 
   capabilities: {
     // AtCoder Problems publishes difficulty for every rated contest.

@@ -286,7 +286,7 @@ export class StatsView extends HTMLElement {
         <div class="hist-row">
           <span class="hist-label">${bucket}</span>
           <div class="hist-track">
-            ${count > 0 ? `<div class="hist-bar ${platform.ratingBandClass(bucket)}" style="width: ${width}%"></div>` : ""}
+            ${count > 0 ? `<div class="hist-bar ${platform.ratingBandClass?.(bucket) ?? "band-neutral"}" style="width: ${width}%"></div>` : ""}
           </div>
           <span class="hist-count ${count > 0 ? "" : "is-zero"}">${count}</span>
         </div>`);

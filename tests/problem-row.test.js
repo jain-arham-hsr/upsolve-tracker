@@ -24,13 +24,19 @@ test("the rating carries no label — the word implied one shared scale", () => 
   assert.match(html, />1300</);
 });
 
-test("the number is tinted by its own platform's band, not a shared one", () => {
-  // 1500 is a different band on each site, which is the entire point.
-  const cf = build("codeforces", { index: "A", name: "X", rating: 1500 });
-  const cc = build("codechef", { index: "A", name: "X", rating: 1500 });
-  assert.equal(cf.tone, "tone-cyan");
-  assert.equal(cc.tone, "tone-green");
-  assert.notEqual(cf.tone, cc.tone);
+test("only Codeforces tints its ratings — its colours are the site's own", () => {
+  // Everywhere else the same palette would import a rank meaning that does not
+  // transfer: "cyan 1600" says something on Codeforces and nothing on CodeChef.
+  assert.equal(build("codeforces", { index: "A", name: "X", rating: 1500 }).tone, "tone-cyan");
+  assert.equal(build("codeforces", { index: "A", name: "X", rating: 2500 }).tone, "tone-red");
+});
+
+test("platforms with no rank scheme of their own render neutral", () => {
+  for (const platformId of ["atcoder", "codechef"]) {
+    const problem = { index: "A", problemId: "a_a", name: "X", rating: 1500 };
+    assert.equal(build(platformId, problem).tone, null);
+    assert.match(renderProblemRow(build(platformId, problem)), /class="rating tone-neutral"/);
+  }
 });
 
 test("an AtCoder difficulty of exactly 0 renders as rated, not as ???", () => {
