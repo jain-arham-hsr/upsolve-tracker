@@ -7,10 +7,10 @@
  *
  *  - **Codeforces** — its three bars, yellow/blue/red with blue tallest,
  *    which is exactly what its favicon shows.
- *  - **AtCoder** — the crown, shield and globe of its heraldic crest. The full
- *    crest adds two rampant horses, scrollwork and a wordmark, none of which
- *    survive shrinking. The crown and globe both earn their pixels: without
- *    them a bare shield reads as a generic security badge.
+ *  - **AtCoder** — the crown and shield of its heraldic crest, with the globe
+ *    reduced to a disc. The full crest adds two rampant horses, scrollwork and
+ *    a wordmark, none of which survive shrinking. The crown earns its pixels:
+ *    without it a bare shield reads as a generic security badge.
  *  - **CodeChef** — `CC` on brown, which *is* its favicon, in its own colours
  *    (`#583722` / `#FAFAED`, sampled from it). A toque was drawn three times
  *    and read as a cloud, then a muffin, then a mushroom: at 12px a lobed
@@ -21,11 +21,12 @@
  * believing a mark works — that is what caught the `@` tried for AtCoder,
  * handsome large and a blob small.
  *
- * The marks render at **16px**. Each element added to the AtCoder crest costs
- * room: a shield alone reads at 12px, a shield with a globe needs 14, and once
- * a crown sits above it the shield shrinks again and 16 is where the globe
- * comes back. Measured at 12, 14, 16 and 18 by magnifying the real pixels —
- * every one of those variants looks fine at 96px.
+ * The marks render at **14px**, and the AtCoder globe is a plain disc because
+ * of it. A circle with an equator and a meridian needs 16px once a crown has
+ * pushed the shield down — below that its strokes land on the same pixels and
+ * grey out. A filled disc has no interior strokes to merge, so it reads at 14.
+ * Measured at 12, 14, 16 and 18 by magnifying the real pixels; every variant
+ * looks fine at 96px, which is how the earlier ones got through.
  *
  * Light-on-dark marks are inverted from their sites' branding, because a dark
  * mark on the #1e1e1e panel is close to invisible.
@@ -49,10 +50,7 @@ const ICONS = {
       <rect x="4.3" y="4.35" width="7.4" height="1.05" rx="0.35" fill="#1C1D1D" />
       <path d="M8 5.1 12.6 6.6 V10 C12.6 12.4 8 14.5 8 14.5 S3.4 12.4 3.4 10 V6.6 Z"
             fill="#1C1D1D" />
-      <circle cx="8" cy="9.6" r="2.2" fill="none" stroke="#F7F7F5" stroke-width="1.05" />
-      <path d="M5.8 9.6h4.4" stroke="#F7F7F5" stroke-width="1.05" />
-      <ellipse cx="8" cy="9.6" rx="1.01" ry="2.2" fill="none" stroke="#F7F7F5"
-               stroke-width="0.95" />
+      <circle cx="8" cy="9.6" r="1.8" fill="#F7F7F5" />
     </svg>`,
 
   codechef: `

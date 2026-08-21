@@ -338,9 +338,9 @@ cf-stats-view {
 /* Which site a row came from. The mark carries it; the text chip is only a
    fallback for a platform that has no icon yet. */
 .platform-icon {
-  /* 16: the crowned shield needs the room. See platform-icons.js. */
-  width: 16px;
-  height: 16px;
+  /* 14. The AtCoder mark is drawn to survive it — see platform-icons.js. */
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
   display: block;
 }
