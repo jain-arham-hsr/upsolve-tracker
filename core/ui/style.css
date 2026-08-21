@@ -303,10 +303,15 @@ cf-stats-view {
   color: var(--text-muted);
 }
 
+/* Which contest this came from. Sans, not mono: it is the one value on the row
+   that is mostly a word rather than a number, and setting "Official 2237C" in a
+   typewriter face made it the odd element in the panel. Dimmed and a notch
+   smaller too — it is the least important thing in the row, and at #d4d4d4 it
+   was brighter than the rating it sits under. */
 .source {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: #d4d4d4; /* High contrast for readability */
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: #8f8f8f;
   font-weight: 500;
 }
 
