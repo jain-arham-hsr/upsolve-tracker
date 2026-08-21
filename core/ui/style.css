@@ -288,7 +288,9 @@ cf-stats-view {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 16px;
+  /* 8, not 16: the index ends in a period, which already reads as a break, so
+     16px left the number looking detached from the title it numbers. */
+  gap: 8px;
   padding: 16px 20px; /* Edge-to-edge padding */
   border-bottom: 1px solid var(--border-color);
   text-decoration: none;
@@ -309,7 +311,13 @@ cf-stats-view {
   font-weight: bold;
   font-size: 0.9rem;
   color: var(--text-muted);
-  min-width: 24px;
+  /* Wide enough for three digits and right-aligned, so every title starts at
+     the same x. At min-width 24px the box fitted "01." but grew for "146.",
+     which walked the title 8.7px right the moment the queue passed 99 —
+     measured, and invisible until you scrolled that far. A four-digit queue
+     would shift again, but 245 problems is already an unusual backlog. */
+  min-width: 36px;
+  text-align: right;
   margin-top: 2px; /* Visual alignment with the title */
 }
 
