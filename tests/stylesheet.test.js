@@ -73,3 +73,31 @@ test("the compact rows still borrow the container's columns", () => {
   assert.match(css, /\.problem-row\.is-compact \{[\s\S]*?grid-template-columns: subgrid/);
   assert.ok(!/--index-ch/.test(css), "the ch-based sizing should be gone");
 });
+
+test("every font-family goes through the two stack variables", () => {
+  // "JetBrains Mono" and "Inter" are named but never bundled or linked, so what
+  // actually renders is the tail of each stack. Spelling those tails out per
+  // rule is how three of them ended up on "Courier New", Courier, monospace
+  // while fifteen sat on a different fallback — a split that showed up as the
+  // queue's contest line looking sharper than the numbers above it.
+  const declarations = css.match(/font-family:[^;]*;/g) ?? [];
+  assert.ok(declarations.length > 20, "expected the stylesheet to set fonts");
+
+  for (const declaration of declarations) {
+    assert.ok(
+      /var\(--font-(sans|mono)\)|inherit/.test(declaration),
+      `font-family must use var(--font-sans|--font-mono): ${declaration}`,
+    );
+  }
+
+  for (const name of ["--font-sans", "--font-mono"]) {
+    assert.ok(css.includes(`${name}:`), `${name} must be defined`);
+  }
+
+  // The specific regression: Courier New must not be anyone's fallback. Checked
+  // against the declarations rather than the file, since the comment explaining
+  // all this names it.
+  for (const declaration of declarations) {
+    assert.ok(!/Courier/.test(declaration), `Courier is not a fallback: ${declaration}`);
+  }
+});
