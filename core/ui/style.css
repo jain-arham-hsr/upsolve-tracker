@@ -607,9 +607,22 @@ cf-stats-view {
   width: 100%;
   overflow-wrap: anywhere;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
+}
+
+/* The mark aligns with the *first* line of the title, not the centre of a
+   wrapped one. In a long list the eye runs down the left edge, and centring
+   would move each mark by however long its title happens to be — encoding
+   nothing, and making that edge ragged. A list marker does not re-centre when
+   its text wraps either.
+
+   The offset centres it on the first line box, then lifts it slightly: the
+   line box includes descender space the title's first line mostly does not
+   use. */
+.contest-name .platform-icon {
+  margin-top: calc((1.35em - 14px) / 2 - 1px);
 }
 
 /* Pill group, sitting under the name against the right edge. align-self
