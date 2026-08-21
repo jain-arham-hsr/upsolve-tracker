@@ -82,13 +82,14 @@ export const codeforces = {
   },
 
   /**
-   * Pills shown beside the contest id. Only worth drawing when it changes how
-   * you read the row: a gym is not on the public problemset, so its ratings are
-   * estimated and it carries no editorial. Official rounds say nothing extra —
-   * the platform mark beside the name already places them.
+   * Pills shown beside the contest id. Codeforces is the one platform where the
+   * subtype changes how the row reads — a gym is off the public problemset, so
+   * its ratings are estimated and it has no editorial — so it is the one
+   * platform that labels it. Both values are named: with only "Gym" drawn, an
+   * unlabelled row reads as missing data rather than as an official round.
    */
   contestFlags(contest) {
-    return subtypeOf(contest) === "OFFICIAL" ? [] : ["Private"];
+    return [subtypeOf(contest) === "OFFICIAL" ? "Official" : "Gym"];
   },
 
   /** How the contest is named in prose, e.g. "Official contest". */

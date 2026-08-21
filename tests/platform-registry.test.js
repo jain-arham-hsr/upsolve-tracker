@@ -130,14 +130,14 @@ test("a record predating platforms still labels as Official", () => {
   assert.equal(getPlatform("codeforces").sourceLabel({ id: "2193" }, { index: "A" }), "Official 2193A");
 });
 
-test("only a Codeforces gym carries a row flag", () => {
-  // Every other pill was dropped: "Official"/"ABC"/"STARTERS" restated what the
-  // contest name and platform mark already said. A gym is the one case that
-  // changes how the row reads, so it is the one case that gets a pill.
+test("only Codeforces carries a row flag", () => {
+  // "ABC" and "STARTERS" restated what the contest name and platform mark
+  // already said. Codeforces official-vs-gym is the one subtype that changes
+  // how the row reads, so it is the only one still drawn.
   const flagsFor = (platform, contest) => getPlatform(platform).contestFlags(contest);
 
-  assert.deepEqual(flagsFor("codeforces", { id: 709413, type: "GYM" }), ["Private"]);
-  assert.deepEqual(flagsFor("codeforces", { id: 2242, type: "OFFICIAL" }), []);
+  assert.deepEqual(flagsFor("codeforces", { id: 709413, type: "GYM" }), ["Gym"]);
+  assert.deepEqual(flagsFor("codeforces", { id: 2242, type: "OFFICIAL" }), ["Official"]);
   assert.deepEqual(flagsFor("atcoder", { id: "abc466", type: "ABC" }), []);
   assert.deepEqual(flagsFor("codechef", { id: "START252D", type: "STARTERS" }), []);
 });
