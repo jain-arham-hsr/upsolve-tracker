@@ -466,29 +466,6 @@ cf-stats-view {
   border-color: #666;
 }
 
-/* Contest Row Restyling */
-/* Badges for Contest Types */
-.contest-type {
-  font-family: "Inter", sans-serif;
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  font-weight: 700;
-  padding: 3px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.5px;
-}
-
-.type-official {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #e0e0e0;
-}
-
-.type-gym {
-  background-color: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
-}
-
 /* --- Disabled Button State --- */
 .btn:disabled {
   opacity: 0.4;
@@ -637,14 +614,23 @@ cf-stats-view {
   flex-shrink: 0;
 }
 
-/* Ensure the tags don't inherit the link's hover state incorrectly */
+/* Shared pill sizing. Careful: this is a grouped selector list — dropping the
+   last one takes the whole rule with it (see the flexbox-scrolling comment). */
 .contest-id,
-.contest-type {
+.contest-flag {
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 3px;
   text-transform: uppercase;
   font-weight: bold;
+}
+
+/* Outlined, so it reads as a qualifier on the id rather than a second id. */
+.contest-flag {
+  font-family: "Inter", sans-serif;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
 }
 
 .contest-id {

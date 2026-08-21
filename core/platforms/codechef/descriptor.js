@@ -95,14 +95,9 @@ export const codechef = {
     return "codechef";
   },
 
-  subtypeLabel(contest) {
-    return SUBTYPE_LABELS[String(contest?.type ?? "OTHER").toUpperCase()] ?? "Other";
-  },
-
-  badgeClass(contest) {
-    return String(contest?.type ?? "").toUpperCase() === "STARTERS"
-      ? "type-official"
-      : "type-gym";
+  /** Nothing about a CodeChef contest changes how its row should be read. */
+  contestFlags() {
+    return [];
   },
 
   /** CodeChef's star bands: 7★ from 2500, down to 1★ below 1400. */

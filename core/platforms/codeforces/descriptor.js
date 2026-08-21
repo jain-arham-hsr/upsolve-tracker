@@ -76,14 +76,19 @@ export const codeforces = {
     return `codeforces:${subtypeOf(contest)}`;
   },
 
-  /** Badge text in the contest list. */
+  /** Feeds sourceLabel, e.g. "Official 2237C". Not drawn on its own. */
   subtypeLabel(contest) {
     return subtypeOf(contest) === "OFFICIAL" ? "Official" : "Gym";
   },
 
-  /** Badge style: filled for primary contests, outlined for secondary. */
-  badgeClass(contest) {
-    return subtypeOf(contest) === "OFFICIAL" ? "type-official" : "type-gym";
+  /**
+   * Pills shown beside the contest id. Only worth drawing when it changes how
+   * you read the row: a gym is not on the public problemset, so its ratings are
+   * estimated and it carries no editorial. Official rounds say nothing extra —
+   * the platform mark beside the name already places them.
+   */
+  contestFlags(contest) {
+    return subtypeOf(contest) === "OFFICIAL" ? [] : ["Private"];
   },
 
   /** How the contest is named in prose, e.g. "Official contest". */

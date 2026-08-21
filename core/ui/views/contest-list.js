@@ -326,8 +326,8 @@ export class ContestList extends HTMLElement {
     // Says "8 of 14" only when a filter is actually hiding something.
     this.countLabel.textContent =
       contests.length === allContests.length
-        ? `${allContests.length} contest${allContests.length === 1 ? "" : "s"}`
-        : `${contests.length} of ${allContests.length} contests`;
+        ? `${allContests.length} contest${allContests.length === 1 ? "" : "s"} tracking`
+        : `${contests.length} of ${allContests.length} contests tracking`;
 
     if (contests.length === 0) {
       this.container.innerHTML = `<div class="muted">Nothing matches that filter.</div>`;
@@ -369,8 +369,11 @@ export class ContestList extends HTMLElement {
               <span>${name}</span>
             </span>
             <span class="contest-tags">
-              <span class="contest-id">#${escapeHtml(String(contest.id))}</span>
-              <span class="contest-type ${platform.badgeClass(contest)}">${platform.subtypeLabel(contest)}</span>
+              ${platform
+                .contestFlags(contest)
+                .map((flag) => `<span class="contest-flag">${escapeHtml(flag)}</span>`)
+                .join("")}
+              <span class="contest-id">${escapeHtml(String(contest.id))}</span>
             </span>
           </button>
           <button type="button" class="contest-menu-btn" data-menu-key="${safeKey}"

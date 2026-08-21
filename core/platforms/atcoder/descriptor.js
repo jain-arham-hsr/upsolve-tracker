@@ -75,15 +75,9 @@ export const atcoder = {
     return "atcoder";
   },
 
-  subtypeLabel(contest) {
-    const subtype = String(contest?.type ?? "OTHER").toUpperCase();
-    return subtype === "OTHER" ? "Other" : subtype;
-  },
-
-  /** Rated rounds read as primary; heuristic and one-off contests as secondary. */
-  badgeClass(contest) {
-    const subtype = String(contest?.type ?? "OTHER").toUpperCase();
-    return ["ABC", "ARC", "AGC"].includes(subtype) ? "type-official" : "type-gym";
+  /** Nothing about an AtCoder round changes how its row should be read. */
+  contestFlags() {
+    return [];
   },
 
   contestLabel() {
