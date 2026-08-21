@@ -236,18 +236,80 @@ Collapsing those would hide a missing *user* rating — which mis-sorts a whole 
 
 ### Stats: an overview, plus one panel per platform
 
-A scope selector switches between them, and **panels never mix platforms** — no chart bins numbers from different sites on one axis.
+**A platform panel is a child of the overview, not a peer of it**, so it is reached by drilling in rather than by a fourth chip beside "Overview": the two have different structure, and four equal chips both said otherwise and wrapped to two rows at panel width. The ring's legend rows *are* the navigation — each is a button — and a panel opens with a `‹ Overview` back link above a header naming the platform. Both directions share one delegated `[data-scope]` handler. The header carries no count, because once scoped the summary line directly above already reads "240 pending · median 1600 · 3 unrated".
+
+**Panels never mix platforms** — no chart bins numbers from different sites on one axis.
 
 - **Per-platform panels** show a native rating histogram in that platform's own units, plus tags and the rating-range control. Only the Codeforces panel colours its bars by rank; the others use a single neutral fill, since the bar length already carries the magnitude and the colours would only import a foreign meaning.
 - **The overview** carries only what is genuinely comparable across sites: the platform ring, and the solve-chance histogram.
 
-**There is no tag chart on the overview.** Vocabularies do not match — Codeforces' `dfs and similar` versus CodeChef's `graphs`, and AtCoder publishes none at all — so pooling them produces an authoritative-looking chart built from incompatible lists. The per-platform panels state tag coverage outright ("tags cover 47% of these problems"), because an empty "graphs" bar otherwise reads as "I have no graph problems" rather than "half of this is untagged". The AtCoder panel says plainly that AtCoder publishes no tags.
+**There is no tag chart on the overview.** Vocabularies do not match — Codeforces' `dfs and similar` versus CodeChef's `graphs`, and AtCoder publishes none at all — so pooling them produces an authoritative-looking chart built from incompatible lists. The per-platform panels state tag coverage outright ("tags cover 47% of these problems"), because an empty "graphs" bar otherwise reads as "I have no graph problems" rather than "half of this is untagged".
 
-**The ring** (`ui/platform-ring.js`) shows pending problems per platform, from the same `collectPendingProblems()` the queue uses, so the two cannot disagree. Colour encodes **identity**, so each platform's `chartColor` is fixed on its descriptor and never assigned by size — filtering must not repaint the survivors. Those hues come from a validated categorical theme rather than the brand colours, which fail the chroma floor as fills (AtCoder brands achromatically, CodeChef's brown reads gray); the icons keep carrying brand identity in the legend.
+**A platform that publishes no tags gets no tag section at all** — heading, coverage line and rating-range control included. Drawing the frame and then explaining it is empty reads as a load that failed. That is `capabilities.publishesTags` on the descriptor, asked of the registry rather than checked against an id, so a new platform declares it instead of the view guessing. AtCoder sets it false.
+
+The rating range is a **dual-thumb slider**: two stacked native `<input type="range">`, not a bespoke widget, so arrow keys still step exactly one bucket — which is what the pair of selects it replaced was good at and a slider is bad at, since ~28 buckets across a panel is about 12px each. The inputs take no pointer events and only their thumbs do, so the lower stays grabbable through the upper. Thumbs **clamp rather than cross**; swapping them mid-drag makes the thumb under the pointer jump sides. When both sit at the top end the min thumb is raised above the max, or it could never be dragged back.
+
+**The ring** (`ui/platform-ring.js`) shows pending problems per platform, from the same `collectPendingProblems()` the queue uses, so the two cannot disagree. Colour encodes **identity**, so each platform's `chartColor` is fixed on its descriptor and never assigned by size — filtering must not repaint the survivors. Those hues come from a validated categorical theme rather than the brand colours, which fail the chroma floor as fills (AtCoder brands achromatically, CodeChef's brown reads gray); the icons keep carrying brand identity in the legend. The three are **checked together, not individually** — changing one means re-running `scripts/validate_palette.js` on all three against the dark surface. Codeforces yellow `#c98500`, AtCoder blue `#3987e5`, CodeChef red `#e34948`; that last pair sits at CVD deutan ΔE 6.2, inside the 6–8 band, which is legal only because every swatch carries an icon, a full name and a count beside it. `#c0392b` is the zero-warning fallback if the legend ever loses its labels.
+
+Note the ring is capped at 220px and centred rather than filling the panel, and its total and caption are **HTML centred over the SVG, not `<text>`** — SVG text scales with the viewBox, so at full width they rendered at ~60px and ~28px, larger than any label in the app. Because they no longer scale, the ring's size and stroke can be tuned freely.
 
 It is deliberately **not a progress ring**. `updateSolvedStatus` deletes a contest once every problem in it is solved, so the only solved problems still on disk sit in part-finished contests — a "you have solved 12%" figure would understate by an unknowable amount and would *fall* as you cleared contests.
 
-**The chance histogram uses a sequential ramp** — one hue, light to dark — not the rank colours. Those ran green through red and put 202 of a real 243-problem queue in a "red" band, so the chart's loudest message was that most of the backlog is failure. Sequential is the correct family here: ordered magnitude with no midpoint to diverge around. Both palettes were checked with the dataviz skill's validator against the real `#1e1e1e` surface rather than picked by eye.
+**The chance histogram uses a sequential ramp** — one hue, light to dark — not the rank colours. Those ran green through red and put 202 of a real 243-problem queue in a "red" band, so the chart's loudest message was that most of the backlog is failure. Sequential is the correct family here: ordered magnitude with no midpoint to diverge around. Its hue is **aqua, not blue**: blue is AtCoder's identity colour on the ring directly above this chart, and a magnitude band sharing a colour with a platform reads as though it means that platform. Every step sits at least 19.6 ΔE from all three identity colours, and lightness is strictly decreasing. Both palettes were checked with the dataviz skill's validator against the real `#1e1e1e` surface rather than picked by eye.
+
+### Shared row tokens, and why the two list views agree
+
+The Queue and Contests rows are different structures — one has a number column and a
+two-line meta block, the other a title with badges beneath — but everything they *share*
+comes from one place, because eight properties had previously drifted into separate
+literals and made the tabs read as different products: `--row-pad-y` / `--row-pad-x`,
+`--row-separator`, `--title-size`, and `--badge-size` / `--badge-ink` / `--badge-fill`.
+The badge was the worst of it: the same component was dimmer, larger in the text and less
+rounded on one tab than the other, and its right edge landed 10px apart.
+
+Three differences are deliberate: the mark is 11px in the queue where it sits beside a
+rating and 14px on Contests where it leads a title; the queue's row is taller because it
+carries two meta lines; and its titles start further right because of the number column.
+
+**`--text-title` (#dedede), not `--text-main`, is the top of a row's ladder.** Anything
+that leads a row uses it — contest name, problem title, solve chance, an untinted rating,
+histogram counts, tag names, ring legend names and the ring's total. `#fff` at weight 600
+is the loudest thing on a near-black panel. Codeforces' tinted ratings are the exception,
+because there the colour carries the site's own meaning rather than emphasis. Nothing
+inverts to signal a selected state either — the tab bar brightens its label and underlines
+it, which is what a large near-white fill was doing wrong.
+
+### Fonts are declared but never shipped
+
+Nothing bundles or links a webfont, and neither `Inter` nor `JetBrains Mono` is installed
+on a typical machine, so **what renders is the tail of each stack** — measured, not
+assumed: `"JetBrains Mono", "Courier New", monospace` and `"Courier New", Courier,
+monospace` produce byte-identical text widths, which is what a fallback looks like. Both
+stacks are therefore one variable each, `--font-sans` and `--font-mono`, with real system
+faces at the tail. Spelling stacks out per rule is exactly how three rules once landed on
+Courier New while fifteen sat elsewhere, which showed up as the queue's contest line
+looking sharper than the numbers above it. `tests/stylesheet.test.js` requires every
+`font-family` to use a variable and forbids Courier as anyone's fallback.
+
+Mono is for identifiers and numbers, sans for words. That is why the footer's Import and
+Export moved off mono — they are actions, and caps made them read as a heading rather than
+something you press.
+
+### Marks are seated by font metrics, never by a tuned nudge
+
+A platform mark next to text has to centre on the text's **ink**, not its box: digits have
+no descenders, so box-centring leaves the mark visibly low. That offset was tuned by hand
+twice and went stale both times — once when the mark resized, once when the font stack was
+fixed and Courier New's metrics stopped applying. It is now derived from constants measured
+with canvas `actualBoundingBox`: `--digit-ink-center` (0.357) for the mono digits beside a
+rating, and `--sans-fb-ascent` / `--sans-fb-descent` / `--sans-ink-center` for a title's
+first line, where the baseline must first be located inside the line box.
+
+`--mark-size` drives both `.platform-icon`'s own width/height *and* the offset maths, so
+overriding it resizes and re-seats in one move; they were independent literals until a
+resize test walked the mark 1.5px off. `.rating` and `.solve-chance` likewise read
+`--rating-size`. Verified by pixel-measuring ink at four sizes: worst case 0.12px.
+`tests/stylesheet.test.js` fails if a raw px translate reappears.
 
 ### A note on `style.css`
 

@@ -30,16 +30,21 @@ probability.
 The queue sorts on that, and shows it:
 
 ```
-01. Nine or Nein                    ~94%  Rating: -817
-                                    AC    ABC471 A
-02. Parity Sort                     ~81%  Rating: 1300
-                                    CF    Contest 1993B
-03. Mod Subtract                    ~44%  Rating: 1757
-                                    CC    START252D MODSUB
+01.  Nine or Nein
+                                     ~94%   ▣ -817
+                                       ABC471 a
+02.  Parity Sort
+                                     ~81%   ▣ 1300
+                                     Official 1993B
+03.  Mod Subtract
+                                     ~44%   ▣ 1757
+                                    START252 MODSUB
 ```
 
-Each row keeps its own site's rating — no invented "equivalent" numbers — with the
-platform alongside it.
+Each row keeps its own site's rating — no invented "equivalent" numbers — with that
+site's mark (▣) beside the number saying whose scale you are reading. There is
+deliberately no "Rating:" label: the word implies one shared scale, which is the
+single claim this design denies.
 
 ## Install
 
@@ -77,7 +82,7 @@ each step. CodeChef Starters are split into divisions; opening the parent contes
 the division matching your rating.
 
 **Work the queue.** The Queue tab lists every unsolved problem from every tracked contest,
-hardest last. Filter to one or more platforms with the chips at the top.
+hardest last. The dropdown at the top right filters to one or more platforms.
 
 **Stay in sync.** Press ↻ to pull your latest accepted submissions. Solved problems drop
 out of the queue, and contests you've fully cleared drop out of the list.

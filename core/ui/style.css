@@ -964,7 +964,7 @@ cf-stats-view {
 }
 
 .range-fill {
-  background-color: #6da7ec;
+  background-color: rgba(255, 255, 255, 0.32);
 }
 
 .range-input {
@@ -1001,7 +1001,7 @@ cf-stats-view {
 }
 
 .range-input:focus-visible::-webkit-slider-thumb {
-  border-color: #6da7ec;
+  border-color: var(--text-title);
 }
 
 
@@ -1181,39 +1181,9 @@ cf-stats-view {
   position: relative;
 }
 
-.filter-chip {
-  /* inline-flex so a platform mark can sit inside the chip; buttons default
-     to inline-block, which would not seat an SVG child. */
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  cursor: pointer;
-  background-color: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
-  transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
-}
 
-.filter-chip:hover {
-  color: var(--text-main);
-  border-color: var(--text-muted);
-}
 
-/* Selected reads as a lift, not an inversion. A solid --accent-color block was
-   the loudest thing on the panel — the same pattern the dialog's default
-   Cancel button had — and nothing else in the app inverts to signal state: the
-   tab bar brightens its label and underlines it. */
-.filter-chip.is-on {
-  background-color: rgba(255, 255, 255, 0.1);
-  border-color: #555;
-  color: var(--text-title);
-}
+
 
 /* --- Contextual add banner ---
    Sits above the tab bar so the offer to add a contest is visible from any
@@ -1425,23 +1395,29 @@ cf-stats-view {
    most of a normal queue in a "red" band, which reads as a verdict on the
    reader rather than as a count of hard problems. Steps come from the blue
    ramp and stop at 600, so the darkest still clears the surface. */
+/* Sequential, one hue, light to dark — see the note above about why this is
+   not the rank colours. The hue is aqua rather than blue because blue is
+   now AtCoder's identity colour on the ring directly above this chart, and
+   a magnitude band sharing a colour with a platform reads as if it means
+   that platform. Every step sits at least 19.6 dE from all three identity
+   colours; lightness is strictly decreasing. */
 .chance-1 {
-  background-color: #cde2fb;
+  background-color: #a3f2cc;
 }
 .chance-2 {
-  background-color: #9ec5f4;
+  background-color: #59dda7;
 }
 .chance-3 {
-  background-color: #6da7ec;
+  background-color: #2ac08a;
 }
 .chance-4 {
-  background-color: #3987e5;
+  background-color: #209d70;
 }
 .chance-5 {
-  background-color: #256abf;
+  background-color: #2d795a;
 }
 .chance-6 {
-  background-color: #184f95;
+  background-color: #325947;
 }
 
 /* --- Platform filter dropdown ---
