@@ -619,25 +619,31 @@ cf-stats-view {
 .contest-id,
 .contest-flag {
   font-size: 10px;
-  text-transform: uppercase;
+  /* Pinned, so the two boxes match: Inter and JetBrains Mono resolve different
+     normal line-heights at 10px, which left the id a pixel short of the flag. */
+  line-height: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
   letter-spacing: 0.5px;
 }
 
-/* Bare text, no box. The subtype qualifies the row; the id is what you scan
-   for. Giving both a bordered pill had them competing, and the outline made
-   the qualifier the louder of the two. */
+/* Keeps a box, but a quieter one than the id beside it: the outline sits below
+   --border-color, the fill is left off, and the word is lowercase. Set in caps
+   at full border weight it out-shouted the id, which is the thing you scan for. */
 .contest-flag {
   font-family: "Inter", sans-serif;
   font-weight: 500;
+  text-transform: lowercase;
   color: #6b6b6b;
-  padding: 2px 0;
+  border: 1px solid #2c2c2c;
 }
 
 .contest-id {
   font-family: "JetBrains Mono", "Courier New", monospace;
   font-weight: bold;
-  padding: 2px 6px;
-  border-radius: 3px;
+  text-transform: uppercase;
+  /* Matches the flag's outer height, which carries a 1px border it doesn't. */
+  padding: 3px 6px;
   background-color: rgba(255, 255, 255, 0.08);
   color: #c2c2c2;
 }
