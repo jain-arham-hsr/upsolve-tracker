@@ -45,11 +45,14 @@ export function toProblemRow({ contest, platform, problem }, userRatings) {
 
 /**
  * @param {object} row - from `toProblemRow`
- * @param {{position?: number}} [options] - 1-based place in the queue. Omitted
- *   inside a contest's expansion, where the queue's global numbering would be
- *   misleading.
+ * @param {{position?: number, compact?: boolean}} [options]
+ *   `position` is the 1-based place in the queue, omitted inside a contest's
+ *   expansion where the global numbering would mislead. `compact` is for that
+ *   expansion too: one line, no platform mark and no contest code, because the
+ *   header directly above already carries both and repeating them on every row
+ *   buries the contest's own title.
  */
-export function renderProblemRow(row, { position } = {}) {
+export function renderProblemRow(row, { position, compact = false } = {}) {
   // `!= null`, not truthiness: AtCoder difficulties reach 0 and go negative,
   // and a truthy test would show a real 0 as unrated.
   const rated = row.rating != null;
@@ -75,6 +78,16 @@ export function renderProblemRow(row, { position } = {}) {
     position == null
       ? ""
       : `<div class="problem-index">${String(position).padStart(2, "0")}.</div>`;
+
+  if (compact) {
+    return `
+    <a href="${escapeHtml(row.url)}" target="_blank" class="problem-row is-compact">
+      <span class="compact-index">${escapeHtml(row.index ?? "")}</span>
+      <span class="compact-name">${name}</span>
+      <span class="compact-chance">${formatSolveProbability(row.solveProbability)}</span>
+      <span class="compact-rating ${tone}">${ratingText}</span>${flag}
+    </a>`;
+  }
 
   return `
     <a href="${escapeHtml(row.url)}" target="_blank" class="problem-row">

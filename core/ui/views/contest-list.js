@@ -393,9 +393,11 @@ export class ContestList extends HTMLElement {
   /**
    * What this contest still owes the queue.
    *
-   * Rendered with the queue's own row renderer, so the two cannot disagree
-   * about ordering or about what a row says. Positions are omitted — the
-   * queue's numbering is global and would be misleading here.
+   * Rendered with the queue's own row renderer in its compact form, so the two
+   * cannot disagree about ordering or about what a row says. Positions are
+   * omitted — the queue's numbering is global and would mislead here — and so
+   * are the platform mark and contest code, which the header above already
+   * carries.
    *
    * Deliberately scoped to this contest rather than deduplicated against the
    * others: a problem shared with another division really is in both, and
@@ -405,7 +407,7 @@ export class ContestList extends HTMLElement {
     const rows = collectPendingProblems([contest])
       .map((pending) => toProblemRow(pending, userRatings))
       .sort(compareQueueItems)
-      .map((row) => renderProblemRow(row))
+      .map((row) => renderProblemRow(row, { compact: true }))
       .join("");
 
     // A fully solved contest is dropped from storage by the refresh, so this

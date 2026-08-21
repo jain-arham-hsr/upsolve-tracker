@@ -1338,8 +1338,55 @@ cf-stats-view {
   background-color: rgba(255, 255, 255, 0.015);
 }
 
-.contest-problems .problem-row {
-  padding-left: 22px;
+/* --- Compact rows, for a contest's expansion ---
+   One line each, and deliberately quieter than the contest title above them:
+   full-size problem names competed with it for the eye, and every row repeated
+   the platform mark and contest code the header already shows. */
+.problem-row.is-compact {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 16px 7px 22px;
+  border-bottom: none;
+}
+
+.compact-index {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.compact-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-chance {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-main);
+  flex-shrink: 0;
+}
+
+.compact-rating {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 30px;
+  text-align: right;
+}
+
+.compact-rating.is-unrated {
+  color: var(--text-muted);
 }
 
 .contest-problems-empty {
