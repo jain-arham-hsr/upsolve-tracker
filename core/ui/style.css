@@ -614,30 +614,32 @@ cf-stats-view {
   flex-shrink: 0;
 }
 
-/* Shared pill sizing. Careful: this is a grouped selector list — dropping the
+/* Shared metrics only. Careful: this is a grouped selector list — dropping the
    last one takes the whole rule with it (see the flexbox-scrolling comment). */
 .contest-id,
 .contest-flag {
   font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 3px;
   text-transform: uppercase;
-  font-weight: bold;
+  letter-spacing: 0.5px;
 }
 
-/* Outlined, so it reads as a qualifier on the id rather than a second id. */
+/* Bare text, no box. The subtype qualifies the row; the id is what you scan
+   for. Giving both a bordered pill had them competing, and the outline made
+   the qualifier the louder of the two. */
 .contest-flag {
   font-family: "Inter", sans-serif;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
+  font-weight: 500;
+  color: #6b6b6b;
+  padding: 2px 0;
 }
 
 .contest-id {
   font-family: "JetBrains Mono", "Courier New", monospace;
-  letter-spacing: 0.5px;
-  background-color: rgba(255, 255, 255, 0.06);
-  color: var(--text-muted);
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #c2c2c2;
 }
 
 /* Fallback chip for a platform with no mark yet. */
