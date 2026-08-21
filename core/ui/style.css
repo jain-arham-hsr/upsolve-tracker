@@ -618,11 +618,13 @@ cf-stats-view {
    nothing, and making that edge ragged. A list marker does not re-centre when
    its text wraps either.
 
-   The offset centres it on the first line box, then lifts it slightly: the
-   line box includes descender space the title's first line mostly does not
-   use. */
+   The offset centres it on the first line *box*, then drops it onto the ink.
+   Those are not the same: a line box includes descender space the text mostly
+   does not use, so box-centring left the mark 1.8px high. The extra 0.8px was
+   found by sweeping and measuring ink centres, not by eye — it lands within
+   half a pixel on every title. */
 .contest-name .platform-icon {
-  margin-top: calc((1.35em - 14px) / 2 - 1px);
+  margin-top: calc((1.35em - 14px) / 2 + 0.8px);
 }
 
 /* Pill group, sitting under the name against the right edge. align-self
