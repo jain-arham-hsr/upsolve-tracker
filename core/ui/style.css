@@ -815,45 +815,10 @@ cf-stats-view {
   color: var(--text-muted);
 }
 
-.filter-select {
-  flex: 1;
-  appearance: none;
-  -webkit-appearance: none;
-  background-color: transparent;
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 6px 28px 6px 10px;
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    background-color 0.2s ease;
 
-  /* Custom chevron, since the native one can't be themed */
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6' fill='none' stroke='%23888888' stroke-width='1.5'><path d='M1 1l4 4 4-4'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 10px 6px;
-}
 
-.filter-select:hover {
-  border-color: #666;
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.filter-select:focus {
-  outline: none;
-  border-color: #666;
-}
 
 /* The dropdown list itself renders outside the panel's theme */
-.filter-select option {
-  background-color: var(--panel-bg);
-  color: var(--text-main);
-}
 
 /* --- Stats View --- */
 #stats-body {
@@ -956,23 +921,90 @@ cf-stats-view {
 
 /* --- Tag Frequency --- */
 .tag-range {
+  margin: 10px 0 4px;
+}
+
+.range-head {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
-.filter-select.compact {
-  padding: 5px 24px 5px 8px;
-  font-size: 0.75rem;
-  background-position: right 8px center;
+.range-values {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--text-title);
 }
 
-.tag-range-sep {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  flex-shrink: 0;
+/* Two inputs stacked on one track. The inputs themselves take no pointer
+   events — only their thumbs do — so the lower one stays grabbable through
+   the upper one everywhere except where a thumb actually is. */
+.range-slider {
+  position: relative;
+  height: 18px;
 }
+
+.range-track,
+.range-fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.range-track {
+  left: 0;
+  right: 0;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.range-fill {
+  background-color: #6da7ec;
+}
+
+.range-input {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  background: none;
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: none;
+}
+
+.range-input:focus {
+  outline: none;
+}
+
+.range-input::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #dedede;
+  border: 2px solid var(--panel-bg);
+  cursor: grab;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.range-input::-webkit-slider-thumb:active {
+  cursor: grabbing;
+}
+
+.range-input:focus-visible::-webkit-slider-thumb {
+  border-color: #6da7ec;
+}
+
+
 
 .tag-range-caption {
   font-size: 0.7rem;

@@ -52,6 +52,9 @@ export class StatsView extends HTMLElement {
     this.rangeMin = this.querySelector("#tag-range-min");
     this.rangeMax = this.querySelector("#tag-range-max");
     this.rangeCaption = this.querySelector("#tag-range-caption");
+    this.rangeFill = this.querySelector("#range-fill");
+    this.rangeValueMin = this.querySelector("#range-value-min");
+    this.rangeValueMax = this.querySelector("#range-value-max");
 
     // The view is rebuilt on every navigation, so both selections are
     // persisted rather than kept on the instance.
@@ -72,8 +75,13 @@ export class StatsView extends HTMLElement {
       await this.render();
     });
 
-    this.rangeMin.addEventListener("change", () => this.onRangeChange("min"));
-    this.rangeMax.addEventListener("change", () => this.onRangeChange("max"));
+    // input while dragging, change on release: the tag list is recomputed in
+    // memory so it can follow the thumb, but storage is written once per drag
+    // rather than once per bucket crossed.
+    for (const [input, which] of [[this.rangeMin, "min"], [this.rangeMax, "max"]]) {
+      input.addEventListener("input", () => this.onRangeChange(which, false));
+      input.addEventListener("change", () => this.onRangeChange(which, true));
+    }
 
     await this.render();
   }
@@ -332,40 +340,62 @@ export class StatsView extends HTMLElement {
     if (min > max) [min, max] = [lowest, highest];
     this.range = { min, max };
 
-    const options = [];
-    for (let bucket = lowest; bucket <= highest; bucket += BUCKET_SIZE) {
-      options.push(`<option value="${bucket}">${bucket}</option>`);
+    for (const input of [this.rangeMin, this.rangeMax]) {
+      input.min = String(lowest);
+      input.max = String(highest);
+      input.step = String(BUCKET_SIZE);
     }
-
-    this.rangeMin.innerHTML = options.join("");
-    this.rangeMax.innerHTML = options.join("");
     this.rangeMin.value = String(min);
     this.rangeMax.value = String(max);
+    this.paintRange();
 
     // A single bucket leaves nothing to choose between. Mixed platforms have
     // no shared rating axis, so the range only applies to one platform.
-    this.rangeBox.classList.toggle("hidden", options.length < 2 || !this.scope);
+    const buckets = (highest - lowest) / BUCKET_SIZE + 1;
+    this.rangeBox.classList.toggle("hidden", buckets < 2 || !this.scope);
   }
 
-  async onRangeChange(changed) {
+  /** Moves the highlighted span and the two numbers to match the thumbs. */
+  paintRange() {
+    const { lowest, highest } = this.bounds ?? {};
+    const min = Number(this.rangeMin.value);
+    const max = Number(this.rangeMax.value);
+    const span = highest - lowest;
+    const pct = (value) => (span > 0 ? ((value - lowest) / span) * 100 : 0);
+
+    this.rangeFill.style.left = `${pct(min)}%`;
+    this.rangeFill.style.right = `${100 - pct(max)}%`;
+    this.rangeValueMin.textContent = String(min);
+    this.rangeValueMax.textContent = String(max);
+
+    // Whichever thumb is at the far end has to sit on top, or it becomes
+    // impossible to drag back once the two coincide there.
+    this.rangeMin.style.zIndex = min >= highest ? "4" : "3";
+    this.rangeMax.style.zIndex = min >= highest ? "3" : "4";
+  }
+
+  async onRangeChange(changed, persist) {
     let min = Number(this.rangeMin.value);
     let max = Number(this.rangeMax.value);
 
-    // Pushing one endpoint past the other drags it along, rather than
-    // leaving an inverted range that silently matches nothing.
+    // Thumbs clamp rather than cross. Swapping them mid-drag makes the one
+    // under the pointer jump to the other side, which reads as a glitch.
     if (min > max) {
       if (changed === "min") {
-        max = min;
-        this.rangeMax.value = String(max);
-      } else {
         min = max;
         this.rangeMin.value = String(min);
+      } else {
+        max = min;
+        this.rangeMax.value = String(max);
       }
     }
 
     this.range = { min, max };
-    await chrome.storage.local.set({ [rangeKeyFor(this.scope)]: this.range });
+    this.paintRange();
     this.renderTags();
+    if (persist) {
+      await chrome.storage.local.set({ [rangeKeyFor(this.scope)]: this.range });
+    }
   }
 
   renderTags() {

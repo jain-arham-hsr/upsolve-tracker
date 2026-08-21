@@ -18,11 +18,20 @@
 
       <div id="tag-coverage" class="tag-range-caption"></div>
 
+      <!-- Two native range inputs stacked, not a bespoke control: dragging is
+           the point, but arrow keys still step one bucket at a time, which is
+           what the old pair of selects was good at. -->
       <div id="tag-range" class="tag-range hidden">
-        <label class="filter-label" for="tag-range-min">Rating</label>
-        <select id="tag-range-min" class="filter-select compact"></select>
-        <span class="tag-range-sep">to</span>
-        <select id="tag-range-max" class="filter-select compact"></select>
+        <div class="range-head">
+          <span class="filter-label">Rating</span>
+          <span class="range-values"><span id="range-value-min"></span>&ndash;<span id="range-value-max"></span></span>
+        </div>
+        <div class="range-slider">
+          <span class="range-track"></span>
+          <span class="range-fill" id="range-fill"></span>
+          <input type="range" id="tag-range-min" class="range-input" aria-label="Lowest rating">
+          <input type="range" id="tag-range-max" class="range-input" aria-label="Highest rating">
+        </div>
       </div>
 
       <div id="tag-range-caption" class="tag-range-caption"></div>
