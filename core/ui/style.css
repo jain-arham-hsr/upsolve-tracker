@@ -628,21 +628,21 @@ cf-stats-view {
   letter-spacing: 0.5px;
 }
 
-/* Keeps a box, but a quieter one than the id beside it: the outline sits below
-   --border-color, the fill is left off, and the weight drops to medium. At full
-   border weight it out-shouted the id, which is the thing you scan for. */
+/* A box, but a soft one: a faint fill rather than an outline, because a 1px
+   border is a hard edge at this size and reads sharper than anything inside it.
+   Semibold too — at 500 the 10px caps came out spindly, and thin strokes are
+   the other half of what read as "sharp". It stays quieter than the id through
+   dimmer ink and a weaker fill, not through a lighter weight. */
 .contest-flag {
   font-family: "Inter", sans-serif;
-  font-weight: 500;
+  font-weight: 600;
   color: #6b6b6b;
-  border: 1px solid #2c2c2c;
+  background-color: rgba(255, 255, 255, 0.055);
 }
 
 .contest-id {
   font-family: "JetBrains Mono", "Courier New", monospace;
   font-weight: bold;
-  /* Matches the flag's outer height, which carries a 1px border it doesn't. */
-  padding: 3px 6px;
   background-color: rgba(255, 255, 255, 0.08);
   color: #c2c2c2;
 }
