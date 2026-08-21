@@ -6,7 +6,6 @@ import {
   listPlatforms,
   platformOf,
   contestsOnPlatform,
-  DEFAULT_PLATFORM_ID,
 } from "./platforms/registry.js";
 import { getAdapter } from "./platforms/adapters.js";
 import { storeFetchedRatings } from "./services/user-ratings.js";

@@ -6,7 +6,7 @@
  * what to do with what comes back.
  */
 import { LocalDB } from "./services/storage.js";
-import { matchContestUrl, DEFAULT_PLATFORM_ID } from "./platforms/registry.js";
+import { matchContestUrl } from "./platforms/registry.js";
 import { getAdapter } from "./platforms/adapters.js";
 import { storeFetchedRatings } from "./services/user-ratings.js";
 import {

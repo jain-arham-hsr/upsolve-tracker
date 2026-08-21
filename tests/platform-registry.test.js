@@ -14,7 +14,6 @@ import {
   makeContestKey,
   findTrackedContest,
   listPlatforms,
-  DEFAULT_PLATFORM_ID,
 } from "../core/platforms/registry.js";
 
 test("Codeforces contest and gym URLs are recognised", () => {

@@ -12,7 +12,6 @@ import {
   platformOf,
   matchesFilter,
   contestKey,
-  DEFAULT_PLATFORM_ID,
 } from "../../platforms/registry.js";
 import { collectPendingProblems } from "../../pending-problems.js";
 import { getEffectiveRatings } from "../../services/user-ratings.js";
@@ -231,10 +230,7 @@ export class ContestList extends HTMLElement {
     if (!pending) return;
 
     const { contest } = pending;
-    await LocalDB.removeTrackedContest(
-      contest.platform ?? DEFAULT_PLATFORM_ID,
-      contest.id,
-    );
+    await LocalDB.removeTrackedContest(contest.platform, contest.id);
     this.expanded.delete(pending.key);
     await chrome.storage.local.set({ [EXPANDED_KEY]: [...this.expanded] });
     await this.renderQueue();

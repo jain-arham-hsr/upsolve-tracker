@@ -9,7 +9,6 @@ import { codeforces } from "./codeforces/descriptor.js";
 import { atcoder } from "./atcoder/descriptor.js";
 import { codechef } from "./codechef/descriptor.js";
 
-export const DEFAULT_PLATFORM_ID = codeforces.id;
 
 const PLATFORMS = [codeforces, atcoder, codechef];
 const BY_ID = new Map(PLATFORMS.map((platform) => [platform.id, platform]));
@@ -62,7 +61,9 @@ export function contestKey(contest) {
 }
 
 export function makeContestKey(platformId, contestId) {
-  return `${platformId ?? DEFAULT_PLATFORM_ID}:${String(contestId)}`;
+  // getPlatform validates, for the same reason contestKey does: a caller that
+  // omits the platform would otherwise mint "undefined:1000".
+  return `${getPlatform(platformId).id}:${String(contestId)}`;
 }
 
 /**
@@ -75,7 +76,7 @@ export function makeContestKey(platformId, contestId) {
  */
 export function contestsOnPlatform(contests, platformId) {
   return (contests ?? []).filter(
-    (contest) => (contest?.platform ?? DEFAULT_PLATFORM_ID) === platformId,
+    (contest) => contest?.platform === platformId,
   );
 }
 
