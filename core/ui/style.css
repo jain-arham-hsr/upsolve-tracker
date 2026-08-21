@@ -285,9 +285,17 @@ cf-stats-view {
 }
 
 .problem-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-weight: 600;
   font-size: 1rem;
   margin-bottom: 6px;
+}
+
+/* Long names wrap; the mark stays put on the first line. */
+.problem-title > span {
+  min-width: 0;
 }
 
 .problem-meta {
@@ -305,12 +313,15 @@ cf-stats-view {
   font-weight: 500;
 }
 
-/* Each meta row pairs two values so the block stays two lines tall. */
+/* Each meta row pairs two values so the block stays two lines tall. The gap
+   is wide because the platform mark used to sit between the chance and the
+   rating; with it gone, "~99% -817" runs together whenever the rating is
+   neutral rather than rank-coloured. */
 .meta-line {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 10px;
 }
 
 /* The rating, in its own platform's units. Tinted by that platform's band via
