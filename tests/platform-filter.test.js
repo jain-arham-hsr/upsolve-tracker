@@ -82,7 +82,7 @@ test("the summary shows one mark per platform, not one per group", () => {
   // Selecting both Codeforces groups is still one platform, so the collapsed
   // button shows a single Codeforces mark — plus the two panel rows.
   const both = renderFilterControl(["codeforces:OFFICIAL", "codeforces:GYM"]);
-  assert.equal((both.match(/aria-label="Codeforces"/g) ?? []).length, 3);
+  assert.equal((both.match(/(?:aria-label|alt)="Codeforces"/g) ?? []).length, 3);
   assert.match(both, /2 of 4/);
 });
 
@@ -101,9 +101,14 @@ test("the list is flat — every row names its platform in full", () => {
 
 test("every row carries its platform's mark, including both Codeforces rows", () => {
   const html = renderFilterControl([]);
-  // Two rows plus nothing in the summary, since nothing is selected.
-  assert.equal((html.match(/aria-label="Codeforces"/g) ?? []).length, 2);
-  assert.equal((html.match(/aria-label="AtCoder"/g) ?? []).length, 1);
+  // Matched on the accessible name rather than the element: AtCoder's mark is
+  // a raster with alt text, the others are inline SVG with aria-label.
+  const named = (label) =>
+    (html.match(new RegExp(`(?:aria-label|alt)="${label}"`, "g")) ?? []).length;
+
+  assert.equal(named("Codeforces"), 2, "one mark on each Codeforces row");
+  assert.equal(named("AtCoder"), 1);
+  assert.equal(named("CodeChef"), 1);
 });
 
 test("selected rows are marked pressed, so state is not colour-alone", () => {
