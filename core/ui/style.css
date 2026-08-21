@@ -292,7 +292,11 @@ cf-stats-view {
 .problem-title {
   font-weight: 600;
   font-size: 1rem;
-  margin-bottom: 6px;
+  /* The meta block below is two lines with a badge of its own, so it needs
+     clear separation from the title rather than the 6px that read as one
+     paragraph. Matters most on a title that wraps, where the second line
+     otherwise runs straight into the rating. */
+  margin-bottom: 11px;
 }
 
 .problem-meta {
