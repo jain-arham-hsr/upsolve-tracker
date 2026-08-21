@@ -2,14 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-The extension is **Upsolve Tracker**; the repo and directory were renamed to match. It covers Codeforces, AtCoder and CodeChef. Internal identifiers **have** now been renamed, but each on its own terms.
-
-- **Custom elements** are `upsolve-*` (`upsolve-app`, `upsolve-queue-view`, …). Nothing persists an element name, so this was a pure find-and-replace — except that `style.css` selects them by name, including the flexbox scrolling fix, and `tests/stylesheet.test.js` names them too.
-- **Settings keys** are `upsolve_tracker.*`, via `services/storage-migration.js`. What makes that safe is ordering and idempotence rather than care: it writes the new key *before* removing the old, so an interrupted run leaves both copies and never neither, and a second run is indistinguishable from the first. It runs at both entry points — the panel and the settings page, either of which can be opened first — and, crucially, **over imported backups too**, since a backup exported before the rename carries the old keys and import writes straight to storage with no undo.
-- **`trackedContests` is deliberately untouched.** It carries no prefix, holds the actual queue, and renaming it would buy nothing but risk.
-- **The IndexedDB store is `upsolve_tracker_db`**, migrated by `migrateSecureStore()` on the first open. This is the most dangerous of the migrations, because a `FileSystemDirectoryHandle` **cannot be re-derived from anything** — an API key can be pasted again, an export folder cannot. So it copies, reads the copy back to confirm it landed, and only then deletes the original; any failure leaves the original untouched and the next boot retries. Handles survive because IndexedDB stores them by structured clone rather than by serialising to text.
-
-Watch for keys built by interpolation rather than written as literals: `rangeKeyFor` in `stats-view.js` builds its key in a template string and was missed by the first sweep, which matched on the opening quote. `BACKUP_FILENAME` is `upsolve_tracker_backup.json`, and the stranding problem is handled rather than accepted: writing to a new name would otherwise leave the old file in the export directory, frozen at the moment of the rename and looking like a perfectly good backup. `writeBackup()` deletes it — *after* the new file is on disk, never before, so a failed write can never leave the directory with no backup at all. A missing legacy file is the normal case for anyone who set up auto-export after the rename and is not treated as an error. `tests/auto-export.test.js` pins all three cases.
+The extension is **Upsolve Tracker**; the repo and directory were renamed to match. It covers Codeforces, AtCoder and CodeChef. Storage keys are `upsolve_tracker.*`, custom elements are `upsolve-*`, the IndexedDB store is `upsolve_tracker_db` and the backup file is `upsolve_tracker_backup.json`. **There is no back-compatibility code anywhere**, deliberately: this was a single-user project at the point of the rename, so the one existing install's data was canonicalised once by hand rather than leaving normalisers in the tree forever. A stored contest therefore always carries its `platform`, and tag-sync state is always `tagsSyncedAt` — code may read both as guaranteed, and anything malformed should fail loudly rather than be quietly repaired.
 
 ## Commands
 
@@ -54,7 +47,7 @@ This replaced two copies of the same Codeforces URL regex (`contest-manager.js` 
 
 Two conventions the registry depends on:
 
-- **Records written before platforms existed carry no `platform` field and read as Codeforces.** That fallback *is* the migration — `platformOf()` and `contestKey()` both default, so nothing has to be rewritten on disk. A `platform` that is present but unrecognised throws instead of defaulting, because that means data from a newer build.
+- **Every stored contest names its `platform`.** `platformOf()` and `contestKey()` both throw on a record that does not, rather than defaulting — a default would file a malformed record under Codeforces and key it as `undefined:1993`. An unrecognised platform throws too, since that means data from a newer build.
 - **A contest may also carry `sourceId`** — the id the user navigated from, when it differs from the one stored. CodeChef parent contests resolve to a division, so `/START252` is stored as `START252D`; `findTrackedContest()` matches either, without which the add banner offers to add an already-tracked contest.
 - **Contest identity is `platform:id`, never the bare id** (`contestKey`). Codeforces contest 1000 and a CodeChef contest "1000" are different contests; keying on the number alone would have one silently overwrite the other in `LocalDB.addTrackedContest`. `LocalDB.removeTrackedContest` takes `(platformId, contestId)` for the same reason.
 
@@ -99,7 +92,7 @@ Two invariants there:
 
 Note every relative import must carry its `.js` extension. Vite resolves extensionless paths, Node does not — three of them had been sitting in `get-prob-stats.js`, `get-rating-distribution.js` and `options.js`, invisible until a test imported that part of the graph.
 
-`backup-validation.js` deliberately does **not** require `platform` — every backup written before this change lacks it — but does refuse a backup naming a platform this build doesn't know, since that would otherwise throw later while rendering the list.
+`backup-validation.js` refuses a backup whose contests omit `platform` or name one this build doesn't know, since either would otherwise throw later while rendering the list.
 
 ### AtCoder
 
@@ -188,7 +181,7 @@ The tag source differs by contest type:
 - **Official** — `problemset.problems`, one ~2 MB request covering all ~11k problems, keyed by `contestId-index`. The per-contest alternative (`contest.standings`) also returns tags but embeds every participant row — ~12 MB for one Div. 3 — so it must not be used in a loop. Note this endpoint rejects `from`/`count` for non-gym contests; it only answers anonymous parameter-less GETs.
 - **Gym** — absent from the problemset entirely. Tags are lifted from the `problems` array of the standings response that adding a gym already fetches, and are usually empty since gyms sit outside CF's taxonomy.
 
-`contest.tagsSyncedAt` records *when* the problemset was last consulted, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever. Records written before this field existed carry a `tagsSynced` boolean instead and are read as "synced long ago".
+`contest.tagsSyncedAt` records *when* the problemset was last consulted, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever.
 
 CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `syncOfficialProblemData` therefore re-checks a contest that still has bare problems, but only once a week; contests where every problem is tagged are never re-requested. It runs at add time and from the refresh, and costs at most one request per sync regardless of how many contests are stale.
 
@@ -341,7 +334,7 @@ Two conventions the shell depends on:
 
 `queue-view` flattens all unsolved problems across contests and sorts by solve probability (see above), and shows a setup prompt when `hasCompleteSetup()` is false — which now means *any* platform is usable, not specifically Codeforces, since AtCoder needs only a handle and CodeChef needs nothing at all — without it, a missing handle or API key made refresh look like a dead button. The platform filter (`ui/platform-filter.js`) is shared by both list views. It is a **dropdown**, not a chip row: chips grew with every platform added and competed for width with the very list they filter, whereas one control stays one line however many platforms exist. The collapsed button shows the active selection as marks plus "2 of 4", so what is filtered stays readable without opening it.
 
-Its groups come from `listFilterPlatforms()`, so a new platform appears without touching either view. The list is **flat**: every group is one row carrying its platform's mark and naming itself in full, so no row depends on a header above it. Codeforces contributes two rows (Official and Gym) because that distinction is worth practising against; platforms with many subtypes contribute one, since nobody wants five AtCoder rows. An empty selection means **no filter**, not "show nothing", and a saved single-select choice from the original dropdown still migrates.
+Its groups come from `listFilterPlatforms()`, so a new platform appears without touching either view. The list is **flat**: every group is one row carrying its platform's mark and naming itself in full, so no row depends on a header above it. Codeforces contributes two rows (Official and Gym) because that distinction is worth practising against; platforms with many subtypes contribute one, since nobody wants five AtCoder rows. An empty selection means **no filter**, not "show nothing".
 
 `ui/dismissable.js` supplies close-on-outside-click and close-on-Escape, shared with the contest row's ⋮ menu; it listens in the capture phase so a handler that stops propagation cannot leave a popover stuck open.
 

@@ -75,26 +75,24 @@ test("first use records the account", async () => {
 const queue = () => [
   { platform: "codeforces", problems: [{ solved: true }, { solved: false }] },
   { platform: "atcoder", problems: [{ solved: true }] },
-  { id: "legacy", problems: [{ solved: true }] },
 ];
 
 test("clearing solved flags touches only the platform that changed", () => {
   const contests = queue();
-  const cleared = clearSolvedForPlatform(contests, "codeforces", "codeforces");
+  const cleared = clearSolvedForPlatform(contests, "codeforces");
 
-  assert.equal(cleared, 2, "the legacy record counts as Codeforces");
+  assert.equal(cleared, 1);
   assert.equal(contests[0].problems[0].solved, false);
   assert.equal(contests[1].problems[0].solved, true, "AtCoder was cleared too");
-  assert.equal(contests[2].problems[0].solved, false);
 });
 
 test("clearing a platform with nothing solved changes nothing", () => {
   const contests = queue();
-  assert.equal(clearSolvedForPlatform(contests, "codechef", "codeforces"), 0);
+  assert.equal(clearSolvedForPlatform(contests, "codechef"), 0);
   assert.equal(contests[1].problems[0].solved, true);
 });
 
 test("clearing survives missing arrays rather than throwing mid-sync", () => {
-  assert.equal(clearSolvedForPlatform(undefined, "codeforces", "codeforces"), 0);
-  assert.equal(clearSolvedForPlatform([{ platform: "codeforces" }], "codeforces", "codeforces"), 0);
+  assert.equal(clearSolvedForPlatform(undefined, "codeforces"), 0);
+  assert.equal(clearSolvedForPlatform([{ platform: "codeforces" }], "codeforces"), 0);
 });

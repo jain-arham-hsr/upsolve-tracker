@@ -8,12 +8,8 @@ import {
 import { CodeforcesService } from "../../services/codeforces-service.js";
 import * as codechefAdapter from "../../platforms/codechef/adapter.js";
 import { platformGlyph } from "../platform-icons.js";
-import { migrateStoredKeys } from "../../services/legacy-migration.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // The settings page can be opened directly, without the panel booting first.
-  await migrateStoredKeys();
-
   // Section marks come from platform-icons.js rather than being pasted in as
   // markup, so there is one place a mark is defined. They are monochrome and
   // inherit the heading's colour, which is what makes them read as muted here

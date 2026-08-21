@@ -6,6 +6,7 @@ import { byStartTimeDesc } from "../core/start-time-service.js";
 
 const contest = (over = {}) => ({
   id: "2193",
+  platform: "codeforces",
   type: "OFFICIAL",
   problems: [{ index: "A", solved: false, rating: 1200, tags: ["dp"] }],
   ...over,
@@ -102,9 +103,13 @@ test("all-unknown dates compare equal rather than throwing", () => {
   );
 });
 
-test("backups without a platform field are still accepted", () => {
-  // Every backup written before platforms existed looks like this.
-  assert.equal(describeBackupProblem({ trackedContests: [contest()] }), null);
+test("a backup whose contests omit their platform is refused", () => {
+  // No read-time default any more, so an unlabelled record would key as
+  // "undefined:1993" and render as an unknown platform. Refuse at the door.
+  assert.match(
+    describeBackupProblem({ trackedContests: [{ id: 1993, problems: [] }] }) ?? "",
+    /platform|support/i,
+  );
 });
 
 test("a backup from a newer version is refused, not imported and crashed later", () => {

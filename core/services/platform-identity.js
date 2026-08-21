@@ -26,7 +26,7 @@
 const IDENTITY_KEY = "upsolve_tracker.platform_identity";
 
 /** @returns {Promise<Record<string, string>>} platform id → verified account */
-export async function getStoredIdentities() {
+async function getStoredIdentities() {
   const stored = await chrome.storage.local.get({ [IDENTITY_KEY]: {} });
   return stored[IDENTITY_KEY] ?? {};
 }
@@ -35,7 +35,7 @@ export async function getStoredIdentity(platformId) {
   return (await getStoredIdentities())[platformId] ?? null;
 }
 
-export async function setStoredIdentity(platformId, username) {
+async function setStoredIdentity(platformId, username) {
   const identities = await getStoredIdentities();
 
   if (username) {
@@ -69,11 +69,11 @@ export function classifyIdentity({ stored, current }) {
  * already removed for being fully solved cannot come back — those were deleted
  * outright.
  */
-export function clearSolvedForPlatform(contests, platformId, defaultPlatformId) {
+export function clearSolvedForPlatform(contests, platformId) {
   let cleared = 0;
 
   for (const contest of contests ?? []) {
-    if ((contest.platform ?? defaultPlatformId) !== platformId) continue;
+    if (contest.platform !== platformId) continue;
 
     for (const problem of contest.problems ?? []) {
       if (problem.solved) {

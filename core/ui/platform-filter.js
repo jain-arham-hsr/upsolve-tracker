@@ -17,23 +17,15 @@ import { bindDismiss } from "./dismissable.js";
 export const PLATFORM_FILTER_KEY = "upsolve_tracker.platform_filter";
 
 /** The single-select key this replaced, read once so a saved choice survives. */
-const LEGACY_KEY = "upsolve_tracker.contest_filter";
-const LEGACY_MAP = { OFFICIAL: ["codeforces:OFFICIAL"], GYM: ["codeforces:GYM"] };
 
 /**
  * @returns {Promise<string[]>} selected keys. Empty means no filter — which is
  *   deliberately not the same as "nothing selected, so show nothing".
  */
 export async function loadFilter() {
-  const stored = await chrome.storage.local.get({
-    [PLATFORM_FILTER_KEY]: null,
-    [LEGACY_KEY]: null,
-  });
-
+  const stored = await chrome.storage.local.get({ [PLATFORM_FILTER_KEY]: null });
   const selected = stored[PLATFORM_FILTER_KEY];
-  if (Array.isArray(selected)) return selected;
-
-  return LEGACY_MAP[stored[LEGACY_KEY]] ?? [];
+  return Array.isArray(selected) ? selected : [];
 }
 
 export async function saveFilter(keys) {

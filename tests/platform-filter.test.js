@@ -37,25 +37,9 @@ test("no stored filter means everything shows", async () => {
   assert.equal(matchesFilter({ platform: "atcoder" }, null), true);
 });
 
-test("a saved single-select choice survives the move to chips", async () => {
-  // The old dropdown stored "OFFICIAL" / "GYM" / "ALL" under another key. Note
-  // the prefix here is the current one: the storage migration renames
-  // cf_trainer.* before any view reads, so by the time this code runs the old
-  // dropdown's value is sitting under upsolve_tracker.contest_filter. Both
-  // migrations have to hold for a long-standing install — see the end-to-end
-  // case in legacy-migration.test.js.
-  stubChrome({ "upsolve_tracker.contest_filter": "GYM" });
-  assert.deepEqual(await loadFilter(), ["codeforces:GYM"]);
 
-  stubChrome({ "upsolve_tracker.contest_filter": "ALL" });
-  assert.deepEqual(await loadFilter(), []);
-});
-
-test("the new selection wins once one exists", async () => {
-  stubChrome({
-    "upsolve_tracker.contest_filter": "GYM",
-    [PLATFORM_FILTER_KEY]: ["atcoder"],
-  });
+test("a stored selection is used as-is", async () => {
+  stubChrome({ [PLATFORM_FILTER_KEY]: ["atcoder"] });
   assert.deepEqual(await loadFilter(), ["atcoder"]);
 });
 
@@ -70,10 +54,6 @@ test("filtering keeps only the selected groups", () => {
   assert.deepEqual(kept.map((c) => c.platform + ":" + c.type), ["codeforces:GYM", "atcoder:ABC"]);
 });
 
-test("a contest predating platforms filters as Codeforces official", async () => {
-  assert.equal(matchesFilter({ id: "1", type: "OFFICIAL" }, ["codeforces:OFFICIAL"]), true);
-  assert.equal(matchesFilter({ id: "1", type: "OFFICIAL" }, ["atcoder"]), false);
-});
 
 test("the collapsed button says what is filtered without being opened", () => {
   assert.match(renderFilterControl([]), /All platforms/);

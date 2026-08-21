@@ -120,11 +120,7 @@ async function syncPlatforms(trackedContests, onProgress) {
       if (verdict === "changed") {
         // The stored flags are a cache of the *old* account's history; leaving
         // them would keep hiding problems this account has never solved.
-        const cleared = clearSolvedForPlatform(
-          trackedContests,
-          platform.id,
-          DEFAULT_PLATFORM_ID,
-        );
+        const cleared = clearSolvedForPlatform(trackedContests, platform.id);
         console.warn(
           `[Progress Manager] ${platform.label} account changed to ${identity.username}; ` +
             `cleared ${cleared} stale solved flag(s).`,

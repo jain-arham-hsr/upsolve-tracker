@@ -45,11 +45,12 @@ test("non-contest URLs return null rather than a plausible guess", () => {
   }
 });
 
-test("records written before platforms existed read as Codeforces", () => {
-  assert.equal(platformOf({ id: "2193", type: "OFFICIAL" }).id, "codeforces");
-  assert.equal(platformOf({}).id, "codeforces");
-  assert.equal(getPlatform(undefined).id, DEFAULT_PLATFORM_ID);
-  assert.equal(getPlatform("").id, DEFAULT_PLATFORM_ID);
+test("a contest must name its platform", () => {
+  // No read-time default any more: a record without a platform is malformed,
+  // and guessing one would silently file it under Codeforces.
+  assert.throws(() => contestKey({ id: 1993 }));
+  assert.throws(() => platformOf({ id: 1993 }));
+  assert.equal(contestKey({ id: 1993, platform: "codeforces" }), "codeforces:1993");
 });
 
 test("an id from a newer version throws instead of silently defaulting", () => {
@@ -65,7 +66,10 @@ test("contest ids do not collide across platforms", () => {
   );
   // Numeric vs string ids are the same contest — backups carry both.
   assert.equal(makeContestKey("codeforces", 1000), makeContestKey("codeforces", "1000"));
-  assert.equal(contestKey({ id: 1993 }), contestKey({ id: "1993", platform: "codeforces" }));
+  assert.equal(
+    contestKey({ id: 1993, platform: "codeforces" }),
+    contestKey({ id: "1993", platform: "codeforces" }),
+  );
 });
 
 test("every registered platform implements the descriptor contract", () => {
@@ -126,9 +130,6 @@ test("the queue label matches the badge wording, not a second vocabulary", () =>
   }
 });
 
-test("a record predating platforms still labels as Official", () => {
-  assert.equal(getPlatform("codeforces").sourceLabel({ id: "2193" }, { index: "A" }), "Official 2193A");
-});
 
 test("only Codeforces carries a row flag", () => {
   // "ABC" and "STARTERS" restated what the contest name and platform mark

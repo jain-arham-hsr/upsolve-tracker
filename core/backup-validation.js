@@ -22,10 +22,9 @@ export function describeBackupProblem(data) {
   if (malformed) {
     return "That backup has malformed contest entries, so it wasn't imported.";
   }
-  // `platform` is deliberately NOT required: backups written before platforms
-  // existed have no such field and read as Codeforces. But a platform this
-  // build has never heard of would throw later, while rendering — so refuse
-  // now, with a reason, rather than importing something that crashes the list.
+  // Every stored contest names its platform, and one this build has never
+  // heard of would throw later while rendering — so refuse now, with a reason,
+  // rather than importing something that crashes the list.
   const unknown = data.trackedContests.find((contest) => {
     try {
       getPlatform(contest.platform);

@@ -12,7 +12,7 @@
  * null forces the caller to decide, loudly.
  */
 
-export const SELECTORS = {
+const SELECTORS = {
   // Ordered fallbacks: first match wins.
   standingsTable: ["table.standings"],
   contestName: [".contest-name", ".caption", "title"],

@@ -109,11 +109,7 @@ async function establishIdentity(platform, adapter, session) {
     // Stale flags belong to the previous account. Unlike the refresh, nothing
     // is held in memory here, so this reads and writes storage directly.
     const contests = await LocalDB.getTrackedContests();
-    const cleared = clearSolvedForPlatform(
-      contests,
-      platform.id,
-      DEFAULT_PLATFORM_ID,
-    );
+    const cleared = clearSolvedForPlatform(contests, platform.id);
     if (cleared > 0) await LocalDB.saveTrackedContests(contests);
   }
 

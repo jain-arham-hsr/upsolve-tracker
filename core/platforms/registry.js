@@ -4,7 +4,6 @@
  * Adding a site means adding a descriptor here; nothing else should branch on
  * which platform a contest came from. Contests stored before platforms existed
  * carry no `platform` field, so every lookup falls back to Codeforces rather
- * than failing — that is the migration, and it costs nothing at read time.
  */
 import { codeforces } from "./codeforces/descriptor.js";
 import { atcoder } from "./atcoder/descriptor.js";
@@ -26,7 +25,6 @@ export function listPlatforms() {
  *   unknown, which means data from a newer version.
  */
 export function getPlatform(id) {
-  if (id == null || id === "") return codeforces;
   const platform = BY_ID.get(id);
   if (!platform) throw new Error(`Unknown platform: ${id}`);
   return platform;
@@ -58,7 +56,9 @@ export function matchContestUrl(url) {
  * backups can carry them as numbers.
  */
 export function contestKey(contest) {
-  return `${contest?.platform ?? DEFAULT_PLATFORM_ID}:${String(contest?.id)}`;
+  // platformOf validates: a record with no platform, or an unknown one, is
+  // malformed, and a key like "undefined:1993" would be stored happily.
+  return `${platformOf(contest).id}:${String(contest?.id)}`;
 }
 
 export function makeContestKey(platformId, contestId) {
@@ -100,7 +100,7 @@ export function listFilterPlatforms() {
 }
 
 /** Which chip a contest belongs to. */
-export function contestFilterKey(contest) {
+function contestFilterKey(contest) {
   return platformOf(contest).filterKey(contest);
 }
 

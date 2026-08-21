@@ -68,12 +68,3 @@ test("solved keys are namespaced, so platforms sharing a contest id don't cross-
   assert.equal(kept[0].problems[0].solved, false, "an unnamespaced key matched");
 });
 
-test("contests predating platforms reconcile as Codeforces", () => {
-  const legacy = { id: "2193", type: "OFFICIAL", problems: [{ index: "A", solved: false }] };
-  const { kept, removed } = applySolvedStatus(
-    [legacy],
-    new Set([codeforces.solvedKey({ id: "2193" }, { index: "A" })]),
-  );
-  assert.equal(kept.length, 0);
-  assert.equal(removed[0].id, "2193");
-});

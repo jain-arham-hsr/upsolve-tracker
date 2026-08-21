@@ -27,11 +27,6 @@ test("contestsOnPlatform keeps only the named platform", () => {
   assert.deepEqual(contestsOnPlatform(undefined, "codeforces"), []);
 });
 
-test("records predating platforms count as Codeforces", () => {
-  const legacy = { id: "2193", type: "OFFICIAL", problems: [] };
-  assert.equal(contestsOnPlatform([legacy], "codeforces").length, 1);
-  assert.equal(contestsOnPlatform([legacy], "atcoder").length, 0);
-});
 
 test("the filter is what stops a foreign contest inheriting a CF start time", async () => {
   // Same id on two platforms. Unfiltered, the bare-id match would date both.

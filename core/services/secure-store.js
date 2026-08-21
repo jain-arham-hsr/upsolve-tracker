@@ -4,15 +4,8 @@
  * - API credentials (shouldn't appear in exported JSON backups)
  */
 
-import { migrateSecureStore } from "./legacy-migration.js";
-
 const DB_NAME = "upsolve_tracker_db";
 const STORE_NAME = "secure";
-
-// Runs once per page, before the first open. An install that predates the
-// rename keeps its key pair and — the part that cannot be re-derived — its
-// export directory handle. See legacy-migration.js.
-let migrated = null;
 
 const KEYS = {
   DIR_HANDLE: "data_dir_handle",
@@ -20,10 +13,7 @@ const KEYS = {
   API_SECRET: "api_secret",
 };
 
-async function openDB() {
-  migrated ??= migrateSecureStore(DB_NAME);
-  await migrated;
-
+function openDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
     request.onupgradeneeded = (e) => {
@@ -91,7 +81,7 @@ export const loadCredentials = async () => ({
  * handle is also what the browser session gets checked against, since its API
  * answers for whoever is signed in rather than for a handle we ask about.
  */
-export async function getPlatformSetup() {
+async function getPlatformSetup() {
   const [settings, { apiKey, apiSecret }] = await Promise.all([
     chrome.storage.local.get([
       "upsolve_tracker.handle",

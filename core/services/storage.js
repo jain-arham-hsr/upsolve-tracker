@@ -32,8 +32,7 @@ export class LocalDB {
    *
    * Identity is platform + id, not id alone: Codeforces contest 1000 and a
    * CodeChef contest "1000" are different contests, and keying on the bare id
-   * would have one silently overwrite the other. Records written before
-   * platforms existed key as Codeforces (see registry.js).
+   * would have one silently overwrite the other.
    */
   static async addTrackedContest(newContest) {
     const contests = await this.getTrackedContests();

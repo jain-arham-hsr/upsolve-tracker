@@ -56,13 +56,6 @@ test("the same id on two platforms is two contests, not one", async () => {
   );
 });
 
-test("a record written before platforms existed is the same contest as an explicit CF one", async () => {
-  // Legacy records carry no `platform`; they must not duplicate on re-add.
-  const store = stubChrome([{ id: "1000", type: "OFFICIAL", problems: [], name: "legacy" }]);
-  await LocalDB.addTrackedContest(contest({ name: "refreshed" }));
-  assert.equal(store.trackedContests.length, 1);
-  assert.equal(store.trackedContests[0].name, "refreshed");
-});
 
 test("removal targets one platform only", async () => {
   const store = stubChrome([
@@ -79,11 +72,10 @@ test("removal accepts a numeric id, as imported backups carry them", async () =>
   assert.equal(store.trackedContests.length, 0);
 });
 
-test("a legacy record with no platform can still be removed", async () => {
-  // The delete button sends "codeforces" for these; the stored record has no
-  // platform at all. Both must resolve to the same key or delete silently
-  // no-ops and the row comes back on re-render.
-  const store = stubChrome([{ id: "1000", type: "GYM", problems: [] }]);
+test("removal matches on the platform-qualified key", async () => {
+  // A bare id is not enough: two platforms can share a contest number, so the
+  // key the button sends has to resolve to the same one the record stores.
+  const store = stubChrome([{ id: "1000", platform: "codeforces", type: "GYM", problems: [] }]);
   await LocalDB.removeTrackedContest("codeforces", "1000");
   assert.equal(store.trackedContests.length, 0);
 });

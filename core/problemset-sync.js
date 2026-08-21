@@ -31,7 +31,7 @@ function needsSync(contest, now) {
   if (contest.type !== "OFFICIAL") return false;
 
   // Pre-timestamp records used a boolean; treat those as synced long ago.
-  const syncedAt = contest.tagsSyncedAt ?? (contest.tagsSynced ? 0 : null);
+  const syncedAt = contest.tagsSyncedAt ?? null;
   if (syncedAt === null) return true;
 
   const incomplete = contest.problems.some(
@@ -91,7 +91,6 @@ export async function syncOfficialProblemData(
       }
     });
     contest.tagsSyncedAt = now;
-    delete contest.tagsSynced;
   });
 
   console.log(

@@ -6,8 +6,7 @@
  * (contest-manager.js and contest-list.js) and the origin was hardcoded in
  * three more places, so a URL change meant five edits.
  *
- * `subtype` is the value stored on `contest.type` — kept under that name so
- * existing records need no migration.
+ * `subtype` is the value stored on `contest.type`.
  */
 
 const URL_PATTERN = /^https?:\/\/(?:www\.)?codeforces\.com\/(contest|gym)\/(\d+)/i;

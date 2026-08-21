@@ -5,7 +5,6 @@
  * otherwise the file silently drifts from what the extension is showing.
  */
 import { loadDirHandle } from "./secure-store.js";
-import { LEGACY_BACKUP_FILENAME } from "./legacy-migration.js";
 
 export const BACKUP_FILENAME = "upsolve_tracker_backup.json";
 
@@ -65,8 +64,6 @@ export async function writeBackup(dirHandle) {
     await writable.write(json);
     await writable.close();
 
-    await retireLegacyBackup(dirHandle);
-
     console.log("[Auto-Export] Backup written to", dirHandle.name);
     return true;
   } catch (error) {
@@ -75,24 +72,3 @@ export async function writeBackup(dirHandle) {
   }
 }
 
-/**
- * Removes the pre-rebrand backup, once a current one exists beside it.
- *
- * Absence is the normal case — anyone who set up auto-export after the rename
- * never had one — so NotFoundError is not worth reporting. Any other failure is
- * logged and swallowed: a leftover file is untidy, but the backup itself
- * succeeded and that is what the caller is waiting on.
- */
-async function retireLegacyBackup(dirHandle) {
-  // Renaming alone would leave the old file in the export directory, frozen at
-  // the moment of the rename and looking like a perfectly good backup —
-  // restoring from it later would silently lose everything added since.
-  try {
-    await dirHandle.removeEntry(LEGACY_BACKUP_FILENAME);
-    console.log("[Auto-Export] Removed the pre-rebrand backup");
-  } catch (error) {
-    if (error.name !== "NotFoundError") {
-      console.warn("[Auto-Export] Could not remove the old backup:", error.message);
-    }
-  }
-}

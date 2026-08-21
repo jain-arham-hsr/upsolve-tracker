@@ -12,7 +12,6 @@ import { LocalDB } from "../services/storage.js";
 import { matchContestUrl, findTrackedContest } from "../platforms/registry.js";
 import { escapeHtml } from "./escape-html.js";
 import { platformIcon } from "./platform-icons.js";
-import { migrateStoredKeys } from "../services/legacy-migration.js";
 
 // Inline so it inherits the header's colour and hover transition, which a
 // colour emoji would ignore. Knobs are filled with the header background so
@@ -29,11 +28,7 @@ export class UpsolveApp extends HTMLElement {
     super();
   }
 
-  async connectedCallback() {
-    // Before anything reads a setting. Every view resolves its own keys, so a
-    // half-migrated store would have some of them silently reading defaults.
-    await migrateStoredKeys();
-
+  connectedCallback() {
     const template = document.getElementById("tpl-app");
     const content = template.content.cloneNode(true);
     this.appendChild(content);
