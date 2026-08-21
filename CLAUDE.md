@@ -55,20 +55,18 @@ Two conventions the registry depends on:
 
 ### Whose data is this? (`services/platform-identity.js`)
 
-**Every read of user-specific data must be attributable to a verified account.** Nothing that writes `solved`, or sets a rating the queue orders by, may run against an unconfirmed identity. Adapters expose `verifyIdentity(session)` — returning `{username, rating}` or throwing — and it runs before solved status is read, on **both** the refresh and the add path (adding a CodeChef contest reads `problemsstats` too).
+**Every platform has a handle you enter in Settings, and that handle is the authority.** Nothing that writes `solved`, or sets a rating the queue orders by, runs without one — and **a contest cannot be added for a platform whose handle is missing**, because it would store unmarked, its solved problems would never clear, and it would look like the sync was merely slow.
 
-Verification is free: the same call already fetched the rating. Codeforces uses `user.info`, AtCoder the profile page, CodeChef the bootstrap object `createSession` already read.
+Adapters check it through `verifyIdentity(session)`, which returns `{username, rating}` or throws, before any user-specific read — on the refresh **and** the add path, since adding a CodeChef contest reads `problemsstats` too. Verification is free: the same call already fetched the rating. Codeforces uses `user.info`, AtCoder the profile page, CodeChef the bootstrap object `createSession` already read.
 
-A mismatch means different things depending on where the identity comes from, which is why adapters declare **`identityIsAmbient`**:
+The check differs by how each platform is addressed:
 
-- **Ambient** (`codechef`) — identity is the browser session, so a mismatch means *someone else signed in*. **Refuse**, and leave everything untouched. This is not hypothetical: `solved` is only ever set true, fully-solved contests are deleted outright, and `writeBackup()` runs after the sync — so one sync under another account permanently corrupts the queue *and* overwrites the backup with the corruption.
-- **Configured** (`codeforces`, `atcoder`) — identity is a handle typed into Settings, so a mismatch means the user changed it deliberately. **Adopt it, and clear that platform's `solved` flags first**: they cache the *old* account's history and would otherwise keep hiding problems this account has never solved. Codeforces' canonical casing is taken from the API so `Tourist` vs `tourist` isn't read as a change.
+- **Codeforces and AtCoder are asked *about* a handle**, so who is signed into those sites is irrelevant and verification only confirms the handle exists. That matters more than it sounds: `user.status?handle=X` returns X's submissions no matter whose key signs the request, so an unchecked handle silently yields somebody else's history. Codeforces' canonical casing is taken from the API, so `Tourist` over `tourist` is not read as a change.
+- **CodeChef answers for whoever holds the session cookie**, so the configured handle is additionally compared against the signed-in account. A mismatch throws with **`isIdentityMismatch`** and callers must always stop — `solved` is only ever set true, fully-solved contests are deleted outright, and `writeBackup()` runs after the sync, so one sync under another account permanently corrupts the queue *and* overwrites the backup with the corruption.
 
-Verification also catches a handle that simply doesn't exist — which otherwise yields no solved problems and looks exactly like a slow sync — and a valid handle belonging to someone else, which yields *their* history (`user.status?handle=X` returns X's submissions regardless of whose key signs the request).
+`services/platform-identity.js` answers the one remaining question: **has that handle changed since the solved flags were derived?** If so they belong to the previous account and are cleared, for that platform only, so the next sync re-derives them. That restores what this file already claims — solved state derived fresh each sync rather than cached — which the stickiness had quietly made false. Contests already deleted for being fully solved cannot come back.
 
 `updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption. The shell reports them **last**, after the backup write and the view refresh — reporting earlier let `"Writing backup…"` overwrite the message for exactly the users whose backup was at risk.
-
-Two failure kinds must not be conflated, which is why the mismatch error carries `isIdentityMismatch`. **Someone else being signed in always stops the operation.** A platform merely being unconfigured — no AtCoder handle — does not: you can still add and track its contests, you just get no solved status until it is set up.
 
 Note the Codeforces scrape sends cookies (`http-client.js:32`), but `standings-dom.js` reads only the contest name, problems, *competitors'* handles, solve counts and pagination — nothing about the viewer. So it needs no identity, and neither do the public bulk endpoints or kenkoooo's static files.
 
