@@ -321,7 +321,13 @@ cf-stats-view {
 
 .problem-title {
   font-weight: 600;
-  font-size: 1rem;
+  /* Same treatment as the contest name, half a step larger: this is the sole
+     primary element of its view, and the row carries more padding around it.
+     Long titles like "Bowser's Castle (Medium Version)" now hold one line at
+     panel width. Not tied to any alignment maths — the row's mark is seated
+     against --rating-size, not this. */
+  font-size: 0.9rem;
+  letter-spacing: 0.1px;
   color: var(--text-title);
   /* The meta block below is two lines with a badge of its own, so it needs
      clear separation from the title rather than the 6px that read as one
