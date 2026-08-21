@@ -8,7 +8,7 @@ import {
 import { CodeforcesService } from "../../services/codeforces-service.js";
 import * as codechefAdapter from "../../platforms/codechef/adapter.js";
 import { platformGlyph } from "../platform-icons.js";
-import { migrateStoredKeys } from "../../services/storage-migration.js";
+import { migrateStoredKeys } from "../../services/legacy-migration.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   // The settings page can be opened directly, without the panel booting first.

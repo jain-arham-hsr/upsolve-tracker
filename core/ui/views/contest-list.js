@@ -1,6 +1,6 @@
 import templateHtml from "./contest-list.html?raw";
 import { LocalDB } from "../../services/storage.js";
-import { renameLegacyKeys } from "../../services/storage-migration.js";
+import { renameLegacyKeys } from "../../services/legacy-migration.js";
 import {
   BACKUP_FILENAME,
   verifyExportPermission,
@@ -287,7 +287,7 @@ export class ContestList extends HTMLElement {
       .querySelector("[data-import-confirm]")
       .addEventListener("click", async () => {
         try {
-          // A backup exported before the rename carries cf_trainer.* keys, and
+          // A backup exported before the rename carries the former key prefix, and
           // import writes straight to storage with no undo — so it would put
           // back exactly what the migration removed.
           await chrome.storage.local.set(renameLegacyKeys(data).data);

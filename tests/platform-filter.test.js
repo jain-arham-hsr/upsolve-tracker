@@ -43,7 +43,7 @@ test("a saved single-select choice survives the move to chips", async () => {
   // cf_trainer.* before any view reads, so by the time this code runs the old
   // dropdown's value is sitting under upsolve_tracker.contest_filter. Both
   // migrations have to hold for a long-standing install — see the end-to-end
-  // case in storage-migration.test.js.
+  // case in legacy-migration.test.js.
   stubChrome({ "upsolve_tracker.contest_filter": "GYM" });
   assert.deepEqual(await loadFilter(), ["codeforces:GYM"]);
 

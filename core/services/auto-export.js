@@ -5,16 +5,9 @@
  * otherwise the file silently drifts from what the extension is showing.
  */
 import { loadDirHandle } from "./secure-store.js";
+import { LEGACY_BACKUP_FILENAME } from "./legacy-migration.js";
 
 export const BACKUP_FILENAME = "upsolve_tracker_backup.json";
-
-// The name this wrote to before the rebrand. Renaming alone would leave that
-// file sitting in the export directory, frozen at the moment of the rename and
-// looking like a perfectly good backup — restoring from it later would silently
-// lose everything added since. So the first successful write under the new name
-// deletes it. That ordering matters: the old file is only given up once its
-// replacement is on disk.
-const LEGACY_BACKUP_FILENAME = "cf_trainer_backup.json";
 
 /**
  * Tests the directory handle immediately. If Chrome locked it after a restart,
@@ -91,6 +84,9 @@ export async function writeBackup(dirHandle) {
  * succeeded and that is what the caller is waiting on.
  */
 async function retireLegacyBackup(dirHandle) {
+  // Renaming alone would leave the old file in the export directory, frozen at
+  // the moment of the rename and looking like a perfectly good backup —
+  // restoring from it later would silently lose everything added since.
   try {
     await dirHandle.removeEntry(LEGACY_BACKUP_FILENAME);
     console.log("[Auto-Export] Removed the pre-rebrand backup");

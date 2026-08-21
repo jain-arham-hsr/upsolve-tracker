@@ -4,8 +4,15 @@
  * - API credentials (shouldn't appear in exported JSON backups)
  */
 
-const DB_NAME = "cf_trainer_db";
+import { migrateSecureStore } from "./legacy-migration.js";
+
+const DB_NAME = "upsolve_tracker_db";
 const STORE_NAME = "secure";
+
+// Runs once per page, before the first open. An install that predates the
+// rename keeps its key pair and — the part that cannot be re-derived — its
+// export directory handle. See legacy-migration.js.
+let migrated = null;
 
 const KEYS = {
   DIR_HANDLE: "data_dir_handle",
@@ -13,7 +20,10 @@ const KEYS = {
   API_SECRET: "api_secret",
 };
 
-function openDB() {
+async function openDB() {
+  migrated ??= migrateSecureStore(DB_NAME);
+  await migrated;
+
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
     request.onupgradeneeded = (e) => {

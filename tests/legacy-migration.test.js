@@ -1,5 +1,5 @@
 /**
- * The cf_trainer.* -> upsolve_tracker.* rename.
+ * The rename off the project's former name.
  *
  * CLAUDE.md kept these keys frozen for a long time on the grounds that a
  * botched migration silently loses someone's queue, so the properties that
@@ -15,7 +15,7 @@ import {
   PREFIX,
   renameLegacyKeys,
   migrateStoredKeys,
-} from "../core/services/storage-migration.js";
+} from "../core/services/legacy-migration.js";
 
 /** chrome.storage.local over a plain object, recording the call order. */
 function stubStorage(initial) {
@@ -120,4 +120,76 @@ test("both migrations chain for a long-standing install", async () => {
 
   const { loadFilter } = await import("../core/ui/platform-filter.js");
   assert.deepEqual(await loadFilter(), ["codeforces:GYM"]);
+});
+
+/**
+ * The secure store is the migration with the worst failure mode: an API key can
+ * be pasted again, but a FileSystemDirectoryHandle cannot be reconstructed from
+ * anything, so losing it loses the export folder outright.
+ */
+test("the secure store is only given up once the copy reads back", async () => {
+  const { migrateSecureStore } = await import("../core/services/legacy-migration.js");
+
+  const dbs = {
+    cf_trainer_db: new Map([["api_key", "abc"], ["data_dir_handle", { kind: "handle" }]]),
+  };
+  const deleted = [];
+  let writesAllowed = true;
+
+  globalThis.indexedDB = {
+    open(name) {
+      const request = {};
+      queueMicrotask(() => {
+        dbs[name] ??= new Map();
+        const map = dbs[name];
+        request.result = {
+          objectStoreNames: { contains: () => true },
+          close() {},
+          transaction: () => ({
+            objectStore: () => ({
+              getAllKeys: () => ({ result: [...map.keys()] }),
+              getAll: () => ({ result: [...map.values()] }),
+              put(value, key) {
+                if (writesAllowed) map.set(key, value);
+              },
+            }),
+            set oncomplete(fn) {
+              queueMicrotask(fn);
+            },
+            set onerror(_fn) {},
+          }),
+        };
+        request.onsuccess?.({ target: request });
+      });
+      return request;
+    },
+    deleteDatabase(name) {
+      const request = {};
+      queueMicrotask(() => {
+        deleted.push(name);
+        delete dbs[name];
+        request.onsuccess?.();
+      });
+      return request;
+    },
+  };
+
+  const moved = await migrateSecureStore("upsolve_tracker_db");
+
+  assert.equal(moved, 2);
+  assert.deepEqual(deleted, ["cf_trainer_db"], "the original is deleted only after the copy");
+  assert.equal(dbs.upsolve_tracker_db.get("api_key"), "abc");
+  assert.deepEqual(dbs.upsolve_tracker_db.get("data_dir_handle"), { kind: "handle" });
+
+  // A copy that silently drops records must leave the original in place.
+  dbs.cf_trainer_db = new Map([["api_key", "abc"]]);
+  writesAllowed = false;
+  deleted.length = 0;
+  const second = await migrateSecureStore("upsolve_tracker_db_2");
+
+  assert.equal(second, 0);
+  assert.deepEqual(deleted, [], "a short copy must not delete the original");
+  assert.ok(dbs.cf_trainer_db.has("api_key"), "the only copy of the key must survive");
+
+  delete globalThis.indexedDB;
 });

@@ -7,9 +7,9 @@ The extension is **Upsolve Tracker**; the repo and directory were renamed to mat
 - **Custom elements** are `upsolve-*` (`upsolve-app`, `upsolve-queue-view`, …). Nothing persists an element name, so this was a pure find-and-replace — except that `style.css` selects them by name, including the flexbox scrolling fix, and `tests/stylesheet.test.js` names them too.
 - **Settings keys** are `upsolve_tracker.*`, via `services/storage-migration.js`. What makes that safe is ordering and idempotence rather than care: it writes the new key *before* removing the old, so an interrupted run leaves both copies and never neither, and a second run is indistinguishable from the first. It runs at both entry points — the panel and the settings page, either of which can be opened first — and, crucially, **over imported backups too**, since a backup exported before the rename carries the old keys and import writes straight to storage with no undo.
 - **`trackedContests` is deliberately untouched.** It carries no prefix, holds the actual queue, and renaming it would buy nothing but risk.
-- **`cf_trainer_db`, the IndexedDB name, is also untouched** — it holds the API key pair and the `FileSystemDirectoryHandle`. A handle cannot be re-derived from anything, so a failed copy between databases loses the export folder silently. The name is invisible to users.
+- **The IndexedDB store is `upsolve_tracker_db`**, migrated by `migrateSecureStore()` on the first open. This is the most dangerous of the migrations, because a `FileSystemDirectoryHandle` **cannot be re-derived from anything** — an API key can be pasted again, an export folder cannot. So it copies, reads the copy back to confirm it landed, and only then deletes the original; any failure leaves the original untouched and the next boot retries. Handles survive because IndexedDB stores them by structured clone rather than by serialising to text.
 
-Watch for keys built by interpolation rather than written as literals: `rangeKeyFor` in `stats-view.js` builds its key in a template string and was missed by the first sweep, which matched on the opening quote. `BACKUP_FILENAME` **did** change, to `upsolve_tracker_backup.json`, but only because the stranding problem is handled rather than accepted: writing to a new name would otherwise leave `cf_trainer_backup.json` in the export directory, frozen at the moment of the rename and looking like a perfectly good backup. `writeBackup()` deletes it — *after* the new file is on disk, never before, so a failed write can never leave the directory with no backup at all. A missing legacy file is the normal case for anyone who set up auto-export after the rename and is not treated as an error. `tests/auto-export.test.js` pins all three cases.
+Watch for keys built by interpolation rather than written as literals: `rangeKeyFor` in `stats-view.js` builds its key in a template string and was missed by the first sweep, which matched on the opening quote. `BACKUP_FILENAME` is `upsolve_tracker_backup.json`, and the stranding problem is handled rather than accepted: writing to a new name would otherwise leave the old file in the export directory, frozen at the moment of the rename and looking like a perfectly good backup. `writeBackup()` deletes it — *after* the new file is on disk, never before, so a failed write can never leave the directory with no backup at all. A missing legacy file is the normal case for anyone who set up auto-export after the rename and is not treated as an error. `tests/auto-export.test.js` pins all three cases.
 
 ## Commands
 
@@ -103,7 +103,7 @@ Note every relative import must carry its `.js` extension. Vite resolves extensi
 
 ### AtCoder
 
-`core/platforms/atcoder/`. Far smaller than the Codeforces adapter, because AtCoder Problems (kenkoooo) publishes difficulty directly — **there is no scrape, no participant sampling and no estimator on this path**. Four static JSON files plus a submissions endpoint cover everything. AtCoder needs no key or secret, only a handle (`cf_trainer.atcoder_handle`), and only to read solved history.
+`core/platforms/atcoder/`. Far smaller than the Codeforces adapter, because AtCoder Problems (kenkoooo) publishes difficulty directly — **there is no scrape, no participant sampling and no estimator on this path**. Four static JSON files plus a submissions endpoint cover everything. AtCoder needs no key or secret, only a handle (`upsolve_tracker.atcoder_handle`), and only to read solved history.
 
 Four things that are easy to get wrong:
 
@@ -203,10 +203,10 @@ CF tags are editable after publication, so a problem can gain tags days later �
 
 ### Storage split — this is deliberate
 
-- **`chrome.storage.local`** (`services/storage.js`, `LocalDB`) — `trackedContests` array, keyed by `platform:id` (see the platform registry above), plus settings under dotted keys `cf_trainer.handle` and `cf_trainer.auto_export`. This is what the Export/Import JSON backup dumps wholesale.
+- **`chrome.storage.local`** (`services/storage.js`, `LocalDB`) — `trackedContests` array, keyed by `platform:id` (see the platform registry above), plus settings under dotted keys `upsolve_tracker.handle` and `upsolve_tracker.auto_export`. This is what the Export/Import JSON backup dumps wholesale.
 - **IndexedDB** (`services/secure-store.js`) — API key/secret and the `FileSystemDirectoryHandle`. Credentials live here specifically so they never land in an exported backup; the directory handle lives here because handles aren't serializable into `chrome.storage`.
 
-`LocalDB` deliberately holds only the tracked-contest methods. Settings are read directly from their dotted keys (`cf_trainer.handle`, `cf_trainer.auto_export`, `cf_trainer.contest_filter`, `cf_trainer.tag_rating_range`), and solved state is derived fresh from `user.status` on every sync rather than cached. Earlier accessors for a `cfHandle` key and a `solvedCache` were removed — nothing wrote them.
+`LocalDB` deliberately holds only the tracked-contest methods. Settings are read directly from their dotted keys (`upsolve_tracker.handle`, `upsolve_tracker.auto_export`, `upsolve_tracker.platform_filter`, `upsolve_tracker.tag_rating_range`), and solved state is derived fresh from `user.status` on every sync rather than cached. Earlier accessors for a `cfHandle` key and a `solvedCache` were removed — nothing wrote them.
 
 ### Deduplicating the queue
 
@@ -330,7 +330,7 @@ The rank-band colours live in `--band-*` variables so the histogram fills (`.ban
 
 ### UI shell
 
-`core/ui/index.js` defines `<cf-app>`, which clones the `#tpl-app` template from `index.html` and hand-rolls a router over three views in `#router-outlet`: `<cf-queue-view>`, `<cf-contest-list>` and `<cf-stats-view>`. Navigation is the tab bar; the header holds only refresh and settings, which act on the app rather than on a view. Views import their markup with Vite `?raw` imports and set `innerHTML`, and are **destroyed and rebuilt on every tab switch** — which is why selections that should survive (the contest type filter, the tag rating range) are persisted to `chrome.storage.local` rather than held on the instance.
+`core/ui/index.js` defines `<upsolve-app>`, which clones the `#tpl-app` template from `index.html` and hand-rolls a router over three views in `#router-outlet`: `<upsolve-queue-view>`, `<upsolve-contest-list>` and `<upsolve-stats-view>`. Navigation is the tab bar; the header holds only refresh and settings, which act on the app rather than on a view. Views import their markup with Vite `?raw` imports and set `innerHTML`, and are **destroyed and rebuilt on every tab switch** — which is why selections that should survive (the contest type filter, the tag rating range) are persisted to `chrome.storage.local` rather than held on the instance.
 
 **Adding a contest is a contextual action, not a navigational one.** The offer only exists when the active browser tab is on a contest page, so it lives in the shell as a banner above the tab bar — visible from any view — rather than inside the Contests view, where the button spent most of its life greyed out. The `chrome.tabs` listeners live in `index.js` for the same reason: they have to outlive any single view.
 
@@ -345,7 +345,7 @@ Its groups come from `listFilterPlatforms()`, so a new platform appears without 
 
 `ui/dismissable.js` supplies close-on-outside-click and close-on-Escape, shared with the contest row's ⋮ menu; it listens in the capture phase so a handler that stops propagation cannot leave a popover stuck open.
 
-**A contest row is an accordion.** Clicking it expands in place to show what that contest still owes the queue, rendered with `problem-row.js` so the expansion and the Queue cannot disagree — positions are omitted there, since the queue's numbering is global. The expansion is scoped to one contest rather than deduplicated against the others: a problem shared with another division really is in both, and hiding it would make the contest look shorter than it is. Expanded keys persist to `cf_trainer.expanded_contests`, because the view is rebuilt on every tab switch. **There is no chevron** — the expansion appearing is the indicator, with `aria-expanded` for anything that can't see it.
+**A contest row is an accordion.** Clicking it expands in place to show what that contest still owes the queue, rendered with `problem-row.js` so the expansion and the Queue cannot disagree — positions are omitted there, since the queue's numbering is global. The expansion is scoped to one contest rather than deduplicated against the others: a problem shared with another division really is in both, and hiding it would make the contest look shorter than it is. Expanded keys persist to `upsolve_tracker.expanded_contests`, because the view is rebuilt on every tab switch. **There is no chevron** — the expansion appearing is the indicator, with `aria-expanded` for anything that can't see it.
 
 The row carries a **⋮ menu** holding *Open contest* and *Remove from queue*; the row is a `<button>`, not an anchor, so clicking it no longer leaves the panel. The menu button stops propagation, or opening it would toggle the accordion underneath.
 
