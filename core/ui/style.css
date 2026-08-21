@@ -654,7 +654,12 @@ cf-stats-view {
   line-height: var(--title-line);
   font-weight: 600;
   letter-spacing: 0.1px;
-  color: var(--text-main);
+  /* Not pure white. This row has no other bright element — unlike the queue,
+     where a tinted rating and the solve chance share the top of the ladder —
+     so #fff at 600 made the title the loudest thing on the page by a wide
+     margin. #dedede still leads the ladder it sits in: id badge #c2c2c2,
+     count line and flags dimmer again. */
+  color: #dedede;
   width: 100%;
   overflow-wrap: anywhere;
   display: flex;
