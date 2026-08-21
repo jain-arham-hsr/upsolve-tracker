@@ -79,20 +79,31 @@ test("the collapsed button says what is filtered without being opened", () => {
 });
 
 test("the summary shows one mark per platform, not one per group", () => {
-  // Selecting both Codeforces groups is still one platform.
+  // Selecting both Codeforces groups is still one platform, so the collapsed
+  // button shows a single Codeforces mark — plus the two panel rows.
   const both = renderFilterControl(["codeforces:OFFICIAL", "codeforces:GYM"]);
-  assert.equal((both.match(/aria-label="Codeforces"/g) ?? []).length, 2,
-    "one mark in the summary, one on the panel row");
+  assert.equal((both.match(/aria-label="Codeforces"/g) ?? []).length, 3);
+  assert.match(both, /2 of 4/);
 });
 
-test("Codeforces nests its two groups; the others are a single row", () => {
+test("the list is flat — every row names its platform in full", () => {
   const html = renderFilterControl([]);
-  assert.match(html, /filter-group-head/);
-  assert.match(html, /data-filter-key="codeforces:OFFICIAL"[^>]*[\s\S]*?Official/);
-  assert.match(html, /class="filter-row is-nested"/);
-  // AtCoder contributes one group, so it is a plain row named for the platform.
-  assert.match(html, /data-filter-key="atcoder"[\s\S]*?AtCoder/);
-  assert.ok(!/is-nested[^>]*data-filter-key="atcoder"/.test(html));
+
+  // No headers, so a row cannot rely on one above it for context.
+  assert.ok(!/filter-group-head/.test(html));
+  assert.ok(!/is-nested/.test(html));
+
+  for (const label of ["Codeforces Official", "Codeforces Gym", "AtCoder", "CodeChef"]) {
+    assert.ok(html.includes(label), `${label} should be a row of its own`);
+  }
+  assert.equal((html.match(/class="filter-row"/g) ?? []).length, 4);
+});
+
+test("every row carries its platform's mark, including both Codeforces rows", () => {
+  const html = renderFilterControl([]);
+  // Two rows plus nothing in the summary, since nothing is selected.
+  assert.equal((html.match(/aria-label="Codeforces"/g) ?? []).length, 2);
+  assert.equal((html.match(/aria-label="AtCoder"/g) ?? []).length, 1);
 });
 
 test("selected rows are marked pressed, so state is not colour-alone", () => {

@@ -61,12 +61,15 @@ export const codeforces = {
 
   /**
    * Codeforces splits into two, because official and gym are genuinely
-   * different things to practise. Platforms with many subtypes offer one
-   * group instead — nobody wants five AtCoder chips.
+   * different things to practise. Platforms with many subtypes offer one group
+   * instead — nobody wants five AtCoder rows.
+   *
+   * Labels name the platform, because the filter is a flat list: a row has to
+   * stand on its own without a header above it.
    */
   filterGroups: [
-    { key: "codeforces:OFFICIAL", label: "Official" },
-    { key: "codeforces:GYM", label: "Gym" },
+    { key: "codeforces:OFFICIAL", label: "Codeforces Official" },
+    { key: "codeforces:GYM", label: "Codeforces Gym" },
   ],
 
   filterKey(contest) {

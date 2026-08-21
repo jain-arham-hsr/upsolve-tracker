@@ -62,7 +62,7 @@ export function renderFilterControl(selected) {
       ${summary}<span class="filter-caret" aria-hidden="true">▾</span>
     </button>
     <div class="filter-panel hidden" data-filter-panel>
-      ${platforms.map((entry) => renderPlatformEntry(entry, active)).join("")}
+      ${renderRows(platforms, active)}
     </div>`;
 }
 
@@ -74,34 +74,28 @@ function marksFor(platforms, active) {
     .join("");
 }
 
-function renderPlatformEntry({ platform, groups }, active) {
-  // One group: the platform itself is the checkbox. Several: a header, then a
-  // nested row each, so "Official" and "Gym" read under "Codeforces".
-  if (groups.length === 1) {
-    return row(groups[0].key, platform.label, active, {
-      mark: platformIcon(platform.id, platform.shortLabel),
-    });
-  }
-
-  return `
-    <div class="filter-group">
-      <div class="filter-group-head">
-        ${platformIcon(platform.id, platform.shortLabel)}
-        <span>${escapeHtml(platform.label)}</span>
-      </div>
-      ${groups.map((group) => row(group.key, group.label, active, { nested: true })).join("")}
-    </div>`;
-}
-
-function row(key, label, active, { mark = "", nested = false } = {}) {
-  const on = active.includes(key);
-  return `
-    <button type="button" class="filter-row${nested ? " is-nested" : ""}"
-            data-filter-key="${escapeHtml(key)}" aria-pressed="${on}">
-      <span class="filter-check" aria-hidden="true">${on ? "✓" : ""}</span>
-      ${mark}
-      <span class="filter-row-label">${escapeHtml(label)}</span>
-    </button>`;
+/**
+ * One row per filter group, flat.
+ *
+ * Codeforces contributes two and everyone else one, but they all read the same
+ * way — each row carries its platform's mark and names itself in full, so
+ * nothing depends on a header above it.
+ */
+function renderRows(platforms, active) {
+  return platforms
+    .flatMap(({ platform, groups }) =>
+      groups.map((group) => {
+        const on = active.includes(group.key);
+        return `
+          <button type="button" class="filter-row"
+                  data-filter-key="${escapeHtml(group.key)}" aria-pressed="${on}">
+            <span class="filter-check" aria-hidden="true">${on ? "✓" : ""}</span>
+            ${platformIcon(platform.id, platform.shortLabel)}
+            <span class="filter-row-label">${escapeHtml(group.label)}</span>
+          </button>`;
+      }),
+    )
+    .join("");
 }
 
 /**
