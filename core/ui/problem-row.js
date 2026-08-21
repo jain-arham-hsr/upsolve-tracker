@@ -70,11 +70,6 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
       ? `<span class="rating-flag" title="Low-confidence estimate">~</span>`
       : "";
 
-  // The mark leads the title rather than sitting by the rating: it says which
-  // site the row belongs to, which is a property of the problem, not of its
-  // difficulty. Inline with the title rather than centred in the row, because
-  // the row is three lines tall and a centred mark would sit beside the meta.
-  //
   // Names come from scraped or API-supplied data; the marks are static.
   const name = escapeHtml(row.name?.replace(/\s+/g, " ").trim() || "Unknown Problem");
   const mark = platformIcon(row.platform, row.platformLabel ?? "");
@@ -98,12 +93,13 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
     <a href="${escapeHtml(row.url)}" target="_blank" class="problem-row">
       ${index}
       <div class="problem-content">
-        <div class="problem-title">${mark}<span>${name}</span></div>
+        <div class="problem-title">${name}</div>
         <div class="problem-meta">
           <span class="meta-line">
             <span class="solve-chance" title="Estimated chance you solve this">${formatSolveProbability(
               row.solveProbability,
             )}</span>
+            ${mark}
             <span class="rating ${tone}">${ratingText}</span>${flag}
           </span>
           <span class="meta-line">

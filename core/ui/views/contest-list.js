@@ -353,6 +353,10 @@ export class ContestList extends HTMLElement {
     const name = escapeHtml(rawName || `Contest ${contest.id}`);
     const safeKey = escapeHtml(key);
 
+    // The platform mark leads the name rather than sitting in the pill row: it
+    // says which site this contest is from, which belongs with its title, not
+    // among the id and type pills.
+    //
     // No chevron: the expansion itself is the indicator. aria-expanded carries
     // it for anything that can't see the difference.
     return `
@@ -360,9 +364,11 @@ export class ContestList extends HTMLElement {
         <div class="contest-head">
           <button type="button" class="contest-row" data-toggle-key="${safeKey}"
                   aria-expanded="${isOpen}">
-            <span class="contest-name">${name}</span>
-            <span class="contest-tags">
+            <span class="contest-name">
               ${platformIcon(platform.id, platform.shortLabel)}
+              <span>${name}</span>
+            </span>
+            <span class="contest-tags">
               <span class="contest-id">#${escapeHtml(String(contest.id))}</span>
               <span class="contest-type ${platform.badgeClass(contest)}">${platform.subtypeLabel(contest)}</span>
             </span>
