@@ -113,12 +113,13 @@ Submission paging is the other sharp edge. The endpoint returns at most 500 rows
 
 `core/platforms/codechef/`. No estimator here either: CodeChef publishes `difficulty_rating` and does so promptly — Starters 252 was fully rated within two days of running. `/api/rankings/` is CSRF-gated and returns 403, but nothing needs it.
 
-CodeChef's public API was retired years ago and the site is an SPA, so the only route to its data is the same `/api/` endpoints the front end calls. **Its ToS §14 forbids crawling**, which is why `api.js` is written to be strictly user-session shaped: only the contest the user is looking at and its problems, `/api/` paths only (robots.txt disallows `/problems/*` and `/status/*`), no catalogue sweep, and a 403 stops and surfaces an error rather than retrying. `/api/list/problems` exists and must never be called in a loop.
+CodeChef's public API was retired years ago and the site is an SPA, so the only route to its data is the same `/api/` endpoints the front end calls. **Its ToS §14 forbids crawling**, which is why `api.js` is written to be strictly user-session shaped: only the contest the user is looking at, its problems, and their own solve history; `/api/` paths only (robots.txt disallows `/problems/*`, `/status/*` and `/recent/user`); and a 403 stops and surfaces an error rather than retrying. What would make it a crawler is **enumeration** — paging the ~21,000-problem catalogue. `/api/list/problems` *is* used, but only ever scoped by `group=attempted` and behind a page cap; see below.
 
 Four traps, all confirmed against the live API:
 
 - **`problemsstats.solved` changes type.** Signed out it is an empty **array**; signed in it is an **object** keyed by problem code. Array methods silently see nothing on the shape that actually carries data, so read it with `Object.keys`.
 - **Signed out looks identical to "solved nothing."** `fetchSolvedKeys` therefore refuses outright when `signedIn` is false, so `progress-manager` isolates the failure and leaves existing flags alone. This is the case the stickiness invariant exists for.
+- **`problemsstats` cannot see an upsolve, and neither can the per-problem endpoint.** Both report only what happened *during* the contest. A contest closes to submissions when it ends, so upsolving happens in practice — see the section below, which is why solved status is no longer read per contest at all.
 - **Two out-of-band difficulty values**, both arriving as strings: `-1` for unrated (74% of the catalogue) and `9999`. Both become null. `9999` is the dangerous one — it is also the queue's own sort-last sentinel, so passing it through would read as a legitimate, very hard problem.
 - **`/START252` is a parent contest** with an empty problem list and no error. Divisions are rating-banded, so the user's own rating (from `codeChefUserData`) selects the one they competed in; with no known rating it names the divisions rather than guessing.
 
@@ -127,6 +128,21 @@ Costs one request for the contest plus **one per problem** — difficulty and ta
 `page-data.js` is the CodeChef equivalent of `standings-dom.js`: the one place that parses its markup, extracting `window.codeChefUserData` by **balanced-brace slicing** — a non-greedy regex stops at the first `};` inside a nested object or a string. It returns `null`, never a default: a guessed handle would look like a signed-in session.
 
 Note `solvedKey` is `codechef:<problem_code>`. The same problem runs in every division of a Starters, so solving it in Div 4 clears it from a tracked Div 3.
+
+#### Solved status is read per user, not per contest
+
+A CodeChef contest stops accepting submissions when it ends, so **upsolving happens in practice mode**. `problemsstats.solved` on the contest payload reflects in-contest submissions only, and so does `problem_status` on the per-problem endpoint — both were tried. Reading either meant a CodeChef problem solved after its contest stayed in the queue forever, which made the whole platform untrackable past contest day.
+
+So `fetchSolvedKeys` is now user-wide, matching Codeforces' `user.status` and AtCoder's submissions feed; its `contests` argument is unused. It reads the practice page's own source, `GET /api/list/problems?group=attempted`, and keeps the rows CodeChef marks Accepted.
+
+Four things that are easy to get wrong:
+
+- **`status === 1` is Accepted**, from the practice bundle's own map: `{0: Unattempted, 1: Accepted, 2: Partially Correct, 3: Wrong Answer, …}`. Match that value explicitly rather than "anything but 0" — `solved` is sticky and never cleared, so a false positive hides a problem permanently while a false negative costs one refresh. `2` is Partially Correct, excluded for the same reason `partially_solved` always was.
+- **`page` is zero-based.** Page 1 silently skips the first hundred rows.
+- **`start_rating` must be `-1`.** A range starting at 0 drops every unrated problem — 5,519 of 21,488 survive that filter.
+- **The page cap is load-bearing.** Signed out, `group=attempted` is *ignored* and the endpoint answers with the whole catalogue. If that ever happens signed in, paging to `count` would walk 21,000 rows and become exactly the sweep this client forbids — so `getAttemptedProblems` refuses when `count` exceeds `MAX_ATTEMPTED` rather than continuing.
+
+Dead ends, so they are not re-investigated: the profile page's solved list carries problem **names only**, no codes or links; "Recent Activity" is AJAX from `/recent/user`, which robots.txt disallows; and the listing endpoint has **no** status filter and **no** `contest_code` filter, so "just my solved ones" and "just this contest's" are both unavailable.
 
 ### Data acquisition on Codeforces: two channels, both required
 

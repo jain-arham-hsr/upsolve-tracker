@@ -5,7 +5,12 @@
  * Starters 252 was rated within two days of running. `/api/rankings/` is
  * CSRF-gated, but nothing here needs it.
  */
-import { getContest, getProblem, getDashboardHtml } from "./api.js";
+import {
+  getAttemptedProblems,
+  getContest,
+  getDashboardHtml,
+  getProblem,
+} from "./api.js";
 import { extractSession } from "./page-data.js";
 import { codechef } from "./descriptor.js";
 
@@ -128,6 +133,18 @@ async function resolveDivision(contestId, session, onProgress) {
 }
 
 /**
+ * 1 = Accepted, from the practice page's own status map:
+ * `{0: Unattempted, 1: Accepted, 2: Partially Correct, 3: Wrong Answer, …}`.
+ *
+ * An explicit allow-list rather than "anything but 0". `solved` is sticky and
+ * never cleared (progress-manager.js), so a false positive permanently hides a
+ * problem you have not solved, while a false negative costs one refresh. And 2
+ * is Partially Correct — scoring some subtasks is not finishing the problem,
+ * the same call `problemsstats` already made by ignoring `partially_solved`.
+ */
+const ACCEPTED = 1;
+
+/**
  * Signed out, `problemsstats.solved` is an empty **array**; signed in it is an
  * **object** keyed by problem code. Object.keys handles both — array methods
  * would silently see nothing on the shape that actually carries data.
@@ -190,23 +207,32 @@ function cleanTags(detail, contestCode) {
 }
 
 /**
- * Solved history is per contest here, not per user: there is no endpoint that
- * answers "everything you have ever solved". So this costs one request per
- * tracked CodeChef contest.
+ * Every problem this account has solved, contest or practice.
+ *
+ * This used to read `problemsstats.solved` per tracked contest, which only ever
+ * reflects submissions made **during** the contest. CodeChef closes a contest
+ * to submissions when it ends, so upsolving happens in practice — and that read
+ * could never see it, leaving every CodeChef problem in the queue forever.
+ *
+ * Now user-wide, like Codeforces' `user.status` and AtCoder's submissions feed,
+ * so `contests` is unused. It is also cheaper: a few paged requests rather than
+ * one per tracked contest.
  */
-export async function fetchSolvedKeys(session, contests, onProgress = () => {}) {
-  const keys = new Set();
-  // Signed out — or signed in as somebody else — every contest reports a
-  // solved list that is empty or not yours. Refuse, so the caller isolates the
-  // failure and leaves existing flags alone.
+export async function fetchSolvedKeys(session, _contests, onProgress = () => {}) {
+  // Signed out — or signed in as somebody else — the listing answers for the
+  // wrong account, and an empty answer is indistinguishable from having solved
+  // nothing. Refuse, so the caller isolates the failure and leaves flags alone.
   await verifyIdentity(session);
 
-  for (const [index, contest] of contests.entries()) {
-    onProgress(`Checking CodeChef contest ${index + 1} of ${contests.length}…`);
-    const payload = await getContest(contest.id);
-    for (const code of solvedCodes(payload)) {
-      keys.add(codechef.solvedKey(contest, { index: code }));
-    }
+  const rows = await getAttemptedProblems(onProgress);
+  const keys = new Set();
+
+  for (const row of rows) {
+    if (Number(row?.status) !== ACCEPTED) continue;
+    if (!row?.code) continue;
+    // solvedKey ignores its contest argument — a CodeChef problem is identified
+    // by its code alone, which is why one solve clears every tracked division.
+    keys.add(codechef.solvedKey(null, { index: row.code }));
   }
 
   return keys;

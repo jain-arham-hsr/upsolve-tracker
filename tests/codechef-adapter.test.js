@@ -30,6 +30,8 @@ const DETAILS = {
 
 let contests = {};
 let requestLog = [];
+/** Rows the practice listing answers with, and the count it advertises. */
+let attempted = { rows: [], count: null };
 
 function stub({ signedIn = true } = {}) {
   requestLog = [];
@@ -41,6 +43,14 @@ function stub({ signedIn = true } = {}) {
         ? `{"user":{"username":"tourist","rating":"1450","note":"has } brace"}}`
         : `{"user":{"username":null,"rating":null}}`;
       return textResponse(`<script>window.codeChefUserData = ${user};</script>`);
+    }
+
+    if (url.includes("/api/list/problems")) {
+      const query = new URL(url).searchParams;
+      const page = Number(query.get("page"));
+      const limit = Number(query.get("limit"));
+      const rows = attempted.rows.slice(page * limit, (page + 1) * limit);
+      return jsonResponse({ count: attempted.count ?? attempted.rows.length, data: rows });
     }
 
     const problemMatch = url.match(/\/api\/contests\/([^/]+)\/problems\/([^/?]+)/);
@@ -61,6 +71,7 @@ const textResponse = (body) => ({ ok: true, status: 200, async text() { return b
 
 beforeEach(() => {
   resetApiState();
+  attempted = { rows: [], count: null };
   contests = {
     START252D: {
       code: "START252D",
@@ -190,7 +201,7 @@ test("signed out, solved status refuses rather than reporting nothing solved", a
   );
 });
 
-test("the wrong account signed in refuses before reading a single contest", async () => {
+test("the wrong account signed in refuses before reading anything", async () => {
   await assert.rejects(
     () => fetchSolvedKeys(
       { handle: "me", signedIn: true, signedInAs: "someone_else" },
@@ -198,10 +209,75 @@ test("the wrong account signed in refuses before reading a single contest", asyn
     ),
     /Signed in to CodeChef as someone_else/,
   );
+
+  // The listing answers for whoever holds the cookie, so reading it under the
+  // wrong account would write their solves onto this queue.
+  assert.deepEqual(
+    requestLog.filter((url) => url.includes("/api/list/problems")),
+    [],
+    "no solve history may be read once identity fails",
+  );
 });
 
-test("solved keys are gathered per contest, since there is no per-user endpoint", async () => {
-  const session = { handle: "me", signedIn: true, signedInAs: "me" };
-  const keys = await fetchSolvedKeys(session, [{ id: "START252D" }]);
+const SESSION = { handle: "me", signedIn: true, signedInAs: "me" };
+
+test("only an Accepted status counts as solved", async () => {
+  // CodeChef's own map: 0 unattempted, 1 accepted, 2 partially correct,
+  // 3 wrong answer. Anything but 1 leaves the problem in the queue — `solved`
+  // is never cleared, so a wrong guess here hides a problem permanently.
+  attempted.rows = [
+    { code: "IOI7", status: 1 },
+    { code: "MODSUB", status: 2 },
+    { code: "UPDQS", status: 3 },
+    { code: "NEVER", status: 0 },
+  ];
+
+  const keys = await fetchSolvedKeys(SESSION, []);
   assert.deepEqual([...keys], ["codechef:IOI7"]);
+});
+
+test("an unrecognised status is not treated as solved", async () => {
+  // A value the site adds later must fail closed rather than clear the queue.
+  attempted.rows = [{ code: "IOI7", status: 42 }, { code: "MODSUB", status: null }];
+  assert.deepEqual([...await fetchSolvedKeys(SESSION, [])], []);
+});
+
+test("solved history is read per user, not per contest", async () => {
+  // The whole point: an upsolve is invisible to any contest payload, so no
+  // contest endpoint may be consulted for solved status any more.
+  attempted.rows = [{ code: "IOI7", status: 1 }];
+  await fetchSolvedKeys(SESSION, [{ id: "START252D" }, { id: "START252C" }]);
+
+  const contestReads = requestLog.filter((url) => /\/api\/contests\/[^/?]+$/.test(url));
+  assert.deepEqual(contestReads, [], "no per-contest read should remain");
+});
+
+test("paging stops once the advertised count is covered", async () => {
+  attempted.rows = Array.from({ length: 250 }, (_, i) => ({ code: `P${i}`, status: 1 }));
+  const keys = await fetchSolvedKeys(SESSION, []);
+
+  assert.equal(keys.size, 250);
+  const pages = requestLog.filter((url) => url.includes("/api/list/problems"));
+  assert.equal(pages.length, 3, "250 rows at 100 per page is three requests");
+});
+
+test("a count that means the filter was ignored refuses to page the catalogue", async () => {
+  // Signed out, `group=attempted` is ignored and the endpoint answers with the
+  // whole catalogue. Paging that would be the crawl this client forbids.
+  attempted.rows = [{ code: "IOI7", status: 1 }];
+  attempted.count = 21_488;
+
+  await assert.rejects(() => fetchSolvedKeys(SESSION, []), /ignored the filter/);
+  const pages = requestLog.filter((url) => url.includes("/api/list/problems"));
+  assert.equal(pages.length, 1, "it must stop on the first page, not keep going");
+});
+
+test("the listing is scoped to the signed-in account and includes unrated problems", async () => {
+  attempted.rows = [{ code: "IOI7", status: 1 }];
+  await fetchSolvedKeys(SESSION, []);
+
+  const query = new URL(requestLog.find((u) => u.includes("/api/list/problems"))).searchParams;
+  assert.equal(query.get("group"), "attempted", "unscoped would be a catalogue read");
+  assert.equal(query.get("page"), "0", "the endpoint is zero-based");
+  assert.equal(query.get("start_rating"), "-1", "0 would drop every unrated problem");
 });
