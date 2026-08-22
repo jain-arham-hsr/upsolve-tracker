@@ -7,14 +7,22 @@
 
   <div id="contest-alert" class="sync-alert hidden"></div>
 
+  <!-- Contests that failed to add because the platform had not published them
+       yet. Collapsed by default and hidden entirely when empty: a frame with
+       nothing in it reads as a load that failed. -->
+  <div id="waiting-section" class="waiting-section hidden"></div>
+
   <div id="contest-items"></div>
 
   <div id="remove-modal" class="modal-backdrop hidden">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="remove-modal-title">
+      <!-- Title and help text are filled by JS: the same dialog also confirms
+           cancelling a waiting contest, where "its unsolved problems leave the
+           queue" would describe something that never happened. -->
       <div class="modal-title" id="remove-modal-title">Remove from queue?</div>
       <div class="modal-body">
         <strong id="remove-modal-name"></strong>
-        <p class="help-text">
+        <p class="help-text" id="remove-modal-help">
           Its unsolved problems leave the queue. Nothing is deleted on the
           contest site, and you can add it again later.
         </p>

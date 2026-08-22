@@ -154,3 +154,22 @@ test("only Codeforces hashes its contest id", () => {
   assert.equal(label("codechef", { id: "START252D" }), "START252");
   assert.equal(label("codechef", { id: "LTIME108" }), "LTIME108");
 });
+
+test("a Codeforces gym may never wait, but an official round may", () => {
+  // This is the rule that keeps waiting affordable. A CF add costs tens of
+  // deliberately throttled requests, and a private or unrated gym can never be
+  // measured — so a gym allowed to wait would slow every refresh, forever, for
+  // a result that is never coming. An official round refusing the same way is
+  // usually just standings that have not settled.
+  const mayWait = (platform, subtype) =>
+    getPlatform(platform).mayBeUnpublished(subtype);
+
+  assert.equal(mayWait("codeforces", "OFFICIAL"), true);
+  assert.equal(mayWait("codeforces", "GYM"), false);
+
+  // The other two have nothing to gain from the distinction: AtCoder's whole
+  // failure mode is a publication delay, and CodeChef stores partial ratings
+  // rather than refusing.
+  assert.equal(mayWait("atcoder", "ABC"), true);
+  assert.equal(mayWait("codechef", "STARTERS"), true);
+});

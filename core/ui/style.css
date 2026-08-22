@@ -1224,6 +1224,119 @@ upsolve-stats-view {
   font-size: 0.75rem;
 }
 
+/* The clock leads the label inside the Waiting button, so it needs the
+   baseline gap a text glyph would have had. */
+.add-banner .btn svg {
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+
+/* --- Waiting strip: contests the platform has not published yet ---
+   Collapsed by default, and hidden outright when empty — a frame with nothing
+   in it reads as a load that failed. Rows reuse .contest-item / .contest-head
+   so this is visibly the same component as the list below it, with one
+   difference: the row is not a button, because a waiting contest has no
+   problems to expand onto. */
+
+/* One shaded band, not more rows. Sharing the list's surface made the strip
+   bleed into the contests below it — the separator under the last waiting row
+   read as just another row separator, and a block of things that are *not*
+   tracked sat inside the list of things that are. */
+.waiting-section {
+  background-color: var(--panel-bg);
+  border-bottom: 1px solid var(--border-color);
+  /* Matches the gap #contest-items already keeps below itself. Without it the
+     band's bottom edge sat flush against the scrolling list, and the first
+     contest read as another waiting row. */
+  margin-bottom: 12px;
+}
+
+.waiting-head {
+  display: flex;
+  align-items: center;
+  /* The chevron sits at the far edge; the clock and count group at the near
+     one. Without it the only cue that this opens was finding out. */
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px var(--row-pad-x);
+  background: transparent;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.waiting-head-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.waiting-chevron {
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+/* Down when closed, up when open — never sideways. A chevron pointing right
+   at the *far right edge of a row* is the drill-in affordance: it is what the
+   Stats legend rows use to open a platform panel, so pointing it that way here
+   promised another screen when this expands in place. Rotation, not two
+   glyphs, so the two states cannot drift apart. */
+.waiting-head[aria-expanded="true"] .waiting-chevron {
+  transform: rotate(180deg);
+}
+
+.waiting-head:hover,
+.waiting-head[aria-expanded="true"] {
+  color: var(--text-title);
+}
+
+.waiting-head:hover {
+  background-color: #262626;
+}
+
+.waiting-item {
+  border-top: 1px solid var(--row-separator);
+}
+
+/* The whole waiting block is one step quieter than the queue below it: these
+   are not tracked yet, and they should not compete with contests that are. */
+.waiting-item .contest-name {
+  color: var(--text-muted);
+}
+
+/* Not a button. No pointer, and none of the row hover the accordion gets —
+   there is nothing to click, and pretending otherwise is the failure this
+   avoids. The separator moves to .waiting-item so it does not draw between
+   the row and its own note. */
+.contest-row.is-static {
+  cursor: default;
+  border-bottom: none;
+  padding-bottom: 6px;
+}
+
+.contest-item:hover .contest-row.is-static {
+  background-color: transparent;
+}
+
+.waiting-note {
+  /* Tighter than a row's own padding: this is a footnote to the line above,
+     not a second row, and at full --row-pad-y it read as one. */
+  padding: 0 var(--row-pad-x) 10px;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
 
 /* --- Overview ring: where the backlog sits, by platform --- */
 

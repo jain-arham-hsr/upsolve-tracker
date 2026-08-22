@@ -10,6 +10,7 @@ import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
 import {
   platformOf,
+  getPlatform,
   matchesFilter,
   contestKey,
 } from "../../platforms/registry.js";
@@ -19,6 +20,11 @@ import { toProblemRow, renderProblemRow } from "../problem-row.js";
 import { compareQueueItems } from "../../queue-order.js";
 import { bindDismiss } from "../dismissable.js";
 import { platformIcon } from "../platform-icons.js";
+import {
+  loadWaiting,
+  cancelWaiting,
+  waitingKey,
+} from "../../waiting-contests.js";
 import {
   loadFilter,
   renderFilterControl,
@@ -30,12 +36,34 @@ import {
  *  the Queue. */
 const EXPANDED_KEY = "upsolve_tracker.expanded_contests";
 
+/** Whether the waiting strip is open, persisted for the same reason. */
+const WAITING_OPEN_KEY = "upsolve_tracker.waiting_expanded";
+
+/** Matches the shell's banner, so the two states read as one thing. */
+const CLOCK_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <circle cx="8" cy="8" r="6.2"></circle>
+  <path d="M8 4.4V8l2.4 1.6"></path>
+</svg>`;
+
+/**
+ * The strip's only affordance. A contest row needs no chevron — the expansion
+ * appearing under it *is* the indicator — but this header collapses to a
+ * single bar with nothing beneath it, so there is nothing to see and no reason
+ * to guess it opens. Down when closed, up when open — never sideways, which
+ * at a row's right edge means "drill in" rather than "expand". It rotates
+ * rather than swapping glyphs, so the two states cannot drift apart.
+ */
+const CHEVRON_ICON = `<svg class="waiting-chevron" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M4 6.2l4 4 4-4"></path>
+</svg>`;
+
 
 export class ContestList extends HTMLElement {
   constructor() {
     super();
     this.filter = [];
     this.expanded = new Set();
+    this.waitingOpen = false;
     this.openMenuKey = null;
     this.dismissMenu = null;
   }
@@ -52,7 +80,11 @@ export class ContestList extends HTMLElement {
     this.countLabel = this.querySelector("#contest-count");
     this.modal = this.querySelector("#remove-modal");
     this.modalName = this.querySelector("#remove-modal-name");
+    this.modalTitle = this.querySelector("#remove-modal-title");
+    this.modalHelp = this.querySelector("#remove-modal-help");
+    this.modalConfirm = this.querySelector("#remove-confirm");
     this.modalCancel = this.querySelector("#remove-cancel");
+    this.waitingSection = this.querySelector("#waiting-section");
 
     this.modalCard = this.querySelector(".modal-card");
     this.modalCancel.addEventListener("click", () => this.closeModal());
@@ -117,12 +149,23 @@ export class ContestList extends HTMLElement {
     // Delegated so the handlers outlive each renderQueue() rewrite.
     // Expansion is persisted for the same reason the filter is: this view is
     // destroyed and rebuilt on every tab switch.
-    const stored = await chrome.storage.local.get({ [EXPANDED_KEY]: [] });
+    const stored = await chrome.storage.local.get({
+      [EXPANDED_KEY]: [],
+      [WAITING_OPEN_KEY]: false,
+    });
     this.expanded = new Set(stored[EXPANDED_KEY]);
+    this.waitingOpen = stored[WAITING_OPEN_KEY] === true;
 
     this.container.addEventListener("click", (event) => this.onListClick(event));
 
-    await this.renderQueue();
+    // The same handler, not a second copy: a waiting row carries the same
+    // [data-menu-key] / [data-open-url] / [data-remove-key] hooks, and the
+    // trailing [data-toggle-key] branch simply never matches one.
+    this.waitingSection.addEventListener("click", (event) =>
+      this.onListClick(event),
+    );
+
+    await this.renderAll();
   }
 
   /**
@@ -153,8 +196,19 @@ export class ContestList extends HTMLElement {
       return;
     }
 
+    if (event.target.closest("[data-waiting-toggle]")) {
+      await this.toggleWaitingOpen();
+      return;
+    }
+
     const row = event.target.closest("[data-toggle-key]");
     if (row) await this.toggleExpanded(row.dataset.toggleKey);
+  }
+
+  async toggleWaitingOpen() {
+    this.waitingOpen = !this.waitingOpen;
+    await chrome.storage.local.set({ [WAITING_OPEN_KEY]: this.waitingOpen });
+    this.renderWaiting();
   }
 
   async toggleExpanded(key) {
@@ -174,11 +228,14 @@ export class ContestList extends HTMLElement {
 
     if (!next) return;
     this.openMenuKey = next;
-    await this.renderQueue();
+    // Both sections: openMenuKey is shared, and repainting only one would
+    // leave a menu open in the list and invisible in the strip, or vice versa.
+    await this.renderAll();
 
+    // Scoped to the view, not to #contest-items, so a waiting row is found too.
     // Same dismiss behaviour as the filter dropdown, rather than a second
     // implementation that differs in one of the three cases.
-    const item = this.container.querySelector(`[data-key="${CSS.escape(next)}"]`);
+    const item = this.querySelector(`[data-key="${CSS.escape(next)}"]`);
     if (item) this.dismissMenu = bindDismiss(item, () => this.closeMenu());
   }
 
@@ -188,7 +245,7 @@ export class ContestList extends HTMLElement {
 
     if (this.openMenuKey === null) return;
     this.openMenuKey = null;
-    await this.renderQueue();
+    await this.renderAll();
   }
 
   /**
@@ -198,17 +255,32 @@ export class ContestList extends HTMLElement {
    */
   askToRemove(key) {
     const contest = this.contestsByKey?.get(key);
-    if (!contest) return;
+    const entry = contest ? null : this.waitingByKey?.get(key);
+    if (!contest && !entry) return;
 
-    const name = contest.name?.replace(/\s+/g, " ").trim() || `Contest ${contest.id}`;
+    // Two things can be confirmed here, and the wording has to match: a
+    // waiting contest has no problems in the queue, so "its unsolved problems
+    // leave the queue" would describe something that never happened.
+    const platform = contest ? platformOf(contest) : getPlatform(entry.platform);
+    const name = contest
+      ? contest.name?.replace(/\s+/g, " ").trim() || `Contest ${contest.id}`
+      : String(entry.contestId);
+
+    this.modalTitle.textContent = contest
+      ? "Remove from queue?"
+      : "Stop waiting for this contest?";
+    this.modalHelp.textContent = contest
+      ? "Its unsolved problems leave the queue. Nothing is deleted on the contest site, and you can add it again later."
+      : "It won't be retried on the next refresh. You can add it again from its contest page whenever the platform publishes it.";
+    this.modalConfirm.textContent = contest ? "Remove" : "Stop waiting";
+
     // Marked like the row it was opened from, so the dialog visibly names the
     // same contest rather than restating its title in isolation. innerHTML,
     // so the name has to be escaped — it is scraped.
-    const platform = platformOf(contest);
     this.modalName.innerHTML =
       `${platformIcon(platform.id, platform.shortLabel)}<span>${escapeHtml(name)}</span>`;
     this.modal.classList.remove("hidden");
-    this.pendingRemoval = { key, contest };
+    this.pendingRemoval = { key, contest, entry };
 
     // Backdrop click and Escape both dismiss. Reusing the popover helper means
     // Escape works wherever focus happens to be, which a listener on this view
@@ -229,11 +301,17 @@ export class ContestList extends HTMLElement {
     this.closeModal();
     if (!pending) return;
 
-    const { contest } = pending;
-    await LocalDB.removeTrackedContest(contest.platform, contest.id);
-    this.expanded.delete(pending.key);
-    await chrome.storage.local.set({ [EXPANDED_KEY]: [...this.expanded] });
-    await this.renderQueue();
+    const { contest, entry } = pending;
+
+    if (entry) {
+      await cancelWaiting(entry.platform, entry.contestId);
+    } else {
+      await LocalDB.removeTrackedContest(contest.platform, contest.id);
+      this.expanded.delete(pending.key);
+      await chrome.storage.local.set({ [EXPANDED_KEY]: [...this.expanded] });
+    }
+
+    await this.renderAll();
 
     // Storage changed, so the backup has to follow it or the exported JSON
     // drifts from what the panel shows.
@@ -246,7 +324,7 @@ export class ContestList extends HTMLElement {
    * solved contests and resolve missing dates, both of which change this list.
    */
   async refreshData() {
-    await this.renderQueue();
+    await this.renderAll();
   }
 
   /** Routes a long-operation message to the shell's status strip. */
@@ -283,7 +361,7 @@ export class ContestList extends HTMLElement {
       .addEventListener("click", async () => {
         try {
           await chrome.storage.local.set(data);
-          await this.renderQueue();
+          await this.renderAll();
           this.showInlineAlert(`Imported ${incoming} contest(s).`);
         } catch (error) {
           this.showInlineAlert(`Import failed: ${error.message}`);
@@ -308,6 +386,113 @@ export class ContestList extends HTMLElement {
     }
   }
 
+  /**
+   * Both sections. The menu key is shared between them, so anything that can
+   * open or close a menu has to repaint both or one is left stale.
+   */
+  async renderAll() {
+    // Waiting first: the queue's empty state reads differently when something
+    // is on its way in, and it needs the loaded list to know.
+    await this.renderWaitingSection();
+    await this.renderQueue();
+  }
+
+  async renderWaitingSection() {
+    this.waiting = await loadWaiting();
+    this.renderWaiting();
+  }
+
+  /**
+   * The waiting strip: contests that failed to add because the platform had
+   * not published them yet, and are retried on every refresh.
+   *
+   * Collapsible and hidden outright when empty. Its rows reuse the contest
+   * row's markup so it reads as the same component, with one deliberate
+   * difference: **the row is not a button.** There is no accordion, because a
+   * waiting contest has no problems to list and an expansion that opened onto
+   * nothing would read as a broken row.
+   */
+  renderWaiting() {
+    const entries = this.waiting ?? [];
+
+    if (entries.length === 0) {
+      this.waitingSection.classList.add("hidden");
+      this.waitingSection.innerHTML = "";
+      this.waitingByKey = new Map();
+      return;
+    }
+
+    this.waitingByKey = new Map(entries.map((entry) => [waitingKey(entry), entry]));
+
+    const rows = this.waitingOpen
+      ? `<div class="waiting-items">${entries
+          .map((entry) => this.renderWaitingRow(entry))
+          .join("")}</div>`
+      : "";
+
+    this.waitingSection.innerHTML = `
+      <button type="button" class="waiting-head" data-waiting-toggle
+              aria-expanded="${this.waitingOpen}">
+        <span class="waiting-head-label">
+          ${CLOCK_ICON}
+          <span>${entries.length} waiting</span>
+        </span>
+        ${CHEVRON_ICON}
+      </button>
+      ${rows}`;
+    this.waitingSection.classList.remove("hidden");
+  }
+
+  renderWaitingRow(entry) {
+    const platform = getPlatform(entry.platform);
+    const key = waitingKey(entry);
+    const safeKey = escapeHtml(key);
+
+    // The last failure, when it was something other than "not published yet" —
+    // the only place a genuinely stuck entry is visible. Without it a wait that
+    // can never end looks identical to one that is merely young.
+    const note = entry.lastError
+      ? escapeHtml(entry.lastError)
+      : "Retried on every refresh.";
+
+    return `
+      <div class="contest-item waiting-item" data-key="${safeKey}">
+        <div class="contest-head">
+          <div class="contest-row is-static">
+            <span class="contest-name">
+              ${platformIcon(platform.id, platform.shortLabel)}
+              <span>${escapeHtml(String(entry.contestId))}</span>
+            </span>
+          </div>
+          <button type="button" class="contest-menu-btn" data-menu-key="${safeKey}"
+                  aria-haspopup="menu" aria-expanded="${this.openMenuKey === key}"
+                  title="More">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <circle cx="8" cy="3" r="1.6"></circle>
+              <circle cx="8" cy="8" r="1.6"></circle>
+              <circle cx="8" cy="13" r="1.6"></circle>
+            </svg>
+          </button>
+          ${this.openMenuKey === key ? this.renderWaitingMenu(entry, safeKey) : ""}
+        </div>
+        <div class="waiting-note">${note}</div>
+      </div>`;
+  }
+
+  renderWaitingMenu(entry, safeKey) {
+    return `
+      <div class="row-menu" role="menu">
+        <button type="button" class="row-menu-item" role="menuitem"
+                data-open-url="${escapeHtml(entry.url)}">
+          Open contest ↗
+        </button>
+        <button type="button" class="row-menu-item is-danger" role="menuitem"
+                data-remove-key="${safeKey}">
+          Stop waiting
+        </button>
+      </div>`;
+  }
+
   async renderQueue() {
     const [allContests, userRatings] = await Promise.all([
       LocalDB.getTrackedContests(),
@@ -315,8 +500,15 @@ export class ContestList extends HTMLElement {
     ]);
 
     if (allContests.length === 0) {
+      // Waiting entries are not tracked, so they do not count — but saying
+      // "no contests" flat while a strip above lists two reads as a bug.
+      const waitingCount = this.waiting?.length ?? 0;
       this.countLabel.textContent = "Nothing queued";
-      this.container.innerHTML = `<div class="muted">No contests in queue.</div>`;
+      this.container.innerHTML = `<div class="muted">${
+        waitingCount > 0
+          ? "No contests in queue yet — the ones above are still waiting to be published."
+          : "No contests in queue."
+      }</div>`;
       return;
     }
 

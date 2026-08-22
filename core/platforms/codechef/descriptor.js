@@ -132,6 +132,16 @@ export const codechef = {
    * Codeforces' scale imports a meaning that does not transfer.
    */
 
+  /**
+   * Every CodeChef contest may wait, though nothing reaches this today:
+   * `allowsPartialRatings` is true here, so an unrated problem stores as null
+   * rather than refusing the add. Kept true so a future publication-delay
+   * failure is retried rather than silently declared permanent.
+   */
+  mayBeUnpublished() {
+    return true;
+  },
+
   capabilities: {
     // Tags come back with each problem, mixed with the setter's handle and
     // the contest code; cleanTags strips those.

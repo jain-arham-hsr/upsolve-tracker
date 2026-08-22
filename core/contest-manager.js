@@ -14,7 +14,11 @@ import {
   clearSolvedForPlatform,
 } from "./services/platform-identity.js";
 
-export async function processNewContest(url, onProgress = () => {}) {
+export async function processNewContest(
+  url,
+  onProgress = () => {},
+  { revalidate = false } = {},
+) {
   try {
     const parsed = matchContestUrl(url);
     if (!parsed) throw new Error("Not a supported contest URL.");
@@ -37,6 +41,10 @@ export async function processNewContest(url, onProgress = () => {}) {
       contestId,
       subtype,
       session,
+      // Set when a waiting contest is retried, so an adapter that caches its
+      // bulk data re-reads it rather than answering from the copy that already
+      // failed. Adapters without a cache ignore it.
+      revalidate,
       onProgress,
     });
 
@@ -51,9 +59,14 @@ export async function processNewContest(url, onProgress = () => {}) {
     });
 
     if (solvedCount === contest.problems.length && contest.problems.length > 0) {
-      throw new Error(
+      const error = new Error(
         `All problems in ${platform.contestLabel(contest)} ${contestId} are already solved!`,
       );
+      // Flagged so a waiting entry can stop waiting for a contest it will
+      // never be given. Matching the sentence instead would break on a copy
+      // edit and leave the entry retrying forever.
+      error.isAlreadySolved = true;
+      throw error;
     }
 
     // There is deliberately no default rating here. A fabricated number would
@@ -65,13 +78,22 @@ export async function processNewContest(url, onProgress = () => {}) {
 
     if (missing.length > 0 && !platform.capabilities.allowsPartialRatings) {
       console.warn("[Contest Manager] Skipping storage. Missing ratings.");
-      throw new Error(
+      const error = new Error(
         missing.length === contest.problems.length
           ? `Couldn't rate this contest: ${platform.label} returned no participant ratings for ${contestId}. Private or unrated standings can't be measured.`
           : `Couldn't rate ${missing.length} of ${contest.problems.length} problems (${missing
               .map((p) => p.index)
               .join(", ")}), so the contest wasn't added.`,
       );
+
+      // A round can refuse this way purely because its standings have not
+      // settled yet, which resolves on its own — but only for the contest
+      // kinds the platform says so of. A Codeforces gym answers false, since
+      // private or unrated standings can never be measured and retrying tens
+      // of throttled requests every refresh would never end.
+      if (platform.mayBeUnpublished(subtype)) error.isNotPublishedYet = true;
+
+      throw error;
     }
 
     onProgress("Saving to your queue…");
@@ -79,7 +101,21 @@ export async function processNewContest(url, onProgress = () => {}) {
 
     return contest;
   } catch (error) {
-    console.error("[Contest Manager] Failed:", error);
+    // A contest the platform has not published yet is an expected outcome, not
+    // a fault: it is caught, remembered and retried. It must not reach
+    // chrome://extensions, which would collect it once per add and then again
+    // on every refresh for as long as it waits, turning a working feature into
+    // a growing list of entries that read as a broken extension.
+    //
+    // `info`, not `warn`: that page gathers **both** error *and* warning
+    // levels, so downgrading to console.warn only changed the icon from a red
+    // circle to a yellow triangle. console.info is still there in DevTools and
+    // is not collected.
+    if (error.isNotPublishedYet) {
+      console.info("[Contest Manager] Not published yet:", error.message);
+    } else {
+      console.error("[Contest Manager] Failed:", error);
+    }
     throw error;
   }
 }

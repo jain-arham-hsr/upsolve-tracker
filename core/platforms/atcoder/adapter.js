@@ -24,14 +24,23 @@ export async function createSession() {
 export async function fetchContestRecord({
   contestId,
   subtype,
+  revalidate = false,
   onProgress = () => {},
 }) {
   onProgress("Fetching AtCoder problem data…");
-  const { problems, contests, contestProblems, models } = await getResources();
+  // `revalidate` is set when a waiting contest is retried: the resources are
+  // cached for 15 minutes, and reading the same stale copy would fail on the
+  // same missing row and look like the retry happened.
+  const { problems, contests, contestProblems, models } = await getResources({
+    revalidate,
+  });
 
   const meta = contests.find((contest) => contest.id === contestId);
   if (!meta) {
-    throw new Error(
+    // Flagged rather than matched on later by message text: kenkoooo indexes a
+    // round some time after it ends, so this resolves on its own and the
+    // contest is worth remembering. See core/waiting-contests.js.
+    throw notPublishedYet(
       `AtCoder Problems doesn't list contest "${contestId}". A contest that just ` +
         `started may not be indexed yet.`,
     );
@@ -42,7 +51,9 @@ export async function fetchContestRecord({
   // alone under-reports rerun contests by more than half.
   const entries = contestProblems.filter((row) => row.contest_id === contestId);
   if (entries.length === 0) {
-    throw new Error(`AtCoder Problems lists no problems for "${contestId}" yet.`);
+    throw notPublishedYet(
+      `AtCoder Problems lists no problems for "${contestId}" yet.`,
+    );
   }
 
   const problemsById = new Map(problems.map((problem) => [problem.id, problem]));
@@ -64,6 +75,19 @@ export async function fetchContestRecord({
     startTimeSeconds: meta.start_epoch_second ?? null,
     addedAt: Date.now(),
   };
+}
+
+/**
+ * Marks a failure as a publication delay rather than a permanent refusal.
+ *
+ * Same idiom as CodeChef's `isIdentityMismatch`: a flag on the error, so
+ * callers branch on a fact rather than on a string that a copy edit would
+ * silently break.
+ */
+function notPublishedYet(message) {
+  const error = new Error(message);
+  error.isNotPublishedYet = true;
+  return error;
 }
 
 function buildProblem(entry, problemsById, models) {

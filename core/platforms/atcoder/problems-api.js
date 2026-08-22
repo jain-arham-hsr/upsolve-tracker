@@ -39,12 +39,18 @@ const paced = createPacer({ minGapMs: MIN_GAP_MS, credentials: "omit" });
 /**
  * Fetches a static resource, revalidating with its ETag once the cached copy
  * is stale. A 304 keeps the parsed body and resets the clock.
+ *
+ * `revalidate` skips the TTL check without skipping the ETag, and exists for
+ * one caller: retrying a contest that was not indexed yet. Serving that retry
+ * from a copy read minutes ago would fail on the same stale array and look
+ * like the check happened, so the wait could never end inside the TTL. A
+ * revalidation that finds no change costs a 304, not another 3 MB.
  */
-async function getResource(path) {
+async function getResource(path, { revalidate = false } = {}) {
   const url = `${BASE}/resources/${path}`;
   const entry = cache.get(url);
 
-  if (entry && Date.now() - entry.fetchedAt < RESOURCE_TTL_MS) {
+  if (!revalidate && entry && Date.now() - entry.fetchedAt < RESOURCE_TTL_MS) {
     return entry.body;
   }
 
@@ -80,12 +86,12 @@ async function getResource(path) {
  * debuted in. Reading the latter alone under-reports a rerun contest badly
  * (one daily-training round lists 4 problems instead of 9).
  */
-export async function getResources() {
+export async function getResources(options = {}) {
   const [problems, contests, contestProblems, models] = await Promise.all([
-    getResource("problems.json"),
-    getResource("contests.json"),
-    getResource("contest-problem.json"),
-    getResource("problem-models.json"),
+    getResource("problems.json", options),
+    getResource("contests.json", options),
+    getResource("contest-problem.json", options),
+    getResource("problem-models.json", options),
   ]);
   return { problems, contests, contestProblems, models };
 }

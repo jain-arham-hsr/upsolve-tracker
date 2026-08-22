@@ -116,6 +116,54 @@ test("an unindexed contest fails loudly rather than storing an empty one", async
   );
 });
 
+test("both not-yet-indexed refusals are flagged as publication delays", async () => {
+  // The flag, not the sentence, is what core/waiting-contests.js branches on:
+  // a copy edit to either message must not silently turn a contest that would
+  // have resolved on its own into one that is never retried.
+  const missingContest = await fetchContestRecord({
+    contestId: "abc999",
+    subtype: "ABC",
+  }).catch((error) => error);
+  assert.equal(missingContest.isNotPublishedYet, true);
+
+  // Listed in contests.json, but contest-problem.json has not caught up.
+  RESOURCES["contests.json"].push({ id: "abc998", title: "Fresh", start_epoch_second: 1 });
+  clearResourceCache();
+  const noProblems = await fetchContestRecord({
+    contestId: "abc998",
+    subtype: "ABC",
+  }).catch((error) => error);
+  RESOURCES["contests.json"].pop();
+
+  assert.match(noProblems.message, /lists no problems/);
+  assert.equal(noProblems.isNotPublishedYet, true);
+});
+
+test("a retry revalidates rather than answering from the cached copy", async () => {
+  // The resources are cached for 15 minutes. Without this, retrying a waiting
+  // contest inside that window re-reads the same stale array, fails on the
+  // same missing row, and looks like the check happened — so the wait could
+  // never end while the panel stayed open.
+  await assert.rejects(() => fetchContestRecord({ contestId: "abc998", subtype: "ABC" }));
+  const before = requestLog.filter((url) => url.endsWith("contests.json")).length;
+
+  RESOURCES["contests.json"].push({ id: "abc998", title: "Fresh", start_epoch_second: 7 });
+  try {
+    const contest = await fetchContestRecord({
+      contestId: "abc998",
+      subtype: "ABC",
+      revalidate: true,
+    }).catch((error) => error);
+
+    const after = requestLog.filter((url) => url.endsWith("contests.json")).length;
+    assert.ok(after > before, "the retry served contests.json from the stale cache");
+    // It is listed now; only contest-problem.json is still behind.
+    assert.match(contest.message, /lists no problems/);
+  } finally {
+    RESOURCES["contests.json"].pop();
+  }
+});
+
 test("start time and name come from the contest list", async () => {
   const contest = await fetchContestRecord({ contestId: "abc471", subtype: "ABC" });
   assert.equal(contest.name, "AtCoder Beginner Contest 471");

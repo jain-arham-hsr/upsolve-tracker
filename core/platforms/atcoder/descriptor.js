@@ -126,6 +126,15 @@ export const atcoder = {
    * Ratings render neutral instead; see problem-row.js.
    */
 
+  /**
+   * Every AtCoder contest may wait. AtCoder Problems indexes a round some time
+   * after it ends, so an add that lands in that window fails purely because
+   * kenkoooo has not caught up yet — the case this whole mechanism exists for.
+   */
+  mayBeUnpublished() {
+    return true;
+  },
+
   capabilities: {
     // AtCoder publishes no problem tags at all — not "none yet", none ever.
     // The stats panel drops its whole tag section rather than heading an

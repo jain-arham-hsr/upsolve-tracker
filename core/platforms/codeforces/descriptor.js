@@ -157,6 +157,22 @@ export const codeforces = {
     );
   },
 
+  /**
+   * Whether a failure to rate this contest could resolve on its own.
+   *
+   * Official rounds can refuse at add time because the standings totals row
+   * has not settled and `contest.ratingChanges` is still empty — a publication
+   * delay, so it is worth retrying on later refreshes.
+   *
+   * Gyms answer **false**, and that distinction is what keeps waiting
+   * affordable here: a private or unrated gym can never be measured, and a CF
+   * add costs tens of deliberately throttled requests, so an entry that could
+   * never resolve would slow every refresh forever.
+   */
+  mayBeUnpublished(subtype) {
+    return subtype === "OFFICIAL";
+  },
+
   capabilities: {
     // problemset.problems carries tags. Gyms sit outside CF's taxonomy and
     // are usually bare, but the vocabulary exists, so the section belongs.
