@@ -16,7 +16,19 @@ npm run build:chrome    # -> dist/chrome
 npm test                # node --test over tests/ — no framework, no browser
 ```
 
-`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, the sampling arithmetic (via `scraping-service.test.js`, which stubs `HttpClient` so no network is touched), backup validation and queue ordering. UI wiring has no coverage — verify that manually by building and loading `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked). There is no linter or formatter configured.
+`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, the sampling arithmetic (via `scraping-service.test.js`, which stubs `HttpClient` so no network is touched), backup validation and queue ordering. There is no linter or formatter configured.
+
+```bash
+npm run build:chrome && npm run smoke   # loads the built panel in headless Chrome
+```
+
+**`npm run smoke` is the only thing that executes a view.** It loads the real bundle from `dist/chrome` with the extension APIs stubbed, clicks all three tabs, drills into a platform on Stats, and fails on any uncaught error, rejection or `console.error` — plus on a view that renders implausibly little, since the queue answers a missing setup with a short prompt that would otherwise read as success.
+
+It exists because of a specific escape: `contest.tagsSyncedAt == nullAt` is valid JavaScript, so `node --check` passed, the build succeeded, the whole unit suite stayed green, and the Stats tab threw on render for every user. Reintroduce that bug and the unit tests still pass while the smoke run fails — that is the gap, and it is worth re-checking that way after changing the harness.
+
+Two things it needs that are easy to get wrong: the built HTML uses absolute `/assets/` paths that `file://` cannot resolve, and `window.indexedDB` must be installed with `Object.defineProperty` — it is getter-only, so assignment fails silently, and real IndexedDB is unavailable on `file://`, which makes `loadCredentials()` reject and leaves the queue stuck on its setup prompt.
+
+It skips rather than fails when no Chrome is found; set `CHROME_PATH` to point at one. It is deliberately shallow — it proves the views run, not that they are right, so **layout still needs a real browser**: build, then load `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked).
 
 `tests/sampling.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
 
