@@ -126,6 +126,10 @@ Then load `dist/chrome` with **Load unpacked** as above.
 
 ## Licence
 
-ISC — see [LICENSE](LICENSE).
+**Not open source.** Copyright © 2026 Arham Jain, all rights reserved.
+
+If you've been given access to this repository you may use and modify it for your own
+personal, non-commercial use. Redistribution and commercial use need permission. See
+[LICENSE](LICENSE).
 
 Not affiliated with Codeforces, AtCoder or CodeChef. Use in line with their terms of service.

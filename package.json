@@ -1,9 +1,11 @@
 {
   "name": "upsolve-tracker",
   "version": "2.1.0",
+  "private": true,
   "description": "Chrome extension that builds an upsolving queue from Codeforces, AtCoder and CodeChef contests, ordered by how likely you are to solve each problem.",
   "main": "index.js",
   "type": "module",
+  "license": "UNLICENSED",
   "scripts": {
     "dev:chrome": "TARGET=chrome vite",
     "build:chrome": "TARGET=chrome vite build",
@@ -19,7 +21,6 @@
     "chrome-extension"
   ],
   "author": "Arham Jain",
-  "license": "ISC",
   "repository": {
     "type": "git",
     "url": "https://github.com/jain-arham-hsr/upsolve-tracker.git"
