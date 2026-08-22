@@ -134,17 +134,22 @@ input:focus {
   margin-top: 12px;
 }
 
-#test-msg {
+/* All three platforms' verdicts in one rule, so "Connected as" and "Signed in
+   as" can't drift apart in size the way they had — AtCoder's had no rule at all
+   and was falling back to the body size. */
+#test-msg,
+#atcoder-status,
+#codechef-status {
   font-size: 0.85rem;
   line-height: 1.4;
 }
 
-/* A verdict about the field above it, not a caption crammed against it. */
+/* A verdict about the field above it, not a caption crammed against it.
+   #test-msg is excluded: it sits inline in .test-row, which spaces itself. */
+#atcoder-status:not(:empty),
 #codechef-status:not(:empty) {
   display: block;
-  margin-top: 10px;
-  font-size: 0.85rem;
-  line-height: 1.4;
+  margin-top: 12px;
 }
 
 /* Intro / privacy note */
