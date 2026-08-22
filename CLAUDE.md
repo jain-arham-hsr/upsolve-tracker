@@ -317,17 +317,33 @@ because there the colour carries the site's own meaning rather than emphasis. No
 inverts to signal a selected state either — the tab bar brightens its label and underlines
 it, which is what a large near-white fill was doing wrong.
 
-### Fonts are declared but never shipped
+### Fonts are bundled, and that is load-bearing
 
-Nothing bundles or links a webfont, and neither `Inter` nor `JetBrains Mono` is installed
-on a typical machine, so **what renders is the tail of each stack** — measured, not
-assumed: `"JetBrains Mono", "Courier New", monospace` and `"Courier New", Courier,
-monospace` produce byte-identical text widths, which is what a fallback looks like. Both
-stacks are therefore one variable each, `--font-sans` and `--font-mono`, with real system
-faces at the tail. Spelling stacks out per rule is exactly how three rules once landed on
-Courier New while fifteen sat elsewhere, which showed up as the queue's contest line
-looking sharper than the numbers above it. `tests/stylesheet.test.js` requires every
-`font-family` to use a variable and forbids Courier as anyone's fallback.
+`core/ui/fonts.css` ships **Inter** and **JetBrains Mono** as woff2 from `public/fonts/`,
+imported by both `style.css` and `options/options.css`. Before this the stacks named both
+and shipped neither, so what actually rendered was the tail of each — SF Pro and SF Mono on
+a Mac, Segoe UI and Consolas on Windows — and the panel looked different on every machine.
+
+**SF Pro cannot be substituted for Inter**: Apple licenses it for Apple platforms only, so
+it may not be redistributed in an extension. Inter is the closest bundleable face and was
+what the stack always named first.
+
+Details worth not rediscovering: they are **variable** fonts, so one file per subset covers
+400–700 rather than one file per weight; only `latin` and `latin-ext` are shipped, since CJK
+would add megabytes for the occasional Japanese AtCoder title; `font-display: block`, because
+the files are local and a swap would flash. Both are SIL OFL 1.1 and the licences ship
+alongside them in `public/fonts/`, which the licence requires.
+
+The `url(/fonts/…)` paths are absolute because an extension resolves them from its own root.
+`npm run smoke` opens the build over `file://`, which resolves them from the *disk* root
+instead, so the harness rewrites them to relative — the absolute form was verified separately
+by serving `dist/chrome` over http. The smoke run now asserts both faces actually load, since
+a missing font is otherwise silent: the panel simply renders in whatever the system has. Every `font-family` still goes through `--font-sans` or `--font-mono`; spelling stacks out
+per rule is exactly how three rules once landed on Courier New while fifteen sat elsewhere,
+which showed up as the queue's contest line looking sharper than the numbers above it.
+`tests/stylesheet.test.js` enforces that and forbids Courier as anyone's fallback. The system
+faces remain at the tail of each stack, as a fallback for the glyphs the latin subsets do not
+cover.
 
 Mono is for identifiers and numbers, sans for words. That is why the footer's Import and
 Export moved off mono — they are actions, and caps made them read as a heading rather than

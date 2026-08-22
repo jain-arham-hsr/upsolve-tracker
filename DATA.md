@@ -6,6 +6,10 @@ it ended up. Written so that when something looks wrong you can check it yoursel
 There is **no server**. Everything is fetched from the three sites directly by your browser
 and stored on your machine.
 
+**Nothing else is fetched at all.** No CDNs, no analytics, no web fonts pulled at runtime.
+The two typefaces (Inter and JetBrains Mono) ship inside the extension, every platform mark
+is inline SVG, and the only remote addresses in the build are the data APIs listed below.
+
 ---
 
 ## The short version

@@ -14,7 +14,7 @@
  *   npm run build:chrome && npm run smoke
  */
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -42,11 +42,20 @@ const work = mkdtempSync(path.join(tmpdir(), "upsolve-smoke-"));
 cpSync(dist, work, { recursive: true });
 
 const page = path.join(work, "core/ui/index.html");
-let html = readFileSync(page, "utf8");
+// The built pages reference /assets/ and /fonts/ from the extension root; a
+// file:// origin resolves those against the disk root instead. Rewriting them
+// is what lets this run without a server — the absolute paths themselves are
+// correct for chrome-extension:// and were verified separately over http.
+const html = readFileSync(page, "utf8")
+  .replaceAll('src="/assets/', 'src="../../assets/')
+  .replaceAll('href="/assets/', 'href="../../assets/');
 
-// The build emits absolute /assets paths, which file:// cannot resolve.
-html = html.replaceAll('src="/assets/', 'src="../../assets/')
-           .replaceAll('href="/assets/', 'href="../../assets/');
+const assetsDir = path.join(work, "assets");
+for (const file of readdirSync(assetsDir)) {
+  if (!file.endsWith(".css")) continue;
+  const full = path.join(assetsDir, file);
+  writeFileSync(full, readFileSync(full, "utf8").replaceAll("url(/fonts/", "url(../fonts/"));
+}
 
 /** A queue with all three platforms, so every renderer has something to draw. */
 const STORE = {
@@ -156,7 +165,13 @@ const driver = `<script type="module">
   document.querySelector(".ring-legend-row")?.click();
   await wait(1000);
   const drilled = document.querySelectorAll(".stats-scope-head").length;
-  document.title = "SMOKE " + JSON.stringify({ errors: window.__errors, seen, drilled });
+  // Fonts load lazily, so ask for them rather than reading a status.
+  const fonts = {};
+  for (const [name, spec] of [["Inter", "500 16px Inter"], ["JetBrains Mono", "700 16px 'JetBrains Mono'"]]) {
+    try { fonts[name] = (await document.fonts.load(spec)).length > 0; }
+    catch { fonts[name] = false; }
+  }
+  document.title = "SMOKE " + JSON.stringify({ errors: window.__errors, seen, drilled, fonts });
 </script>`;
 
 writeFileSync(page, html.replace("<head>", "<head>\n" + stub).replace("</body>", driver + "</body>"));
@@ -173,7 +188,16 @@ if (!title) {
 }
 
 const decode = (s) => s.replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
-const { errors, seen, drilled } = JSON.parse(decode(title[1]));
+const { errors, seen, drilled, fonts } = JSON.parse(decode(title[1]));
+
+for (const [name, ok] of Object.entries(fonts)) {
+  // A missing bundled font is silent: the panel renders in whatever the system
+  // has, which is exactly the inconsistency bundling them was meant to end.
+  if (!ok) {
+    console.error(`smoke: ${name} did not load — the panel would fall back to a system face`);
+    process.exit(1);
+  }
+}
 
 if (drilled !== 1) {
   console.error("smoke: drilling into a platform on Stats produced no scope header");
@@ -197,4 +221,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log("smoke: all three views rendered clean —", seen.join("  "), " drilled:" + drilled);
+console.log("smoke: views clean, fonts loaded —", seen.join("  "), " drilled:" + drilled);
