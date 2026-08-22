@@ -30,13 +30,17 @@ Two things it needs that are easy to get wrong: the built HTML uses absolute `/a
 
 It skips rather than fails when no Chrome is found; set `CHROME_PATH` to point at one. It is deliberately shallow — it proves the views run, not that they are right, so **layout still needs a real browser**: build, then load `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked).
 
+**Known gap: smoke loads the side panel only, never `core/ui/options/index.html`.** The options page carries real logic — three `verifyIdentity` paths, credential save/load, the folder picker — and none of it is executed by any automated check. A `nullAt`-class typo there would ship. Checking it by hand means the same recipe smoke uses: copy `dist/chrome`, rewrite `/assets/` to a relative path *at the right depth* (`core/ui/options/` is three levels down, not two), and run Chrome with `--allow-file-access-from-files` — without that flag the `crossorigin` attribute CRXJS puts on the `<link>` makes Chrome CORS-block the stylesheet under `file://`, and the page renders in Times with every computed style wrong. That failure looks exactly like a CSS bug.
+
 `tests/sampling.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
 
 `tests/estimator-accuracy.test.js` records a **known bias**: estimates run below Codeforces' published ratings, by up to ~300 on the hardest problems. The Elo model assumes everyone attempted every problem, when most never open the hard ones — non-attempts read as difficulty-driven failures, so the model over-predicts solves and the search settles too low. Fixing it means modelling attempts, not ability. It matters less now that official problems take CF's published rating when one exists, leaving the estimator to gyms and contests too fresh to be rated.
 
 The build is still target-parameterized (`TARGET` selects `targets/<name>/manifest.json` and `dist/<name>`), but only `chrome` exists — the previous `dev:firefox` / `build:firefox` scripts were removed because they failed at config load. A real Firefox target needs more than a manifest: `targets/chrome/` depends on `chrome.sidePanel`, which Firefox answers with `sidebar_action`, and CRXJS emits a Chrome-style service-worker loader. Everything under `core/` already sticks to APIs both browsers implement.
 
-Pushing to `main` triggers `.github/workflows/release.yaml`: it builds Chrome, reads the version from `targets/chrome/manifest.json`, **deletes any existing release/tag with that version**, and republishes. Bump the manifest version when you want a distinct release; leaving it unchanged silently replaces the previous one.
+Pushing to `main` triggers `.github/workflows/release.yaml`: it runs `npm test`, builds Chrome, reads the version from `targets/chrome/manifest.json`, **deletes any existing release/tag with that version**, and republishes. Bump the manifest version when you want a distinct release; leaving it unchanged silently replaces the previous one — and because the workflow re-creates the tag, the old tag is *moved to the new commit*, so a span of work can end up filed under a version that was already published. That happened between the first v2.1 and v2.2. `package.json`'s version is decorative (nothing reads it); keep it in step with the manifest anyway so the two never disagree.
+
+The test step is the gate: before it existed the workflow would happily build and publish a release from a red tree.
 
 ## Build model
 
@@ -374,6 +378,10 @@ resize test walked the mark 1.5px off. `.rating` and `.solve-chance` likewise re
 Two apparent duplicates are deliberate and should stay: `.contest-type` appears twice because the second is part of a **grouped** selector (`.contest-id, .contest-type`), and deleting it would silently restyle `.contest-id`; `.btn` gains a bare `position: relative` later for tooltip anchoring. Before removing an apparent duplicate, check whether it is one line of a group.
 
 The rank-band colours live in `--band-*` variables so the histogram fills (`.band-*`) and the queue's rating text (`.tone-*`) cannot drift apart.
+
+### The settings page styles its three verdicts as one rule
+
+`options.css` gives `#test-msg`, `#atcoder-status` and `#codechef-status` their size in a **single grouped selector**, and the standalone two their spacing in a second. Not three parallel rules: that is precisely how they drifted — Codeforces and CodeChef each had their own `0.85rem` block while AtCoder's status had *no rule at all*, so it fell back to the body's 16px and sat flush against its input. `#test-msg` is deliberately excluded from the spacing rule because it sits inline inside `.test-row`, which spaces itself with `gap`. A fourth platform picks up the correct treatment by being added to those two selectors, and nothing else.
 
 ### UI shell
 
