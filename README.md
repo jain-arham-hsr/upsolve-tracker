@@ -1,136 +1,131 @@
+<div align="center">
+
+<img src="public/icons/icon-192.png" width="96" alt="Upsolve Tracker">
+
 # Upsolve Tracker
 
-A Chrome extension that turns Codeforces, AtCoder and CodeChef contests into a single
-upsolving queue, ordered easiest-first — including the problems that never got a rating.
+**One practice queue across Codeforces, AtCoder and CodeChef — sorted by how likely you are to solve each problem.**
 
-## Why
+</div>
 
-Upsolving works best in difficulty order, but a lot of problems have no rating: Codeforces
-gym and ICPC contests have none at all, and recent rounds go unrated for a while. Upsolve
-Tracker estimates the missing ones instead of skipping them.
+---
 
-That estimate comes from the contest itself. Given everyone who competed and how many of
-them solved a problem, there is exactly one rating **R** at which the Elo model predicts
-that many solves — so the extension binary-searches for it. A problem solved by 40 people
-in a room of 3000 gets the rating that difficulty implies, whether or not Codeforces ever
-published one. Team contests collapse each team into the single rating at which it would
-lose half the time.
+The problems you *didn't* solve in a contest are the ones worth going back to. Upsolve
+Tracker keeps them in one list, ordered easiest-first, and quietly removes each one as soon
+as you solve it.
 
-AtCoder and CodeChef both publish their own difficulty ratings promptly, so the estimator
-is a Codeforces-only fallback — there, a published rating is simply used as-is.
-
-## One queue across three sites
-
-A rating means different things on different sites: a Codeforces 1600 and an AtCoder 1600
-are not the same problem. But all three define difficulty as roughly *the rating at which a
-contestant has a 50% chance of solving it*, so putting a problem's difficulty and your
-rating **on that same site** through the Elo curve cancels the scale and leaves a plain
-probability.
-
-The queue sorts on that, and shows it:
+<div align="center">
 
 ```
-01.  Nine or Nein
-                                     ~94%   ▣ -817
-                                       ABC471 a
-02.  Parity Sort
-                                     ~81%   ▣ 1300
-                                     Official 1993B
-03.  Mod Subtract
-                                     ~44%   ▣ 1757
-                                    START252 MODSUB
+01.  Duck Surplus
+                                      ~78%   ▣ 1000
+                                       Official 2237C
+
+02.  Modify and Subtract
+                                      ~29%   ▣ 1757
+                                     START252 MODSUB
+
+03.  Nine or Nein
+                                      ~99%   ▣ -817
+                                         ABC471 a
 ```
 
-Each row keeps its own site's rating — no invented "equivalent" numbers — with that
-site's mark (▣) beside the number saying whose scale you are reading. There is
-deliberately no "Rating:" label: the word implies one shared scale, which is the
-single claim this design denies.
+</div>
 
-## Install
+## Why the percentages
 
-1. Download `upsolve-tracker-chrome-vX.Y.zip` from the [Releases page](https://github.com/jain-arham-hsr/upsolve-tracker/releases) and unzip it.
-2. Open `chrome://extensions` and turn on **Developer mode** (top right).
-3. Click **Load unpacked** and select the unzipped folder.
-4. Click the extension icon to open the side panel.
+A 1600 on Codeforces and a 1600 on AtCoder are not the same problem — different sites,
+different crowds, different scales. So the queue doesn't sort on ratings. It sorts on **how
+likely you are to solve it**, worked out from that problem's difficulty and *your* rating on
+*that* site. Those two cancel the scale out, which makes a Codeforces problem and a CodeChef
+problem genuinely comparable.
 
-## Setup
+Each row still shows the site's own rating, with its mark beside it — never a converted
+number.
 
-Each platform needs a different amount, and you only need the ones you use.
+## Getting started
 
-| Platform | What it needs |
-|---|---|
-| **Codeforces** | Handle, plus an API key pair from [codeforces.com/settings/api](https://codeforces.com/settings/api) |
-| **AtCoder** | Handle only |
-| **CodeChef** | Nothing — just be signed in to codechef.com in this browser |
+**1. Install**
 
-Open the ⚙ settings from the side panel to fill in what applies. Press **Test connection**
-to check the Codeforces pair before relying on it.
+Download `upsolve-tracker-chrome-vX.Y.zip` from the
+[Releases page](https://github.com/jain-arham-hsr/upsolve-tracker/releases) and unzip it.
+Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the
+unzipped folder. Click the extension icon to open the side panel.
 
-Your key and secret are stored in this browser only, are used to sign requests to
-codeforces.com, and are sent nowhere else — and they're deliberately excluded from the
-JSON backup, so exporting your queue never leaks them.
+**2. Tell it who you are**
 
-There's also an optional **AtCoder rating** override. AtCoder suppresses ratings heavily
-for your first 10–15 rated contests, so if yours hasn't settled yet, putting your real
-strength there stops every AtCoder problem sinking to the bottom of the queue.
+Open **⚙ Settings** from the panel. You only need the sites you actually use, but a site
+needs its handle before you can add any of its contests.
 
-## Use
+| Site | What it needs |
+|:--|:--|
+| **Codeforces** | Your handle, plus an API key pair from [codeforces.com/settings/api](https://codeforces.com/settings/api) |
+| **AtCoder** | Your handle |
+| **CodeChef** | Your handle, and be signed in to codechef.com in this browser |
 
-**Add a contest.** Open any supported contest page and a bar appears at the top of the
-panel offering to add it. Working out the ratings takes a few seconds — the panel reports
-each step. CodeChef Starters are split into divisions; opening the parent contest picks
-the division matching your rating.
+Each section confirms the account it found — *“✓ Connected as tourist”* — so a typo shows up
+straight away. Your Codeforces key and secret stay in this browser, are only used to sign
+requests to codeforces.com, and are deliberately kept out of the backup file.
 
-**Work the queue.** The Queue tab lists every unsolved problem from every tracked contest,
-hardest last. The dropdown at the top right filters to one or more platforms.
+## Using it
 
-**Stay in sync.** Press ↻ to pull your latest accepted submissions. Solved problems drop
-out of the queue, and contests you've fully cleared drop out of the list.
+**Add a contest.** Open any contest page on a supported site and a bar appears at the top of
+the panel offering to add it. Working out the difficulties takes a few seconds and the panel
+narrates each step. CodeChef Starters split into divisions — open the parent contest and it
+picks the division matching your rating.
 
-**See the shape of your queue.** The Stats tab opens on an overview — how much of your
-queue is comfortable versus brutal — and has a panel per platform showing that site's own
-rating spread and tag breakdown, in its own units.
+**Work the queue.** The **Queue** tab lists every unsolved problem you're tracking, easiest
+first. The dropdown at the top right filters to one or more sites.
 
-**Prune.** On the Contests tab, hover a row and hold the ✕ for a moment to remove it. A
-stray click does nothing.
+**Stay in sync.** Press **↻** to pull in what you've solved. Solved problems drop out of the
+queue, and a contest disappears once you've finished all of it. Practice-mode solves count
+too, so upsolving a CodeChef problem after its contest has ended works normally.
 
-**Back up.** Export writes a JSON file you can re-import later. Enable auto-export in
-settings to have that file kept current automatically.
+**See your contests.** The **Contests** tab lists everything you're tracking. Click a row to
+expand it and see what that contest still owes the queue. The **⋮** menu opens the contest
+on its site, or removes it.
 
-## Build from source
+**Check the shape of your backlog.** The **Stats** tab opens on an overview — where your
+problems are and how hard they are — and you can click into any site for its own rating
+spread and topic breakdown.
 
-Requires Node 20.19+ or 22.12+ (Vite 8's requirement).
+**Keep a backup.** Export writes a JSON file you can re-import later. Turn on auto-export in
+Settings and it stays current by itself.
+
+## Things worth knowing
+
+- **Chrome only.** The side panel uses an API Firefox doesn't have an equivalent for.
+- **It's deliberately unhurried.** Requests are spaced out so the sites don't rate-limit you.
+  Adding a contest is not instant, and that's on purpose.
+- **`???` instead of a rating** means the site hasn't published a difficulty yet. It fills in
+  on a later refresh. AtCoder in particular rates a round a few days after it runs.
+- **No topic tags on AtCoder.** It doesn't publish any. Codeforces gym problems usually have
+  none either.
+- **Ratings for unrated Codeforces contests are estimated**, not official — worked out from
+  how many people solved each problem. They're replaced by the real number once Codeforces
+  publishes one.
+
+## Where your data comes from
+
+Everything stays on your machine — there's no server. If you want to know exactly which
+site each number came from, or something looks wrong and you'd like to check it yourself,
+see **[DATA.md](DATA.md)**.
+
+## Building it yourself
+
+Requires Node 20.19+ or 22.12+.
 
 ```bash
 npm install
-npm run build:chrome   # -> dist/chrome
-npm test               # rating maths, platform adapters, queue ordering
+npm run build:chrome    # -> dist/chrome
+npm test                # rating maths, adapters, queue ordering
+npm run smoke           # loads the built panel in headless Chrome
 ```
 
-Then load `dist/chrome` via **Load unpacked** as above. `npm run dev:chrome` runs a dev
-server with hot reload.
-
-The tests run offline against real contest data captured in `tests/fixtures/`, and cover
-the parts that would fail quietly rather than loudly. The UI itself has no automated
-coverage — check that by loading the built extension.
-
-## Limitations
-
-- **Chrome only.** The side panel uses `chrome.sidePanel`, which has no direct Firefox
-  equivalent. The shared code in `core/` already avoids Chrome-only APIs.
-- **Some Codeforces data is scraped.** Problem names and official solve counts come from
-  the standings page, because the API doesn't expose them. AtCoder and CodeChef need no
-  scraping.
-- **Requests are deliberately slow.** Each platform's requests are spaced out to avoid
-  tripping rate limiting. Adding a contest is not instant by design.
-- **AtCoder has no tags.** AtCoder publishes none at all, so its problems never appear in
-  the tag breakdown. Codeforces gym tags are usually empty for the same reason.
-- **AtCoder difficulty lands a few days late.** A round added the evening it ends may show
-  some problems as `???`; they fill in on a later refresh.
+Then load `dist/chrome` with **Load unpacked** as above.
 
 ## Licence
 
 ISC — see [LICENSE](LICENSE).
 
-Not affiliated with Codeforces, AtCoder or CodeChef. Use in accordance with their terms of
-service.
+Not affiliated with Codeforces, AtCoder or CodeChef. Use in line with their terms of service.
