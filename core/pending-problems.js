@@ -16,10 +16,18 @@
  * When the same problem shows up twice, the occurrence from the **newer**
  * contest wins — that is the one the user most likely just competed in, and so
  * the more useful link.
+ *
+ * A problem marked `upsolvable: false` is dropped by default. It is not work
+ * you can do: CodeChef never mirrored it to practice, so there is nowhere left
+ * to submit it (see `platforms/codechef/adapter.js`). Excluding it here rather
+ * than in each view is what keeps the queue, the platform ring and both stats
+ * histograms agreeing on what "pending" means. The contest expansion is the one
+ * caller that opts back in, since hiding the row there would make the contest
+ * look shorter than it is.
  */
 import { platformOf } from "./platforms/registry.js";
 
-export function collectPendingProblems(contests) {
+export function collectPendingProblems(contests, { includeUnupsolvable = false } = {}) {
   const byKey = new Map();
 
   for (const contest of contests ?? []) {
@@ -27,6 +35,9 @@ export function collectPendingProblems(contests) {
 
     for (const problem of contest.problems ?? []) {
       if (problem.solved) continue;
+      // `=== false`, not falsy: the key is absent on every problem that can be
+      // upsolved, which is all of them on Codeforces and AtCoder.
+      if (!includeUnupsolvable && problem.upsolvable === false) continue;
 
       const key = platform.problemKey(contest, problem);
       const existing = byKey.get(key);

@@ -482,6 +482,29 @@ upsolve-stats-view {
   cursor: help;
 }
 
+/* A problem the platform never mirrored to practice: still listed under its
+   contest, but no longer work you can do, so it is out of the queue entirely.
+
+   Quieted through ink, the same way the waiting strip drops its contest names
+   to --text-muted, rather than through weight or a strikethrough — struck-out
+   reads as cancelled-by-you, which is the opposite of what happened.
+
+   Deliberately not --band-red. That ramp carries rank meaning, and borrowing it
+   here would score the problem as hard rather than report it as unreachable.
+
+   The mark itself lives inside the name cell, not beside it: .contest-problems
+   declares four columns and each compact row borrows them with subgrid, so a
+   fifth child would drop onto an implicit row of its own. */
+.problem-row.is-unupsolvable .compact-name,
+.problem-row.is-unupsolvable .problem-title {
+  color: var(--text-muted);
+}
+
+.upsolve-warn {
+  color: var(--text-muted);
+  cursor: help;
+}
+
 /* --- Contest List Items --- */
 /* One declaration. This was previously spread across five blocks that each
    overrode the last, so editing any one of them appeared to do nothing —

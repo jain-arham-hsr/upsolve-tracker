@@ -18,6 +18,10 @@ export function countPendingTags(contests, range = null) {
   contests.forEach((contest) => {
     contest.problems.forEach((prob) => {
       if (prob.solved) return;
+      // This walks contests directly rather than going through
+      // collectPendingProblems, so it has to repeat that filter itself — or the
+      // bars would count problems the coverage line above them has excluded.
+      if (prob.upsolvable === false) return;
       if (range) {
         if (typeof prob.rating !== "number") return;
         if (prob.rating < range.min || prob.rating > range.max) return;

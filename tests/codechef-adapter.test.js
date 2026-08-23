@@ -12,12 +12,21 @@ import { resetApiState } from "../core/platforms/codechef/api.js";
 import {
   fetchContestRecord,
   fetchSolvedKeys,
+  syncMetadata,
 } from "../core/platforms/codechef/adapter.js";
 
 const PROBLEMS = {
-  IOI7: { code: "IOI7", name: "IOI Gold", successful_submissions: "24922" },
+  IOI7: {
+    code: "IOI7", name: "IOI Gold", successful_submissions: "24922",
+    is_added_to_practice: true,
+  },
+  // No `is_added_to_practice` at all — must read as mirrored, not as missing.
   MODSUB: { code: "MODSUB", name: "Mod Subtract", successful_submissions: "1489" },
-  UPDQS: { code: "UPDQS", name: "Update Queries", successful_submissions: "647" },
+  // The MAXTHEMIN case: in the contest, never mirrored to /problems/.
+  UPDQS: {
+    code: "UPDQS", name: "Update Queries", successful_submissions: "647",
+    is_added_to_practice: false,
+  },
 };
 
 const DETAILS = {
@@ -69,6 +78,13 @@ function stub({ signedIn = true } = {}) {
 const jsonResponse = (body) => ({ ok: true, status: 200, async json() { return body; } });
 const textResponse = (body) => ({ ok: true, status: 200, async text() { return body; } });
 
+/**
+ * Deep, because tests flip `is_added_to_practice` on a payload entry to model
+ * CodeChef mirroring a problem later. Sharing the PROBLEMS literal by reference
+ * leaked that mutation into every test that ran afterwards.
+ */
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
 beforeEach(() => {
   resetApiState();
   attempted = { rows: [], count: null };
@@ -78,7 +94,7 @@ beforeEach(() => {
       name: "Starters 252 (Rated)",
       is_a_parent_contest: false,
       time: { start: 1_787_150_160 },
-      problems: PROBLEMS,
+      problems: clone(PROBLEMS),
       // Signed in, this is an object keyed by code — not an array.
       problemsstats: { solved: { IOI7: true }, partially_solved: { MODSUB: true }, attempted: {} },
     },
@@ -94,7 +110,7 @@ beforeEach(() => {
     },
     START252C: {
       code: "START252C", name: "Starters 252 (Div 3)", is_a_parent_contest: false,
-      time: { start: 1_787_150_160 }, problems: { IOI7: PROBLEMS.IOI7 },
+      time: { start: 1_787_150_160 }, problems: { IOI7: clone(PROBLEMS.IOI7) },
       problemsstats: { solved: [] },
     },
   };
@@ -280,4 +296,140 @@ test("the listing is scoped to the signed-in account and includes unrated proble
   assert.equal(query.get("group"), "attempted", "unscoped would be a catalogue read");
   assert.equal(query.get("page"), "0", "the endpoint is zero-based");
   assert.equal(query.get("start_rating"), "-1", "0 would drop every unrated problem");
+});
+
+/**
+ * Some old problems were never mirrored to CodeChef's practice archive, so once
+ * the contest closes to submissions there is nowhere left to solve them. The
+ * signal is `is_added_to_practice` on the contest payload — verified live
+ * against START32C/MAXTHEMIN, which is the only one of its ten problems that
+ * 404s at /problems/.
+ */
+test("a problem never added to practice is flagged, and no other problem is", async () => {
+  const contest = await fetchContestRecord({
+    contestId: "START252D", subtype: "STARTERS", session: {},
+  });
+  const byCode = Object.fromEntries(contest.problems.map((p) => [p.index, p]));
+
+  assert.equal(byCode.UPDQS.upsolvable, false);
+  // Absent, not `true`. The key means "this is dead work" and is written only
+  // when it is — every problem on Codeforces and AtCoder omits it.
+  assert.equal("upsolvable" in byCode.IOI7, false);
+  // The field missing from the payload must read as mirrored. Treating unknown
+  // as unmirrored would empty the queue on any payload shape change.
+  assert.equal("upsolvable" in byCode.MODSUB, false);
+});
+
+test("detecting it costs no extra request", async () => {
+  requestLog = [];
+  await fetchContestRecord({ contestId: "START252D", subtype: "STARTERS", session: {} });
+
+  // One contest payload plus one detail per problem — the flag rides along on
+  // the payload that was already being fetched.
+  assert.equal(requestLog.filter((url) => /\/api\/contests\/[^/]+$/.test(url)).length, 1);
+  assert.equal(requestLog.filter((url) => url.includes("/problems/")).length, 3);
+});
+
+test("a problem CodeChef later mirrors comes back to the queue", async () => {
+  const contest = await fetchContestRecord({
+    contestId: "START252D", subtype: "STARTERS", session: {},
+  });
+  const updqs = contest.problems.find((p) => p.index === "UPDQS");
+  assert.equal(updqs.upsolvable, false);
+
+  // CodeChef adds it to practice.
+  resetApiState();
+  contests.START252D.problems.UPDQS.is_added_to_practice = true;
+
+  const changed = await syncMetadata({}, [contest]);
+
+  assert.equal(changed, 1);
+  // Deleted rather than set true, so the stored shape stays consistent with
+  // what buildProblem writes.
+  assert.equal("upsolvable" in updqs, false);
+});
+
+test("the re-check runs every refresh, not on the weekly rating stamp", async () => {
+  const contest = await fetchContestRecord({
+    contestId: "START252D", subtype: "STARTERS", session: {},
+  });
+  // Freshly stamped, so the weekly rating re-check is skipped entirely.
+  contest.tagsSyncedAt = Date.now();
+
+  resetApiState();
+  contests.START252D.problems.UPDQS.is_added_to_practice = true;
+  await syncMetadata({}, [contest]);
+
+  assert.equal("upsolvable" in contest.problems.find((p) => p.index === "UPDQS"), false);
+});
+
+test("a contest with nothing flagged is never asked about", async () => {
+  // The re-check exists to clear a flag, so it only looks at contests that have
+  // one. Asking about every tracked contest on every refresh would be a request
+  // each, forever, to find something that does not happen — CodeChef does not
+  // pull problems back out of practice.
+  const contest = await fetchContestRecord({
+    contestId: "START252C", subtype: "STARTERS", session: {},
+  });
+  assert.deepEqual(contest.problems.filter((p) => p.upsolvable === false), []);
+
+  resetApiState();
+  requestLog = [];
+  await syncMetadata({}, [contest]);
+  assert.equal(requestLog.length, 0);
+});
+
+test("a flagged contest is re-checked until it clears, then stops costing anything", async () => {
+  const contest = await fetchContestRecord({
+    contestId: "START252D", subtype: "STARTERS", session: {},
+  });
+  assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
+
+  // Still unmirrored: asked again, and stays flagged.
+  resetApiState();
+  requestLog = [];
+  await syncMetadata({}, [contest]);
+  assert.equal(requestLog.length, 1);
+  assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
+
+  // CodeChef mirrors it: the flag clears...
+  resetApiState();
+  contests.START252D.problems.UPDQS.is_added_to_practice = true;
+  await syncMetadata({}, [contest]);
+  assert.equal("upsolvable" in contest.problems.find((p) => p.index === "UPDQS"), false);
+
+  // ...and with nothing left flagged, the contest drops out of the pass.
+  resetApiState();
+  requestLog = [];
+  await syncMetadata({}, [contest]);
+  assert.equal(requestLog.length, 0, "a settled contest must cost nothing");
+});
+
+test("a failed re-check leaves the flag alone rather than clearing it", async () => {
+  // The contest is not in the stub, so getContest throws. Guessing the problem
+  // back into the queue on a network blip would undo the whole point.
+  const contest = await fetchContestRecord({
+    contestId: "START252D", subtype: "STARTERS", session: {},
+  });
+  resetApiState();
+  delete contests.START252D;
+
+  await syncMetadata({}, [contest]);
+
+  assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
+});
+
+test("a problem missing from the payload keeps its flag rather than being guessed back", async () => {
+  // Distinct from a failed request: the response arrives and simply does not
+  // mention the problem. Treating that as "mirrored" would put a problem that
+  // cannot be submitted back into the queue on a payload shape change.
+  const contest = await fetchContestRecord({
+    contestId: "START252D", subtype: "STARTERS", session: {},
+  });
+  resetApiState();
+  delete contests.START252D.problems.UPDQS;
+
+  await syncMetadata({}, [contest]);
+
+  assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
 });

@@ -612,7 +612,10 @@ export class ContestList extends HTMLElement {
    * hiding it here would make the contest look shorter than it is.
    */
   renderProblems(contest, platform, userRatings) {
-    const pending = collectPendingProblems([contest])
+    // `includeUnupsolvable`: the queue drops problems that were never mirrored
+    // to practice, but this is a contest's own list — omitting them here would
+    // make the contest look shorter than it is, and give no clue why.
+    const pending = collectPendingProblems([contest], { includeUnupsolvable: true })
       .map((entry) => toProblemRow(entry, userRatings))
       .sort(compareQueueItems);
 

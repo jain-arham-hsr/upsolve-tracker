@@ -70,6 +70,25 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
       ? `<span class="rating-flag" title="Low-confidence estimate">~</span>`
       : "";
 
+  // A problem the platform never mirrored to practice can't be submitted any
+  // more, so it is dropped from the queue entirely (pending-problems.js) and
+  // survives only in a contest's expansion — where hiding it would make the
+  // contest look shorter than it is. Marked, not silently different.
+  //
+  // The wording stays platform-neutral: this renderer is shared, and naming
+  // CodeChef here would be the one place a view branches on the platform.
+  //
+  // It leads the name rather than trailing it. `.compact-name` truncates with
+  // an ellipsis, so a trailing mark is clipped off the end for exactly the long
+  // titles most likely to need explaining — "Maximize the Minim…" showed the
+  // row muted with no clue why. Leading, it is always the first thing on the
+  // line and cannot be truncated away.
+  const unupsolvable = row.upsolvable === false;
+  const warn = unupsolvable
+    ? `<span class="upsolve-warn" title="Not in the practice archive — it can't be submitted outside the contest">⚠</span> `
+    : "";
+  const rowClass = unupsolvable ? " is-unupsolvable" : "";
+
   // Names come from scraped or API-supplied data; the marks are static.
   const name = escapeHtml(row.name?.replace(/\s+/g, " ").trim() || "Unknown Problem");
   const mark = platformIcon(row.platform, row.platformLabel ?? "");
@@ -81,19 +100,19 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
 
   if (compact) {
     return `
-    <a href="${escapeHtml(row.url)}" target="_blank" class="problem-row is-compact">
+    <a href="${escapeHtml(row.url)}" target="_blank" class="problem-row is-compact${rowClass}">
       <span class="compact-index">${escapeHtml(row.index ?? "")}</span>
-      <span class="compact-name">${name}</span>
+      <span class="compact-name">${warn}${name}</span>
       <span class="compact-chance">${formatSolveProbability(row.solveProbability)}</span>
       <span class="compact-rating ${tone}">${ratingText}</span>${flag}
     </a>`;
   }
 
   return `
-    <a href="${escapeHtml(row.url)}" target="_blank" class="problem-row">
+    <a href="${escapeHtml(row.url)}" target="_blank" class="problem-row${rowClass}">
       ${index}
       <div class="problem-content">
-        <div class="problem-title">${name}</div>
+        <div class="problem-title">${warn}${name}</div>
         <div class="problem-meta">
           <span class="meta-line">
             <span class="solve-chance" title="Estimated chance you solve this">${formatSolveProbability(

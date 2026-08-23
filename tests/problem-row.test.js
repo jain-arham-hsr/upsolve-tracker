@@ -87,3 +87,58 @@ test("a low-confidence AtCoder model is marked rather than passed off as measure
   );
   assert.match(html, /rating-flag/);
 });
+
+/**
+ * A problem that was never mirrored to the platform's practice archive can no
+ * longer be submitted. It is out of the queue entirely, and survives only in a
+ * contest's expansion — so the mark is what stops it reading as an ordinary
+ * pending problem the user simply hasn't got to.
+ */
+const stranded = { index: "MAXTHEMIN", name: "Maximize the Minimum", rating: 1358, upsolvable: false };
+
+test("a problem that can no longer be submitted is marked, in both row forms", () => {
+  for (const options of [{ position: 3 }, { compact: true }]) {
+    const html = renderProblemRow(build("codechef", stranded), options);
+    assert.match(html, /class="[^"]*\bis-unupsolvable\b/);
+    assert.match(html, /upsolve-warn/);
+    assert.match(html, /⚠/);
+  }
+});
+
+test("the mark sits inside the name cell, and leads it", () => {
+  // Inside, because `.contest-problems` declares four grid columns and each
+  // compact row borrows them with subgrid — a fifth child would drop onto an
+  // implicit row of its own, which is the latent bug the experimental-rating
+  // flag already has.
+  //
+  // Leading, because `.compact-name` truncates with an ellipsis: a trailing
+  // mark is clipped off the end for long titles, which is precisely when the
+  // row most needs explaining. It shipped that way once and was invisible.
+  const html = renderProblemRow(build("codechef", stranded), { compact: true });
+  assert.match(html, /<span class="compact-name"><span class="upsolve-warn"[^>]*>⚠<\/span> [^<]/);
+
+  const full = renderProblemRow(build("codechef", stranded), { position: 1 });
+  assert.match(full, /<div class="problem-title"><span class="upsolve-warn"/);
+});
+
+test("the wording names no platform — this renderer is shared by all three", () => {
+  const html = renderProblemRow(build("codechef", stranded), { compact: true });
+  const [, explanation] = html.match(/class="upsolve-warn" title="([^"]*)"/);
+  // The href legitimately contains the origin; the sentence must not name a
+  // site, or the shared renderer becomes a view that branches on the platform.
+  assert.ok(!/codechef|codeforces|atcoder/i.test(explanation), explanation);
+  assert.match(explanation, /submitted/);
+});
+
+test("an ordinary problem carries no mark, and neither does an absent flag", () => {
+  for (const problem of [
+    { index: "VOLCONTROL", name: "Volume Control", rating: 1200 },
+    { index: "VOLCONTROL", name: "Volume Control", rating: 1200, upsolvable: true },
+  ]) {
+    for (const options of [{ position: 1 }, { compact: true }]) {
+      const html = renderProblemRow(build("codechef", problem), options);
+      assert.ok(!/is-unupsolvable/.test(html));
+      assert.ok(!/upsolve-warn/.test(html));
+    }
+  }
+});

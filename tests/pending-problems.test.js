@@ -80,3 +80,64 @@ test("solved problems are excluded, and an empty queue is empty", () => {
   assert.deepEqual(collectPendingProblems([]), []);
   assert.deepEqual(collectPendingProblems(undefined), []);
 });
+
+/**
+ * A problem CodeChef never mirrored to practice can no longer be submitted, so
+ * it is not work the queue can offer. It is dropped here rather than in each
+ * view, so the queue, the platform ring and both stats histograms cannot end up
+ * disagreeing about what "pending" counts.
+ */
+const start32c = (problems) => ({
+  id: "START32C", platform: "codechef", type: "STARTERS", startTimeSeconds: 100, problems,
+});
+
+test("a problem that can no longer be submitted is not queued", () => {
+  const pending = collectPendingProblems([
+    start32c([
+      unsolved({ index: "MAXTHEMIN", upsolvable: false }),
+      unsolved({ index: "VOLCONTROL" }),
+    ]),
+  ]);
+  assert.deepEqual(pending.map((entry) => entry.problem.index), ["VOLCONTROL"]);
+});
+
+test("the contest's own expansion opts back in, so it does not look shorter", () => {
+  const pending = collectPendingProblems(
+    [
+      start32c([
+        unsolved({ index: "MAXTHEMIN", upsolvable: false }),
+        unsolved({ index: "VOLCONTROL" }),
+      ]),
+    ],
+    { includeUnupsolvable: true },
+  );
+  assert.deepEqual(pending.map((entry) => entry.problem.index).sort(), [
+    "MAXTHEMIN",
+    "VOLCONTROL",
+  ]);
+});
+
+test("solved still wins over unupsolvable, in both modes", () => {
+  const contests = [
+    start32c([unsolved({ index: "MAXTHEMIN", solved: true, upsolvable: false })]),
+  ];
+  assert.equal(collectPendingProblems(contests).length, 0);
+  assert.equal(collectPendingProblems(contests, { includeUnupsolvable: true }).length, 0);
+});
+
+test("an unupsolvable problem still dedupes across divisions when included", () => {
+  // The same problem runs in every division of a Starters, so an expansion that
+  // opts in must not start double-counting it.
+  const pending = collectPendingProblems(
+    [
+      start32c([unsolved({ index: "MAXTHEMIN", upsolvable: false })]),
+      {
+        id: "START32D", platform: "codechef", type: "STARTERS", startTimeSeconds: 200,
+        problems: [unsolved({ index: "MAXTHEMIN", upsolvable: false })],
+      },
+    ],
+    { includeUnupsolvable: true },
+  );
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].contest.id, "START32D");
+});

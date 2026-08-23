@@ -133,3 +133,20 @@ test("an explicit codeforces platform is accepted", () => {
     null,
   );
 });
+
+test("tag counts skip problems that can no longer be submitted", () => {
+  // countPendingTags walks contests directly instead of going through
+  // collectPendingProblems, so it has to repeat that filter — otherwise the
+  // bars count problems the coverage line above them has already excluded.
+  const contests = [
+    {
+      id: "START32C", platform: "codechef", type: "STARTERS", startTimeSeconds: 1,
+      problems: [
+        { index: "MAXTHEMIN", solved: false, rating: 1358, tags: ["stranded"], upsolvable: false },
+        { index: "VOLCONTROL", solved: false, rating: 1200, tags: ["greedy"] },
+      ],
+    },
+  ];
+
+  assert.deepEqual(countPendingTags(contests).map((t) => t.tag), ["greedy"]);
+});

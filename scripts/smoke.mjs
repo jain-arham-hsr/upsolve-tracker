@@ -67,6 +67,10 @@ const STORE = {
   // they are one button, and a typo inside a row would ship unseen — which is
   // the exact class of escape this harness exists for.
   "upsolve_tracker.waiting_expanded": true,
+  // Pre-expanded so the accordion's contents are on screen without depending on
+  // click timing — collapsed, the unupsolvable row would not be rendered at all
+  // and the check below would silently measure zero.
+  "upsolve_tracker.expanded_contests": ["codechef:START252D"],
   "upsolve_tracker.waiting_contests": [
     {
       url: "https://atcoder.jp/contests/abc472", platform: "atcoder",
@@ -103,7 +107,20 @@ const STORE = {
     {
       id: "START252D", platform: "codechef", type: "STARTERS", name: "Starters 252",
       sourceId: "START252", startTimeSeconds: 1_720_000_000, tagsSyncedAt: Date.now(),
-      problems: [{ index: "MODSUB", name: "Modify and Subtract", rating: 1757, tags: ["dp"], solved: false }],
+      problems: [
+        { index: "MODSUB", name: "Modify and Subtract", rating: 1757, tags: ["dp"], solved: false },
+        // Never mirrored to CodeChef's practice archive, so it can't be
+        // submitted any more: out of the queue, but still listed under its
+        // contest with a mark. No unit test reaches contest-list.js, so this
+        // is the only place the expansion's opt-in is exercised.
+        {
+          // Deliberately long: `.compact-name` truncates with an ellipsis, and a
+          // mark placed after the name is clipped away entirely. A short name
+          // would fit and the check below would pass on a broken layout.
+          index: "MAXTHEMIN", name: "Maximize the Minimum of the Array After K Operations, Each Applied to a Contiguous Subarray of Even Length, Modulo A Large Prime",
+          rating: 1358, tags: ["observation"], solved: false, upsolvable: false,
+        },
+      ],
     },
   ],
 };
@@ -214,6 +231,35 @@ const driver = `<script type="module">
     if (view === "upsolve-contest-list") {
       window.__waiting = document.querySelectorAll(".waiting-item").length;
     }
+    // A problem that can no longer be submitted has to be in exactly one of
+    // these two places. Both halves matter: dropping it from the queue is the
+    // point, and keeping it under its contest is what stops the contest
+    // looking shorter than it is.
+    const codes = (root) =>
+      [...document.querySelectorAll(root)].map((el) => el.textContent.trim());
+    if (view === "upsolve-queue-view") {
+      window.__queueCodes = codes(".problem-row .source");
+    }
+    if (view === "upsolve-contest-list") {
+      // Measured, not matched in the HTML. The mark shipped once *after* the
+      // name, which reads fine as a string and is invisible on screen: the name
+      // cell truncates, so the mark was clipped off the end for exactly the long
+      // titles that most need explaining.
+      const warnEl = document.querySelector(".contest-problems .upsolve-warn");
+      const cellEl = warnEl?.closest(".compact-name");
+      const warnBox = warnEl?.getBoundingClientRect();
+      const cellBox = cellEl?.getBoundingClientRect();
+      window.__expansion = {
+        codes: codes('[data-key="codechef:START252D"] .contest-problems .compact-index'),
+        marked: [...document.querySelectorAll(".contest-problems .problem-row.is-unupsolvable .compact-index")]
+          .map((el) => el.textContent.trim()),
+        warns: document.querySelectorAll(".contest-problems .upsolve-warn").length,
+        // Truncation is what makes this worth measuring; without it the mark
+        // fits either way and the check proves nothing.
+        truncated: cellEl ? cellEl.scrollWidth > cellEl.clientWidth + 1 : false,
+        visible: !!(warnBox && cellBox && warnBox.width > 0 && warnBox.right <= cellBox.right + 0.5),
+      };
+    }
     seen.push(view.replace("upsolve-", "") + ":" + (outlet?.textContent.trim().length ?? 0) + (window.__debug ? "|" + outlet?.textContent.replace(/\\s+/g," ").trim().slice(0,140) : ""));
   }
   // Cancelling a wait happens in the Contests view; the banner lives in the
@@ -277,7 +323,7 @@ const driver = `<script type="module">
     try { fonts[name] = (await document.fonts.load(spec)).length > 0; }
     catch { fonts[name] = false; }
   }
-  document.title = "SMOKE " + JSON.stringify({ errors: window.__errors, seen, drilled, fonts, waiting: window.__waiting ?? 0, banner, grew });
+  document.title = "SMOKE " + JSON.stringify({ errors: window.__errors, seen, drilled, fonts, waiting: window.__waiting ?? 0, banner, grew, queueCodes: window.__queueCodes ?? [], expansion: window.__expansion ?? null });
 </script>`;
 
 writeFileSync(page, html.replace("<head>", "<head>\n" + stub).replace("</body>", driver + "</body>"));
@@ -294,7 +340,47 @@ if (!title) {
 }
 
 const decode = (s) => s.replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
-const { errors, seen, drilled, fonts, waiting, banner, grew } = JSON.parse(decode(title[1]));
+const { errors, seen, drilled, fonts, waiting, banner, grew, queueCodes, expansion } =
+  JSON.parse(decode(title[1]));
+
+// A problem CodeChef never mirrored to practice can no longer be submitted, so
+// it is dropped from the queue — but it stays under its contest, marked, or the
+// contest silently looks shorter than it is with no clue why.
+//
+// Nothing else reaches contest-list.js: removing the expansion's opt-in leaves
+// the whole unit suite green, which is exactly the gap this harness is for.
+if (queueCodes.some((code) => code.includes("MAXTHEMIN"))) {
+  console.error(`smoke: the queue offered a problem that can't be submitted — ${queueCodes.join(", ")}`);
+  process.exitCode = 1;
+}
+if (!queueCodes.some((code) => code.includes("MODSUB"))) {
+  console.error(`smoke: the filter took the rest of the contest with it — queue held ${queueCodes.join(", ")}`);
+  process.exitCode = 1;
+}
+if (!expansion) {
+  console.error("smoke: the Contests tab never reported its expansion");
+  process.exitCode = 1;
+} else {
+  if (!expansion.codes.includes("MAXTHEMIN")) {
+    console.error(`smoke: the contest hid a problem it still owes — expansion held ${expansion.codes.join(", ") || "nothing"}`);
+    process.exitCode = 1;
+  }
+  if (expansion.marked.join() !== "MAXTHEMIN" || expansion.warns !== 1) {
+    console.error(`smoke: expected exactly MAXTHEMIN marked, got [${expansion.marked.join(", ")}] with ${expansion.warns} mark(s)`);
+    process.exitCode = 1;
+  }
+  // The mark shipped once trailing the name, where the cell's ellipsis clipped
+  // it: the row rendered muted with nothing to say why, while the string-level
+  // test passed. So this is measured against the cell's actual box.
+  if (!expansion.truncated) {
+    console.error("smoke: the seeded name no longer truncates, so the mark's placement is untested");
+    process.exitCode = 1;
+  }
+  if (!expansion.visible) {
+    console.error("smoke: the ⚠ is outside its name cell — clipped by the ellipsis, so nothing explains the muted row");
+    process.exitCode = 1;
+  }
+}
 
 // A view that does not follow storage looks exactly like one with nothing to
 // show — the contest is there, and the tab that should list it does not.
