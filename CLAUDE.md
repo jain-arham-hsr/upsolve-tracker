@@ -18,6 +18,8 @@ npm test                # node --test over tests/ — no framework, no browser
 
 `npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, the sampling arithmetic (via `scraping-service.test.js`, which stubs `HttpClient` so no network is touched), backup validation and queue ordering. There is no linter or formatter configured.
 
+**Adapter fixtures must be cloned per test, not shared.** `codechef-adapter.test.js` keeps its payloads in module-level consts (`PROBLEMS`, `DETAILS`) that the `fetch` stub reads directly, so a test modelling "CodeChef published this later" — flipping `is_added_to_practice`, or filling in a `difficulty_rating` — mutates the fixture for every test that runs after it. The suite then passes or fails on *ordering*. `beforeEach` deep-copies both; do the same for any fixture a test writes to.
+
 ```bash
 npm run build:chrome && npm run smoke   # loads the built panel in headless Chrome
 ```
@@ -36,7 +38,9 @@ The mirror direction is checked too: the run writes a new waiting entry **straig
 
 Each of these was confirmed the way the `nullAt` gap was: by removing the fix and watching the run report the original symptom. That is the standard for anything added here — a smoke check that has never been seen to fail is not yet evidence of anything.
 
-It skips rather than fails when no Chrome is found; set `CHROME_PATH` to point at one. It is deliberately shallow — it proves the views run, not that they are right, so **layout still needs a real browser**: build, then load `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked).
+It skips rather than fails when no Chrome is found; set `CHROME_PATH` to point at one. It is mostly shallow — it proves the views run, not that they are right, so **layout still needs a real browser**: build, then load `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked).
+
+There is **one measured layout check**, and it is the template for adding more. The unmirrored-practice `⚠` first shipped *after* the problem name, where `.compact-name`'s ellipsis clipped it off the end — the row rendered muted with no mark at all, while the unit test, which matched the HTML string, passed. So the run compares the mark's `getBoundingClientRect()` against its cell's, and separately asserts the seeded name **actually truncates**; without that second check the mark fits either way and the first proves nothing. Note the harness panel is wider than the real side panel, so a name long enough to truncate in Chrome may not be long enough here. The store also seeds `upsolve_tracker.expanded_contests`, since a collapsed accordion renders no rows and the check would silently measure zero.
 
 **Known gap: smoke loads the side panel only, never `core/ui/options/index.html`.** The options page carries real logic — three `verifyIdentity` paths, credential save/load, the folder picker — and none of it is executed by any automated check. A `nullAt`-class typo there would ship. Checking it by hand means the same recipe smoke uses: copy `dist/chrome`, rewrite `/assets/` to a relative path *at the right depth* (`core/ui/options/` is three levels down, not two), and run Chrome with `--allow-file-access-from-files` — without that flag the `crossorigin` attribute CRXJS puts on the `<link>` makes Chrome CORS-block the stylesheet under `file://`, and the page renders in Times with every computed style wrong. That failure looks exactly like a CSS bug.
 
@@ -47,6 +51,8 @@ It skips rather than fails when no Chrome is found; set `CHROME_PATH` to point a
 The build is still target-parameterized (`TARGET` selects `targets/<name>/manifest.json` and `dist/<name>`), but only `chrome` exists — the previous `dev:firefox` / `build:firefox` scripts were removed because they failed at config load. A real Firefox target needs more than a manifest: `targets/chrome/` depends on `chrome.sidePanel`, which Firefox answers with `sidebar_action`, and CRXJS emits a Chrome-style service-worker loader. Everything under `core/` already sticks to APIs both browsers implement.
 
 Pushing to `main` triggers `.github/workflows/release.yaml`: it runs `npm test`, builds Chrome, reads the version from `targets/chrome/manifest.json`, **deletes any existing release/tag with that version**, and republishes. Bump the manifest version when you want a distinct release; leaving it unchanged silently replaces the previous one — and because the workflow re-creates the tag, the old tag is *moved to the new commit*, so a span of work can end up filed under a version that was already published. That happened between the first v2.1 and v2.2. `package.json`'s version is decorative (nothing reads it); keep it in step with the manifest anyway so the two never disagree.
+
+A docs-only or comment-only commit needs **no** bump: the built bundle is unchanged, so re-publishing the same version is correct and simply moves the tag forward to include it. Bump only when what ships differs. Note `gh` is **not installed** on this machine, so the workflow's result cannot be checked from a shell — look at the Actions tab.
 
 The test step is the gate: before it existed the workflow would happily build and publish a release from a red tree.
 
@@ -484,6 +490,8 @@ A platform with no mark yet falls back to a text chip rather than rendering noth
 Views build rows with template strings and `innerHTML`, so anything originating outside the extension goes through `ui/escape-html.js` first. That covers contest names, problem names and tags (scraped or API-supplied), and the problem URL and source label, which are both built from a scraped problem index. Values the extension derives itself — counts, ratings, the type badge — don't need it.
 
 `backup-validation.js` guards Import, which writes straight into `chrome.storage.local` with no undo. Note it uses `.some()`, not `.find()`: a `null` entry in `trackedContests` is itself falsy, so a truthiness check on `find`'s return value silently accepted malformed backups. There's a test for exactly that case.
+
+**The exported backup is how you inspect the real queue from outside the browser.** `chrome.storage.local` is unreachable from a shell, but auto-export writes the whole store to `upsolve_tracker_backup.json` in whichever folder the picker points at — on this machine, `~/Workbench/__pinned__/upsolve-tracker/`. That is what made it possible to confirm the practice-mirror work against the actual 65 tracked contests rather than against fixtures, and to cross-check every stored flag against the live CodeChef API. It is only as fresh as the last refresh or add, since those are what call `writeBackup()`.
 
 **Auto-export gotchas** (`services/auto-export.js`, used by both the add-contest handler and the global refresh):
 
