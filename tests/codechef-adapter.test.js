@@ -38,6 +38,8 @@ const DETAILS = {
 };
 
 let contests = {};
+/** Per-test copy of DETAILS, for the same reason `contests` is cloned below. */
+let details = {};
 let requestLog = [];
 /** Rows the practice listing answers with, and the count it advertises. */
 let attempted = { rows: [], count: null };
@@ -63,7 +65,7 @@ function stub({ signedIn = true } = {}) {
     }
 
     const problemMatch = url.match(/\/api\/contests\/([^/]+)\/problems\/([^/?]+)/);
-    if (problemMatch) return jsonResponse(DETAILS[problemMatch[2]] ?? {});
+    if (problemMatch) return jsonResponse(details[problemMatch[2]] ?? {});
 
     const contestMatch = url.match(/\/api\/contests\/([^/?]+)$/);
     if (contestMatch) {
@@ -88,6 +90,7 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 beforeEach(() => {
   resetApiState();
   attempted = { rows: [], count: null };
+  details = clone(DETAILS);
   contests = {
     START252D: {
       code: "START252D",
@@ -432,4 +435,50 @@ test("a problem missing from the payload keeps its flag rather than being guesse
   await syncMetadata({}, [contest]);
 
   assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
+});
+
+/**
+ * The other half of syncMetadata. CodeChef publishes difficulty promptly but
+ * not always by the time a contest is added, so an unrated problem stores null,
+ * renders "???" and is re-read later — at most weekly, since that pass costs a
+ * request per still-unrated problem rather than one per contest.
+ */
+test("a difficulty published after the contest was added is filled in", async () => {
+  const contest = await fetchContestRecord({
+    contestId: "START252D", subtype: "STARTERS", session: {},
+  });
+  const modsub = contest.problems.find((p) => p.index === "MODSUB");
+  assert.equal(modsub.rating, null, "-1 is CodeChef's 'not rated'");
+
+  // Rated since, and the contest has not been looked at for a fortnight.
+  resetApiState();
+  details.MODSUB = { difficulty_rating: "1500", user_tags: ["greedy", "start252"] };
+  contest.tagsSyncedAt = Date.now() - 14 * 24 * 60 * 60 * 1000;
+
+  await syncMetadata({}, [contest]);
+
+  assert.equal(modsub.rating, 1500);
+  assert.equal(modsub.ratingSource, "official");
+  assert.deepEqual(modsub.tags, ["greedy"], "the contest code is still stripped");
+});
+
+test("the difficulty re-check is throttled to a week, unlike the practice one", async () => {
+  const contest = await fetchContestRecord({
+    contestId: "START252D", subtype: "STARTERS", session: {},
+  });
+  // Looked at today. The practice pass still runs — UPDQS is flagged — so this
+  // pins that the two cadences really are independent rather than both firing.
+  contest.tagsSyncedAt = Date.now();
+
+  resetApiState();
+  details.MODSUB = { difficulty_rating: "1500", user_tags: [] };
+  requestLog = [];
+  await syncMetadata({}, [contest]);
+
+  assert.equal(contest.problems.find((p) => p.index === "MODSUB").rating, null);
+  assert.equal(
+    requestLog.filter((url) => url.includes("/problems/")).length,
+    0,
+    "no per-problem request: the weekly gate held",
+  );
 });

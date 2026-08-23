@@ -263,26 +263,37 @@ export async function fetchSolvedKeys(session, _contests, onProgress = () => {})
 }
 
 /**
- * Re-checks what only settles after a contest is added: published difficulty,
- * and whether each problem reached CodeChef's practice archive.
+ * How long a contest with unrated problems waits before being asked again.
  *
- * Costs one request per still-unrated problem, so it is limited to contests
- * that haven't been looked at for a week — the same shape as the Codeforces
- * tag re-check.
+ * Governs the **difficulty** re-check only. That one costs a request per
+ * still-unrated problem, so it is throttled to a week — the same shape as the
+ * Codeforces tag re-check. The practice re-check has its own, much faster
+ * cadence and its own cost argument; see `refreshPracticeFlags`.
  */
 const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Re-checks what only settles after a contest is added.
+ *
+ * Two independent passes, deliberately on different cadences: whether a problem
+ * reached CodeChef's practice archive is re-read on **every** refresh, while a
+ * missing published difficulty is re-read at most weekly. Sharing one gate
+ * would let the slower pass suppress the faster.
+ *
+ * @returns {number} records updated, across both passes. Nothing in production
+ *   reads it; it exists so the tests can tell a real update from a no-op.
+ */
 export async function syncMetadata(session, contests, onProgress = () => {}) {
   const now = Date.now();
 
-  let resolved = await refreshPracticeFlags(contests, onProgress);
+  let updated = await refreshPracticeFlags(contests, onProgress);
 
   const stale = contests.filter(
     (contest) =>
       contest.problems.some((problem) => problem.rating === null) &&
       now - (contest.tagsSyncedAt ?? 0) > RECHECK_AFTER_MS,
   );
-  if (stale.length === 0) return resolved;
+  if (stale.length === 0) return updated;
 
   for (const contest of stale) {
     for (const problem of contest.problems) {
@@ -297,7 +308,7 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
         problem.rating = rating;
         problem.ratingSource = "official";
         problem.tags = cleanTags(detail, contest.id);
-        resolved++;
+        updated++;
       } catch (error) {
         console.warn(`[CodeChef] re-check of ${problem.index} failed:`, error.message);
       }
@@ -305,18 +316,16 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
     contest.tagsSyncedAt = now;
   }
 
-  return resolved;
+  return updated;
 }
 
 /**
  * Re-reads `is_added_to_practice` for contests that might have it wrong.
  *
- * Unlike the rating re-check above this runs on **every** refresh, not on the
- * weekly `tagsSyncedAt` stamp, and it writes in both directions — a problem
- * CodeChef later mirrors has to come back to the queue, so this cannot be
- * write-once the way `solved` is.
+ * Writes in both directions — a problem CodeChef later mirrors has to come back
+ * to the queue, so this cannot be write-once the way `solved` is.
  *
- * Two reasons for the faster cadence. A wrongly-flagged problem would otherwise
+ * Two reasons it runs on every refresh rather than on the weekly stamp. A wrongly-flagged problem would otherwise
  * sit out of the queue for a week; and a contest added *hours* after it ends may
  * plausibly report every problem as unmirrored simply because CodeChef has not
  * got to them yet, which would empty the queue for exactly the contest you most
