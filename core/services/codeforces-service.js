@@ -44,6 +44,24 @@ export class CodeforcesService {
   }
 
   /**
+   * Fetches submissions for a contest.
+   *
+   * This is the only window into a gym whose standings Codeforces has hidden:
+   * contest.standings answers FAILED for those, but contest.status still
+   * answers. See platforms/codeforces/contest-status.js.
+   *
+   * @param {string|number} contestId
+   * @param {{from?: number, count?: number}} [page]
+   */
+  async getContestStatus(contestId, { from = 1, count = 10000 } = {}) {
+    return this._callMethod("contest.status", {
+      contestId: contestId,
+      from: from,
+      count: count,
+    });
+  }
+
+  /**
    * Fetches contest metadata (including startTimeSeconds) in bulk.
    * @param {boolean} gym - Gym contests are a separate list from official ones.
    */

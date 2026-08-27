@@ -40,13 +40,23 @@ Each of these was confirmed the way the `nullAt` gap was: by removing the fix an
 
 It skips rather than fails when no Chrome is found; set `CHROME_PATH` to point at one. It is mostly shallow — it proves the views run, not that they are right, so **layout still needs a real browser**: build, then load `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked).
 
-There is **one measured layout check**, and it is the template for adding more. The unmirrored-practice `⚠` first shipped *after* the problem name, where `.compact-name`'s ellipsis clipped it off the end — the row rendered muted with no mark at all, while the unit test, which matched the HTML string, passed. So the run compares the mark's `getBoundingClientRect()` against its cell's, and separately asserts the seeded name **actually truncates**; without that second check the mark fits either way and the first proves nothing. Note the harness panel is wider than the real side panel, so a name long enough to truncate in Chrome may not be long enough here. The store also seeds `upsolve_tracker.expanded_contests`, since a collapsed accordion renders no rows and the check would silently measure zero.
+There are **two measured layout checks**, and they are the template for adding more. The unmirrored-practice `⚠` first shipped *after* the problem name, where `.compact-name`'s ellipsis clipped it off the end — the row rendered muted with no mark at all, while the unit test, which matched the HTML string, passed. So the run compares the mark's `getBoundingClientRect()` against its cell's, and separately asserts the seeded name **actually truncates**; without that second check the mark fits either way and the first proves nothing. Note the harness panel is wider than the real side panel, so a name long enough to truncate in Chrome may not be long enough here. The store also seeds `upsolve_tracker.expanded_contests`, since a collapsed accordion renders no rows and the check would silently measure zero.
+
+The second measures **two things down the queue**: that the platform marks share an x, and that the gap between each mark and its number is constant. `.meta-line` is packed to the right, so every item's x is measured back from the rating cell — and while that cell sized to its content, a one-character difference walked the mark sideways. Removing the width reservation reports `platform marks drift 13.5px`; right-aligning the cell reports `the gap between the platform mark and the rating varies by 13.5px`. The gap check measures a **`Range` over the cell's contents**, not the cell's own box — the box is a fixed-width column and does not move when the text inside it is realigned, so an earlier version measuring the box passed happily while every number sat shoved against the far side of its cell. The gap check works by measuring the **always-rendered flag's right edge**, which is the only thing in the DOM that marks where the digits begin — the number itself is a bare text node.
+
+It carries the same second check as the `⚠` does: the store seeds one problem with `ratingSource: "estimated"` so a `~` actually renders next to unflagged rows, and the run **fails if the queue's ratings are all one width** — without a mix, every row aligns whatever the CSS does and the measurement proves nothing.
 
 **Known gap: smoke loads the side panel only, never `core/ui/options/index.html`.** The options page carries real logic — three `verifyIdentity` paths, credential save/load, the folder picker — and none of it is executed by any automated check. A `nullAt`-class typo there would ship. Checking it by hand means the same recipe smoke uses: copy `dist/chrome`, rewrite `/assets/` to a relative path *at the right depth* (`core/ui/options/` is three levels down, not two), and run Chrome with `--allow-file-access-from-files` — without that flag the `crossorigin` attribute CRXJS puts on the `<link>` makes Chrome CORS-block the stylesheet under `file://`, and the page renders in Times with every computed style wrong. That failure looks exactly like a CSS bug.
 
 `tests/sampling.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
 
-`tests/estimator-accuracy.test.js` records a **known bias**: estimates run below Codeforces' published ratings, by up to ~300 on the hardest problems. The Elo model assumes everyone attempted every problem, when most never open the hard ones — non-attempts read as difficulty-driven failures, so the model over-predicts solves and the search settles too low. Fixing it means modelling attempts, not ability. It matters less now that official problems take CF's published rating when one exists, leaving the estimator to gyms and contests too fresh to be rated.
+`tests/estimator-accuracy.test.js` records a **known bias**: estimates run below Codeforces' published ratings, by up to ~300 on the hardest problems. The Elo model assumes everyone attempted every problem, when most never open the hard ones — non-attempts read as difficulty-driven failures, so the model over-predicts solves and the search settles too low.
+
+**"Model attempts, not ability" was the suggested fix, and it is wrong.** It was measured against 62 gym problems where CF publishes a rating — a real labelled set — and fitting only the parties that actually submitted took mean absolute error from 213 to **374**, with the bias swinging to −310. CF's own ratings are calibrated over everyone who *entered* the round, not everyone who opened the problem, so conditioning on attempters leaves the definition rather than correcting for it. Six other levers were tried and all were neutral or worse (attempt blending, shrinkage to the contest mean, the zero-solve target, the 800 floor, team collapsing by max/mean, Elo divisors 200–1000); the file lists the numbers so none is retried. Enforcing difficulty order across a contest was rejected before measuring — only 2 of 8 contests are actually sorted.
+
+The residue is not reweightable: fed data from its own model at those field sizes the estimator has an irreducible error of 87 against an actual 213, so ~126 points is model misfit — most likely because the two numbers measure different things, difficulty for a two-hour CF round versus for a handful of teams sharing a machine over five ICPC hours. The response is honesty rather than accuracy: `ui/problem-row.js` marks an estimated rating with `~`, so a ±200 number does not read as exact.
+
+It matters less than it did, because published ratings are now preferred wherever they exist — official contests via `problemset-sync.js`, and the ~32% of gym problems CF recognises via `get-prob-stats.js`.
 
 The build is still target-parameterized (`TARGET` selects `targets/<name>/manifest.json` and `dist/<name>`), but only `chrome` exists — the previous `dev:firefox` / `build:firefox` scripts were removed because they failed at config load. A real Firefox target needs more than a manifest: `targets/chrome/` depends on `chrome.sidePanel`, which Firefox answers with `sidebar_action`, and CRXJS emits a Chrome-style service-worker loader. Everything under `core/` already sticks to APIs both browsers implement.
 
@@ -229,7 +239,7 @@ Such a problem stores `upsolvable: false`. The key is **written only when it is 
 Four things about it are deliberate:
 
 - **It is dropped in `pending-problems.js`, not in each view.** That is the single choke point the queue, the platform ring and both stats histograms all run through, so they cannot disagree about what "pending" counts. `tag-service.js` is the one iterator that bypasses it — `countPendingTags` walks contests directly — so it repeats the guard by hand, or the tag bars would count problems the coverage line directly above them has excluded.
-- **The contest's own expansion opts back in**, via `collectPendingProblems(contests, { includeUnupsolvable: true })`. Hiding the row there would make the contest look shorter than it is and give no clue why. It renders muted with a `⚠` whose title explains it; the wording names no platform, since `problem-row.js` is shared by all three. The mark goes **inside** the name cell — `.contest-problems` declares four columns and each compact row borrows them with `subgrid`, so a fifth child drops onto an implicit row of its own. (The experimental-rating `~` flag already has that latent bug; don't add a second.) And it **leads** the name rather than trailing it: `.compact-name` truncates with an ellipsis, so a trailing mark is clipped away for exactly the long titles that most need explaining. It shipped trailing once and was invisible on screen — "Maximize the Minim…" rendered muted with no mark and no clue why — while the test, which matched the HTML string, passed.
+- **The contest's own expansion opts back in**, via `collectPendingProblems(contests, { includeUnupsolvable: true })`. Hiding the row there would make the contest look shorter than it is and give no clue why. It renders muted with a `⚠` whose title explains it; the wording names no platform, since `problem-row.js` is shared by all three. The mark goes **inside** the name cell — `.contest-problems` declares four columns and each compact row borrows them with `subgrid`, so a fifth child drops onto an implicit row of its own. The `~` rating flag *did* have that bug, latently, until the flag started firing on every estimated Codeforces rating and put a stray `~` on the line below most rows of a gym's expansion; it now lives inside the rating cell. `tests/problem-row.test.js` counts a compact row's children rather than checking where a mark sits, since that is the invariant and it is what catches the next one. And it **leads** the name rather than trailing it: `.compact-name` truncates with an ellipsis, so a trailing mark is clipped away for exactly the long titles that most need explaining. It shipped trailing once and was invisible on screen — "Maximize the Minim…" rendered muted with no mark and no clue why — while the test, which matched the HTML string, passed.
 - **The contest is deliberately not auto-deleted.** `progress-manager.js` is untouched: an unupsolvable problem never gets `solved = true`, so `allSolved` stays false and the contest keeps its place on the Contests tab with the warned row visible. It leaves only when removed by hand. Folding the flag into `allSolved` would delete the contest and the warning with it, which is the opposite of the point.
 - **`refreshPracticeFlags` runs on every refresh, not on the weekly `tagsSyncedAt` stamp**, and writes in **both** directions — a problem CodeChef later mirrors has to come back to the queue, so unlike `solved` this is not write-once. It looks **only at contests that still carry a flagged problem**, so the normal fully-mirrored queue costs nothing; reading the *contest* payload rather than the per-problem endpoint is what makes even the flagged case cheap, at one request per affected contest instead of one per affected problem. A contest with nothing flagged is deliberately never re-checked: the only thing that would find is CodeChef *removing* a problem from practice, which does not happen, and paying a request per contest per refresh to look for it would be the sweep this client exists to avoid. A failed re-check leaves the flag alone rather than clearing it — guessing a problem back into the queue on a network blip would undo the point.
 
@@ -269,6 +279,76 @@ What works, and what's implemented, is two strata:
 
 Verified against **real** rounds captured in `tests/fixtures/real-contest-fields.json` (rank order, pre-contest ratings and in-contest solve counts, all from the API): 14 of 15 problems reproduce the full-field rating exactly, one is 100 off. Real rank/rating correlation is about -0.65, not -1, so pages cluster less than a synthetic sorted field suggests — don't re-verify this with simulated data. Contests of 30 pages or fewer are still read whole, since sampling would cost the same. The last page is confirmed to actually be last before its number is used to size the field — a wrong count would undercount the field and skew every rating.
 
+#### Gyms whose standings Codeforces has hidden
+
+A gym can be set to **"Standings will not be visible as original contest"**. When it is, both
+halves of the acquisition path die at once: the standings page carries no `table.standings`, and
+`contest.standings` answers `FAILED — "contestId: Standings are not available"`. That was terminal
+— and worse than a wait, since `mayBeUnpublished("GYM")` is false, so the contest never even
+became a waiting entry. Verified on gym 712373.
+
+**`contest.status` still answers**, and it carries everything the standings response was mined for.
+`platforms/codeforces/contest-status.js` derives it, pure over the submission array so it tests
+without a network stack. Against 712373's real 103 rows it reproduces the contest page exactly —
+A x12, B x12, C x12, D x4, E x6, F x1 — which is the fixture `tests/fixtures/gym-standings-hidden.json`
+and the thing `tests/contest-status.test.js` pins.
+
+Five things there are easy to get wrong:
+
+- **The problem list comes from the `/gym/<id>` problems page, not from the submissions.** A
+  problem nobody attempted appears in no submission, so a submission-derived list silently yields a
+  contest one problem short — which reads as a shorter contest, not as a failure. The problems page
+  is the one page that still renders for these contests. If it can't be parsed either, the add
+  refuses loudly rather than falling back to the shorter list.
+- **Entering the fallback is a flag on the error, never a message match** — `error.isStandingsHidden`,
+  the same idiom as `isNotPublishedYet` and `isIdentityMismatch`. And the gate is three conditions:
+  gym **and** flagged **and** the problems page parses. An *official* contest with no standings
+  table deliberately still throws: that is far more likely a Codeforces layout change, which
+  CLAUDE.md's rules say must fail loudly rather than be routed around. `tests/gym-hidden-standings.test.js`
+  is mostly about what the branch must *not* touch; it stubs the service to throw if a healthy gym
+  ever reaches `getContestStatus`.
+- **Practice submissions are excluded, and that is what makes the counts right.** A gym closes when
+  it ends, so practice solves say nothing about how hard a problem was during it — and the estimator
+  is fitted to exactly that quantity. Including them breaks 8 of the 12 derivation tests. Ghost
+  parties are excluded too, matching the standings path, and a party is counted once per problem
+  however many times it resubmits.
+- **`participantTypes` matches `getContestStandings`' `CONTESTANT,VIRTUAL`** so both gym paths mean
+  the same thing by a "solve". 712373 happens to have no virtual entrants, so that choice is
+  unexercised there.
+- **With no official submissions at all, `solveCountsRead` is false.** All-zero counts are
+  indistinguishable from "nobody solved anything", and handing those to the estimator floors every
+  problem at 800 (`rating-estimator.js:45,62`) rather than refusing.
+
+The field is recovered from who submitted, through `getGymRatingDistFromParties`. Everything below
+the handles — `user.info` chunking, `computeTeamRating`, the strata shape — is shared with the
+standings path via `ratePartyList` so the two cannot drift. Note this field is **narrower** than a
+standings one: it sees only parties that submitted at least once. A party that entered and
+submitted nothing solved nothing either, so the counts stay consistent with it, but the field skews
+strong.
+
+That matters less than it sounds here, because this path **takes the difficulty Codeforces
+publishes on the problem** (`submission.problem.rating`, stored `ratingSource: "official"`) and
+only estimates what is left. For 712373 that is all six problems, so the estimator never runs — which
+is just as well, since at 12 parties it has almost no signal. Note the *visible*-gym path is
+deliberately unchanged and still estimates everything, even though `standings.problems[].rating`
+carries the same number; changing that would alter contests that already add successfully.
+
+**The problems page names the contest somewhere else**, and reusing
+`findContestName` there is wrong: that page has no `.contest-name`, and its first `.caption` is the
+"→ About Contest" sidebox heading — so the first real add filed the contest in the queue under the
+name "→ About Contest". The name is the sidebar contest box's header link
+(`#sidebar .rtable th a`, whose href is the contest root), which is not a `.caption` at all.
+`findContestNameOnProblemsPage` is separate from `findContestName` for that reason, and
+`tests/standings-dom.test.js` keeps the real sidebar markup plus a test asserting that the
+*standings* chain still returns "→ About Contest" on it — which is what makes the split legible.
+Note the name is read once at add time and never re-read, so a contest added under the wrong name
+keeps it until removed and re-added.
+
+Both halves are now confirmed against the live site: `contest.status` against the API, and the
+problems-page parser by a real add of 712373, which found all six problems with correct indices and
+names. `curl` still gets a 403 from this machine (see below), so the tests remain synthetic apart
+from the captured sidebar markup.
+
 ### You cannot fetch Codeforces HTML from a dev machine
 
 `codeforces.com/contest/<id>/standings` answers a plain `curl`/`fetch` with a Cloudflare interstitial — HTTP 403 and a "Just a moment" body — regardless of User-Agent headers. Browser-like headers don't help; the extension only gets through because it runs inside a browser with a real session. **Don't burn time trying**; the API (`codeforces.com/api/*`) is unaffected and answers fine.
@@ -290,7 +370,15 @@ Both come from `problemset.problems` via `problemset-sync.js` (`tag-service.js` 
 The tag source differs by contest type:
 
 - **Official** — `problemset.problems`, one ~2 MB request covering all ~11k problems, keyed by `contestId-index`. The per-contest alternative (`contest.standings`) also returns tags but embeds every participant row — ~12 MB for one Div. 3 — so it must not be used in a loop. Note this endpoint rejects `from`/`count` for non-gym contests; it only answers anonymous parameter-less GETs.
-- **Gym** — absent from the problemset entirely. Tags are lifted from the `problems` array of the standings response that adding a gym already fetches, and are usually empty since gyms sit outside CF's taxonomy.
+- **Gym** — absent from the problemset entirely. Tags *and the published rating* are lifted from the `problems` array of the standings response that adding a gym already fetches (`get-prob-stats.js#applyStandingsProblemData`). Tags are usually empty, since gyms sit outside CF's taxonomy — but **about a third of gym problems carry a `rating`**, and taking it is not optional decoration.
+
+  Those are problems the setter picked from the CF archive rather than preparing in Polygon, so CF still recognises them and serves its own number; problems written for the contest have none and are estimated as before. Measured over the 62 stored gym problems CF also rates, the estimate was a mean **211** off with 14 out by 400+, so ignoring the published value — which this code did until it was noticed — actively mis-sorted the queue. A one-time correction of the affected install was applied through Import rather than left as a normaliser, per the no-back-compat rule at the top of this file.
+
+  **Don't add a recurring gym re-check.** A gym rating is inherited from an already-rated archive problem, so unlike CF's editable tags it never appears later. Re-checking would cost one `contest.standings` per gym per refresh forever, and the gyms with no rated problems would never resolve — the same sweep the CodeChef practice-flag section argues against.
+
+  Note this shrinks `needsEstimate`, so a fully-rated gym now skips `estimateMissingRatings` — and with it the **second** `contest.standings` fetch `get-rating-distribution.js` makes for a response `get-prob-stats.js` already had. That duplicate is still paid whenever anything needs estimating.
+
+  Worth knowing before trusting the number: a setter *can* keep the rating and replace the statement — CF supports it directly ([Rewrite Statements in Mashups](https://codeforces.com/blog/entry/84795)), to stop trainees googling the editorial. The official test set is unchanged and the form warns when the formulas differ, so the rating still describes the problem being judged; the residual risk is a rewrite that quietly strips a hint. Of the 62, 55 match exactly one archive problem by name with an identical rating and zero disagreements, and a re-*upload* of a rated contest inherits nothing at all (gym 100001 has no ratings and its problem name drifted to "Spreadsheets").
 
 `contest.tagsSyncedAt` records *when* the problemset was last consulted, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever.
 
@@ -333,6 +421,43 @@ All three sites define difficulty as roughly the rating at which a contestant ha
 The queue displays **native ratings with the platform's mark beside them**, never a converted number, and shows the probability coarsely (`~72%`) because it is modelled. There is deliberately no "Rating:" label — the word implied one shared scale, which is the single claim this design denies. **Only Codeforces tints its rating numbers**, because only there do the colours carry the site's own established meaning — "cyan 1600" says something specific on Codeforces and nothing on CodeChef, which grades in stars. Platforms with no rank scheme of their own render `.tone-neutral`; the platform mark beside the number is what says whose scale you are reading. A descriptor opts in by defining `ratingBandClass`, and the shared code falls back to neutral when it is absent.
 
 `ui/problem-row.js` owns that markup for both the queue and the contest list — `toProblemRow()` builds the view model and `renderProblemRow()` renders it, so the two views cannot drift. Two options shape it for context: `position` is omitted in a contest's expansion, where the queue's global numbering would mislead, and `compact` switches to a **one-line** row for the same place. Compact drops the platform mark and the contest code because the header directly above already carries both, and quietens the problem name — at full weight four problem titles competed with the contest's own title for the eye.
+
+A rating the extension **modelled rather than measured** — AtCoder's own low-confidence models, or
+anything the Codeforces estimator produced, which on a gym is most problems — is marked with a
+**dotted underline** (`.rating.is-estimated`), not with a glyph beside the number. An unmarked
+number reads as exact, and these run a mean 211 off.
+
+**A `~` was tried first and cost four consecutive layout bugs**, which is the reusable lesson here:
+a mark that occupies width competes with the digits for space, and every way of settling that
+competition broke something else.
+
+1. In a contest's expansion it was a fifth child of a four-column `subgrid`, so it dropped onto the
+   line *below* every marked row.
+2. In the queue it sat outside `.rating`, where `.meta-line`'s flex gap detached it from its number
+   and shoved that number sideways.
+3. Reserving a column for it — always rendered, `visibility: hidden` when unused — keeps the digits
+   stacked, which nothing asked for, and started every *unmarked* number a character from its
+   platform mark: equal across rows, but far enough that the column read as right-aligned, which
+   was the thing being fixed.
+4. Drawing it out of flow (`width: 1ch` against `margin-left: -1ch`) to reclaim that space wedged it
+   against the platform mark, ink 0.7px inside it.
+
+A decoration occupies no width, so none of it arises — and it doubles as the "there is an
+explanation attached" cue. The `title` therefore moved onto `.rating` itself: on the glyph it made
+a ~6.7px hover target and hovering the number did nothing at all.
+
+Details settled by looking at a 6× render of real rows across the rank tints, not by reasoning:
+**dotted at 1px**, `text-underline-offset: 3px`, in `currentColor` so a Codeforces rating keeps its
+band colour through the rule. Dashed at this size reads as an almost-solid line and gets confused
+with a link; 1.5px dots start competing with the digits. The defaults for thickness and offset are
+font-derived and land too tight to read at `--rating-size`, so both are set explicitly.
+
+Because the mark costs nothing, `.rating` needs only `min-width: 4ch` — the widest a rating gets,
+AtCoder's negatives included (`-817`). It is **left-aligned**, which is what makes the gap between
+the platform mark and the number identical on every row; right-aligning pins the last digit instead
+and pushes a three-digit rating an extra character from its mark. `.solve-chance` is `4ch` and
+right-aligned for the opposite reason — there the ones digit is what should stack, `~9%` under
+`~26%`.
 
 Rows fall into three bands, and the two reasons a row can lack a probability must not be conflated:
 

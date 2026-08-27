@@ -16,6 +16,7 @@ import { estimateProblemRating } from "../../rating-estimator.js";
 import {
   getOfficialRatingDist,
   getGymRatingDist,
+  getGymRatingDistFromParties,
   distributionSize,
 } from "../../get-rating-distribution.js";
 import { getProblemStats } from "../../get-prob-stats.js";
@@ -87,8 +88,14 @@ export async function fetchContestRecord({
   const type = subtype === "OFFICIAL" ? "contest" : "gym";
 
   onProgress("Reading the standings…");
-  const { contestName, problems, tagsSynced, startTimeSeconds, solveCountsRead } =
-    await getProblemStats(type, contestId, service);
+  const {
+    contestName,
+    problems,
+    tagsSynced,
+    startTimeSeconds,
+    solveCountsRead,
+    partyHandles,
+  } = await getProblemStats(type, contestId, service);
 
   const contest = {
     id: contestId,
@@ -125,6 +132,7 @@ export async function fetchContestRecord({
       type,
       service,
       needsEstimate,
+      partyHandles,
       onProgress,
     });
   }
@@ -139,12 +147,17 @@ async function estimateMissingRatings({
   type,
   service,
   needsEstimate,
+  partyHandles = null,
   onProgress,
 }) {
   onProgress("Measuring the field…");
 
   let distribution = { strata: [] };
-  if (type === "contest") {
+  if (partyHandles) {
+    // A gym whose standings are hidden: contest.standings answers FAILED, so
+    // the field was recovered from who submitted instead.
+    distribution = await getGymRatingDistFromParties(service, partyHandles);
+  } else if (type === "contest") {
     distribution = await getOfficialRatingDist(service, contestId, onProgress);
     // An empty ratingChanges means the round isn't rated yet — the freshly
     // finished contest you most want to upsolve. Fall back to the standings.

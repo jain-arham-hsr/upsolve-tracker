@@ -1,0 +1,3481 @@
+{
+ "source": "codeforces.com/api — contest.status for gym 712373 (ICPC PRELIMS PC : 1), whose standings Codeforces has disabled",
+ "captured": "2026-08-25",
+ "note": "contest.standings answers FAILED \"Standings are not available\" for this contest; contest.status still answers. Solve counts derived from these rows must reproduce the contest page: A x12, B x12, C x12, D x4, E x6, F x1. Handles and team names are pseudonymised: this was a private contest, and the derivation only ever treats them as opaque identifiers. Party membership, sizes and counts are untouched.",
+ "contestId": 712373,
+ "submissions": [
+  {
+   "id": 388312984,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787634692,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245363466,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor01"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388310169,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787632400,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245363466,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor01"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388289721,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787605379,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245372240,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor02"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388283159,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787598550,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245371721,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388283123,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787598522,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245371386,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor04"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388282655,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787598149,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245371386,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor04"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388268706,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787590555,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245364846,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388265121,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787588626,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245358990,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388264699,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787588401,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245358990,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388263640,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787587819,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245358990,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     }
+    ]
+   },
+   "verdict": "TIME_LIMIT_EXCEEDED",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388258056,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787584595,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245358990,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388257520,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787584231,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245358990,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388257398,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787584163,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245359133,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor07"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388257145,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787584016,
+   "relativeTimeSeconds": 2147483647,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245358990,
+    "participantType": "PRACTICE",
+    "ghost": false,
+    "teamId": null,
+    "teamName": null,
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388256950,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583899,
+   "relativeTimeSeconds": 10799,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "RUNTIME_ERROR",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388256854,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583845,
+   "relativeTimeSeconds": 10745,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245343289,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233681,
+    "teamName": "team02",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor11"
+     },
+     {
+      "handle": "competitor01"
+     },
+     {
+      "handle": "competitor12"
+     }
+    ]
+   },
+   "verdict": "TIME_LIMIT_EXCEEDED",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388256839,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583835,
+   "relativeTimeSeconds": 10735,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388256535,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583655,
+   "relativeTimeSeconds": 10555,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347308,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 226476,
+    "teamName": "team03",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor13"
+     },
+     {
+      "handle": "competitor14"
+     },
+     {
+      "handle": "competitor15"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388256448,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583599,
+   "relativeTimeSeconds": 10499,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347075,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234210,
+    "teamName": "team04",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor16"
+     },
+     {
+      "handle": "competitor17"
+     },
+     {
+      "handle": "competitor18"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388255988,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583336,
+   "relativeTimeSeconds": 10236,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388255980,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583331,
+   "relativeTimeSeconds": 10231,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388255979,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583331,
+   "relativeTimeSeconds": 10231,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245343289,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233681,
+    "teamName": "team02",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor11"
+     },
+     {
+      "handle": "competitor01"
+     },
+     {
+      "handle": "competitor12"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388255877,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583268,
+   "relativeTimeSeconds": 10168,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388255864,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583264,
+   "relativeTimeSeconds": 10164,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "TIME_LIMIT_EXCEEDED",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388255721,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787583180,
+   "relativeTimeSeconds": 10080,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388255282,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582936,
+   "relativeTimeSeconds": 9836,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "TIME_LIMIT_EXCEEDED",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388255194,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582886,
+   "relativeTimeSeconds": 9786,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "TIME_LIMIT_EXCEEDED",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388255128,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582853,
+   "relativeTimeSeconds": 9753,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245343289,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233681,
+    "teamName": "team02",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor11"
+     },
+     {
+      "handle": "competitor01"
+     },
+     {
+      "handle": "competitor12"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388254916,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582734,
+   "relativeTimeSeconds": 9634,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388254789,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582658,
+   "relativeTimeSeconds": 9558,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347308,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 226476,
+    "teamName": "team03",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor13"
+     },
+     {
+      "handle": "competitor14"
+     },
+     {
+      "handle": "competitor15"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388254683,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582591,
+   "relativeTimeSeconds": 9491,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "TIME_LIMIT_EXCEEDED",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388254478,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582482,
+   "relativeTimeSeconds": 9382,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347075,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234210,
+    "teamName": "team04",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor16"
+     },
+     {
+      "handle": "competitor17"
+     },
+     {
+      "handle": "competitor18"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388254410,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582444,
+   "relativeTimeSeconds": 9344,
+   "problem": {
+    "contestId": 712373,
+    "index": "F",
+    "name": "Multiple Lamps",
+    "type": "PROGRAMMING",
+    "rating": 2400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388254106,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582255,
+   "relativeTimeSeconds": 9155,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347075,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234210,
+    "teamName": "team04",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor16"
+     },
+     {
+      "handle": "competitor17"
+     },
+     {
+      "handle": "competitor18"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388253938,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582156,
+   "relativeTimeSeconds": 9056,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347263,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 218510,
+    "teamName": "team07",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     },
+     {
+      "handle": "competitor23"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388253890,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582124,
+   "relativeTimeSeconds": 9024,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347850,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234244,
+    "teamName": "team08",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor24"
+     },
+     {
+      "handle": "competitor02"
+     },
+     {
+      "handle": "competitor25"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388253838,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787582085,
+   "relativeTimeSeconds": 8985,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245343289,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233681,
+    "teamName": "team02",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor11"
+     },
+     {
+      "handle": "competitor01"
+     },
+     {
+      "handle": "competitor12"
+     }
+    ]
+   },
+   "verdict": "TIME_LIMIT_EXCEEDED",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388253426,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787581874,
+   "relativeTimeSeconds": 8774,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347180,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234237,
+    "teamName": "team09",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor26"
+     },
+     {
+      "handle": "competitor27"
+     },
+     {
+      "handle": "competitor28"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388252849,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787581583,
+   "relativeTimeSeconds": 8483,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347180,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234237,
+    "teamName": "team09",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor26"
+     },
+     {
+      "handle": "competitor27"
+     },
+     {
+      "handle": "competitor28"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388251752,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787581009,
+   "relativeTimeSeconds": 7909,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245343289,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233681,
+    "teamName": "team02",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor11"
+     },
+     {
+      "handle": "competitor01"
+     },
+     {
+      "handle": "competitor12"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388251521,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787580882,
+   "relativeTimeSeconds": 7782,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245343289,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233681,
+    "teamName": "team02",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor11"
+     },
+     {
+      "handle": "competitor01"
+     },
+     {
+      "handle": "competitor12"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388250660,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787580426,
+   "relativeTimeSeconds": 7326,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347263,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 218510,
+    "teamName": "team07",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     },
+     {
+      "handle": "competitor23"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388249987,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787580081,
+   "relativeTimeSeconds": 6981,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347180,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234237,
+    "teamName": "team09",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor26"
+     },
+     {
+      "handle": "competitor27"
+     },
+     {
+      "handle": "competitor28"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388249856,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787580012,
+   "relativeTimeSeconds": 6912,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388249798,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787579982,
+   "relativeTimeSeconds": 6882,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "COMPILATION_ERROR",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388249487,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787579813,
+   "relativeTimeSeconds": 6713,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245343289,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233681,
+    "teamName": "team02",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor11"
+     },
+     {
+      "handle": "competitor01"
+     },
+     {
+      "handle": "competitor12"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388249480,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787579811,
+   "relativeTimeSeconds": 6711,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "TIME_LIMIT_EXCEEDED",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388249048,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787579569,
+   "relativeTimeSeconds": 6469,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "TIME_LIMIT_EXCEEDED",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388248874,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787579480,
+   "relativeTimeSeconds": 6380,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347263,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 218510,
+    "teamName": "team07",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     },
+     {
+      "handle": "competitor23"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388248072,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787579033,
+   "relativeTimeSeconds": 5933,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245339242,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 232673,
+    "teamName": "team10",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor29"
+     },
+     {
+      "handle": "competitor30"
+     },
+     {
+      "handle": "competitor07"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388247905,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787578944,
+   "relativeTimeSeconds": 5844,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347308,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 226476,
+    "teamName": "team03",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor13"
+     },
+     {
+      "handle": "competitor14"
+     },
+     {
+      "handle": "competitor15"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388247686,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787578830,
+   "relativeTimeSeconds": 5730,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347263,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 218510,
+    "teamName": "team07",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     },
+     {
+      "handle": "competitor23"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388247619,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787578798,
+   "relativeTimeSeconds": 5698,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347263,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 218510,
+    "teamName": "team07",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     },
+     {
+      "handle": "competitor23"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388247405,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787578673,
+   "relativeTimeSeconds": 5573,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347263,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 218510,
+    "teamName": "team07",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     },
+     {
+      "handle": "competitor23"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388247287,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787578608,
+   "relativeTimeSeconds": 5508,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388246982,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787578445,
+   "relativeTimeSeconds": 5345,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347263,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 218510,
+    "teamName": "team07",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     },
+     {
+      "handle": "competitor23"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388246656,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787578267,
+   "relativeTimeSeconds": 5167,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388246565,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787578222,
+   "relativeTimeSeconds": 5122,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347850,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234244,
+    "teamName": "team08",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor24"
+     },
+     {
+      "handle": "competitor02"
+     },
+     {
+      "handle": "competitor25"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388246183,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787578014,
+   "relativeTimeSeconds": 4914,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347075,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234210,
+    "teamName": "team04",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor16"
+     },
+     {
+      "handle": "competitor17"
+     },
+     {
+      "handle": "competitor18"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388244748,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787577219,
+   "relativeTimeSeconds": 4119,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245348089,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234226,
+    "teamName": "team11",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor31"
+     },
+     {
+      "handle": "competitor32"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388244474,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787577079,
+   "relativeTimeSeconds": 3979,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347184,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 203603,
+    "teamName": "team12",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     },
+     {
+      "handle": "competitor33"
+     },
+     {
+      "handle": "competitor34"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388244225,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787576944,
+   "relativeTimeSeconds": 3844,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388243530,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787576569,
+   "relativeTimeSeconds": 3469,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388243331,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787576458,
+   "relativeTimeSeconds": 3358,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388243244,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787576412,
+   "relativeTimeSeconds": 3312,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245348089,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234226,
+    "teamName": "team11",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor31"
+     },
+     {
+      "handle": "competitor32"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388243211,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787576397,
+   "relativeTimeSeconds": 3297,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347184,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 203603,
+    "teamName": "team12",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     },
+     {
+      "handle": "competitor33"
+     },
+     {
+      "handle": "competitor34"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388243087,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787576331,
+   "relativeTimeSeconds": 3231,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388243020,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787576297,
+   "relativeTimeSeconds": 3197,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245343289,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233681,
+    "teamName": "team02",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor11"
+     },
+     {
+      "handle": "competitor01"
+     },
+     {
+      "handle": "competitor12"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388242933,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787576238,
+   "relativeTimeSeconds": 3138,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245348089,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234226,
+    "teamName": "team11",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor31"
+     },
+     {
+      "handle": "competitor32"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388242565,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787576021,
+   "relativeTimeSeconds": 2921,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347263,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 218510,
+    "teamName": "team07",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     },
+     {
+      "handle": "competitor23"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388242472,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787575978,
+   "relativeTimeSeconds": 2878,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388242078,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787575756,
+   "relativeTimeSeconds": 2656,
+   "problem": {
+    "contestId": 712373,
+    "index": "E",
+    "name": "Array Restoration",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388241936,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787575668,
+   "relativeTimeSeconds": 2568,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388241907,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787575653,
+   "relativeTimeSeconds": 2553,
+   "problem": {
+    "contestId": 712373,
+    "index": "D",
+    "name": "Bakry and Partitioning",
+    "type": "PROGRAMMING",
+    "rating": 1700,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388241831,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787575601,
+   "relativeTimeSeconds": 2501,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347180,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234237,
+    "teamName": "team09",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor26"
+     },
+     {
+      "handle": "competitor27"
+     },
+     {
+      "handle": "competitor28"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388241412,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787575352,
+   "relativeTimeSeconds": 2252,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245348089,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234226,
+    "teamName": "team11",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor31"
+     },
+     {
+      "handle": "competitor32"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388241003,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787575117,
+   "relativeTimeSeconds": 2017,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347075,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234210,
+    "teamName": "team04",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor16"
+     },
+     {
+      "handle": "competitor17"
+     },
+     {
+      "handle": "competitor18"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388240876,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787575049,
+   "relativeTimeSeconds": 1949,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "WRONG_ANSWER",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388240362,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574757,
+   "relativeTimeSeconds": 1657,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388240289,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574711,
+   "relativeTimeSeconds": 1611,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347263,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 218510,
+    "teamName": "team07",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     },
+     {
+      "handle": "competitor23"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388240090,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574601,
+   "relativeTimeSeconds": 1501,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347850,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234244,
+    "teamName": "team08",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor24"
+     },
+     {
+      "handle": "competitor02"
+     },
+     {
+      "handle": "competitor25"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239923,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574499,
+   "relativeTimeSeconds": 1399,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245348089,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234226,
+    "teamName": "team11",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor31"
+     },
+     {
+      "handle": "competitor32"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239845,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574451,
+   "relativeTimeSeconds": 1351,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347184,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 203603,
+    "teamName": "team12",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     },
+     {
+      "handle": "competitor33"
+     },
+     {
+      "handle": "competitor34"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239665,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574336,
+   "relativeTimeSeconds": 1236,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347308,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 226476,
+    "teamName": "team03",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor13"
+     },
+     {
+      "handle": "competitor14"
+     },
+     {
+      "handle": "competitor15"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239493,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574233,
+   "relativeTimeSeconds": 1133,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347180,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234237,
+    "teamName": "team09",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor26"
+     },
+     {
+      "handle": "competitor27"
+     },
+     {
+      "handle": "competitor28"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239474,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574218,
+   "relativeTimeSeconds": 1118,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245339242,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 232673,
+    "teamName": "team10",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor29"
+     },
+     {
+      "handle": "competitor30"
+     },
+     {
+      "handle": "competitor07"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239446,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574201,
+   "relativeTimeSeconds": 1101,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245348089,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234226,
+    "teamName": "team11",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor31"
+     },
+     {
+      "handle": "competitor32"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239428,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574194,
+   "relativeTimeSeconds": 1094,
+   "problem": {
+    "contestId": 712373,
+    "index": "C",
+    "name": "Not Assigning",
+    "type": "PROGRAMMING",
+    "rating": 1400,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239373,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574154,
+   "relativeTimeSeconds": 1054,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347850,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234244,
+    "teamName": "team08",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor24"
+     },
+     {
+      "handle": "competitor02"
+     },
+     {
+      "handle": "competitor25"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239293,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574116,
+   "relativeTimeSeconds": 1016,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245343289,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233681,
+    "teamName": "team02",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor11"
+     },
+     {
+      "handle": "competitor01"
+     },
+     {
+      "handle": "competitor12"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239291,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574115,
+   "relativeTimeSeconds": 1015,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239187,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574059,
+   "relativeTimeSeconds": 959,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347075,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234210,
+    "teamName": "team04",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor16"
+     },
+     {
+      "handle": "competitor17"
+     },
+     {
+      "handle": "competitor18"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388239167,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787574047,
+   "relativeTimeSeconds": 947,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347263,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 218510,
+    "teamName": "team07",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor05"
+     },
+     {
+      "handle": "competitor23"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388238758,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787573856,
+   "relativeTimeSeconds": 756,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347184,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 203603,
+    "teamName": "team12",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     },
+     {
+      "handle": "competitor33"
+     },
+     {
+      "handle": "competitor34"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388238611,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787573773,
+   "relativeTimeSeconds": 673,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245346818,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233391,
+    "teamName": "team06",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor21"
+     },
+     {
+      "handle": "competitor04"
+     },
+     {
+      "handle": "competitor22"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388238590,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787573761,
+   "relativeTimeSeconds": 661,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347308,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 226476,
+    "teamName": "team03",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor13"
+     },
+     {
+      "handle": "competitor14"
+     },
+     {
+      "handle": "competitor15"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388238585,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787573759,
+   "relativeTimeSeconds": 659,
+   "problem": {
+    "contestId": 712373,
+    "index": "B",
+    "name": "JOE is on TV!",
+    "type": "PROGRAMMING",
+    "rating": 1000,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388238428,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787573676,
+   "relativeTimeSeconds": 576,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245343289,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233681,
+    "teamName": "team02",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor11"
+     },
+     {
+      "handle": "competitor01"
+     },
+     {
+      "handle": "competitor12"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388238379,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787573649,
+   "relativeTimeSeconds": 549,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245339242,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 232673,
+    "teamName": "team10",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor29"
+     },
+     {
+      "handle": "competitor30"
+     },
+     {
+      "handle": "competitor07"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388238350,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787573632,
+   "relativeTimeSeconds": 532,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347180,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 234237,
+    "teamName": "team09",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor26"
+     },
+     {
+      "handle": "competitor27"
+     },
+     {
+      "handle": "competitor28"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388238205,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787573557,
+   "relativeTimeSeconds": 457,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347070,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 233385,
+    "teamName": "team01",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor08"
+     },
+     {
+      "handle": "competitor09"
+     },
+     {
+      "handle": "competitor10"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388237911,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787573379,
+   "relativeTimeSeconds": 279,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347179,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 230224,
+    "teamName": "team05",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor03"
+     },
+     {
+      "handle": "competitor19"
+     },
+     {
+      "handle": "competitor20"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  },
+  {
+   "id": 388237640,
+   "contestId": 712373,
+   "creationTimeSeconds": 1787573241,
+   "relativeTimeSeconds": 141,
+   "problem": {
+    "contestId": 712373,
+    "index": "A",
+    "name": "Everything Everywhere All But One",
+    "type": "PROGRAMMING",
+    "rating": 800,
+    "tags": []
+   },
+   "author": {
+    "participantId": 245347184,
+    "participantType": "CONTESTANT",
+    "ghost": false,
+    "teamId": 203603,
+    "teamName": "team12",
+    "startTimeSeconds": 1787573100,
+    "members": [
+     {
+      "handle": "competitor06"
+     },
+     {
+      "handle": "competitor33"
+     },
+     {
+      "handle": "competitor34"
+     }
+    ]
+   },
+   "verdict": "OK",
+   "testset": "TESTS"
+  }
+ ]
+}

@@ -2,8 +2,10 @@ import { HttpClient } from "./http-client.js";
 import {
   extractHandles,
   extractProblems,
+  extractProblemsFromList,
   extractSolveCounts,
   findContestName,
+  findContestNameOnProblemsPage,
   findStandingsTable,
   hasPageLink,
   highestPageNumber,
@@ -40,10 +42,16 @@ export async function scrapeContestProblems(type, contestId) {
 
   const standingsTable = findStandingsTable(doc);
   if (!standingsTable) {
-    throw new Error(
+    const error = new Error(
       `Couldn't read the standings for ${type} ${contestId} — the page didn't contain a standings table. ` +
         `Codeforces may have changed its layout, or the contest may be private.`,
     );
+    // A flag rather than a message match, the same idiom as isNotPublishedYet
+    // and isIdentityMismatch: a copy edit to the sentence above must not
+    // silently change which contests take the fallback. get-prob-stats.js
+    // reads this to rebuild a gym from contest.status instead of giving up.
+    error.isStandingsHidden = true;
+    throw error;
   }
 
   const parsed = extractProblems(standingsTable);
@@ -54,14 +62,8 @@ export async function scrapeContestProblems(type, contestId) {
     );
   }
 
-  const problems = parsed.map((problem) => ({
-    ...problem,
-    rating: null,
-    ratingSource: null,
-    officialSolves: 0,
-    solved: false,
-    tags: [], // Filled from the API; the standings page doesn't carry tags.
-  }));
+  // Tags are filled from the API; the standings page doesn't carry them.
+  const problems = parsed.map(blankProblem);
 
   const counts = extractSolveCounts(standingsTable, problems.length);
   if (counts) {
@@ -78,6 +80,48 @@ export async function scrapeContestProblems(type, contestId) {
     contestName: findContestName(doc) ?? `Contest ${contestId}`,
     problems,
     solveCountsRead: counts !== null,
+  };
+}
+
+/**
+ * Problem metadata from a contest's own problems page.
+ *
+ * Only used when the standings are hidden — see scrapeContestProblems above.
+ * The page carries no solve counts and no field, so the caller has to source
+ * those elsewhere; what it does carry is the definitive problem list,
+ * including problems nobody submitted to.
+ *
+ * @param {string} type - "contest" or "gym"
+ * @param {string} contestId
+ * @returns {{ contestName: string, problems: object[] }|null}
+ *   null when the page can't be parsed, so the caller can refuse loudly.
+ */
+export async function scrapeProblemsPage(type, contestId) {
+  const path = `/${type}/${contestId}`;
+  const rawHtml = await HttpClient.get(`https://codeforces.com${path}`);
+  const doc = new DOMParser().parseFromString(rawHtml, "text/html");
+
+  const parsed = extractProblemsFromList(doc);
+  if (!parsed) return null;
+
+  return {
+    // Not findContestName: this page names the contest somewhere else, and
+    // that chain's second choice is the "→ About Contest" sidebox heading.
+    contestName:
+      findContestNameOnProblemsPage(doc, path) ?? `Contest ${contestId}`,
+    problems: parsed.map(blankProblem),
+  };
+}
+
+/** The stored shape, before anything is known about difficulty or solves. */
+function blankProblem(problem) {
+  return {
+    ...problem,
+    rating: null,
+    ratingSource: null,
+    officialSolves: 0,
+    solved: false,
+    tags: [],
   };
 }
 

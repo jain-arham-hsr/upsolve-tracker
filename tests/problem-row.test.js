@@ -7,6 +7,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { toProblemRow, renderProblemRow } from "../core/ui/problem-row.js";
 import { getPlatform } from "../core/platforms/registry.js";
+import { DOMParser } from "linkedom";
+
+/**
+ * The estimate mark is a decoration on the number, not a glyph beside it — a
+ * "~" cost four consecutive layout bugs because one character of width competes
+ * with the digits for space. So "marked" is a state on the rating cell, and
+ * nothing about it can move anything.
+ */
+const isMarked = (html) => /class="(?:rating|compact-rating)[^"]*is-estimated/.test(html);
 
 const build = (platformId, problem, contest = {}, ratings = {}) =>
   toProblemRow(
@@ -85,7 +94,7 @@ test("a low-confidence AtCoder model is marked rather than passed off as measure
   const html = renderProblemRow(
     build("atcoder", { index: "A", problemId: "a_a", name: "X", rating: 1200, ratingConfidence: "experimental" }),
   );
-  assert.match(html, /rating-flag/);
+  assert.ok(isMarked(html));
 });
 
 /**
@@ -141,4 +150,140 @@ test("an ordinary problem carries no mark, and neither does an absent flag", () 
       assert.ok(!/upsolve-warn/.test(html));
     }
   }
+});
+
+/**
+ * An unmarked number reads as exact. Most Codeforces gym problems are not:
+ * measured against the 62 gym problems Codeforces also rates, the estimate ran
+ * a mean 211 off, and 14 of them by 400 or more. So an inferred number says so.
+ */
+test("an estimated rating is marked", () => {
+  const html = renderProblemRow(
+    build("codeforces", { index: "A", name: "X", rating: 1400, ratingSource: "estimated" }),
+  );
+  assert.ok(isMarked(html));
+  assert.match(html, /Codeforces publishes no rating/);
+});
+
+test("a published rating is not marked at all", () => {
+  const html = renderProblemRow(
+    build("codeforces", { index: "A", name: "X", rating: 1400, ratingSource: "official" }),
+  );
+  assert.ok(!isMarked(html));
+  // No tooltip either: hovering an ordinary rating should not explain a mark
+  // that is not there.
+  assert.doesNotMatch(html, /class="rating[^"]*"[^>]*title=/);
+});
+
+test("AtCoder's own low-confidence model is marked, with its own wording", () => {
+  const html = renderProblemRow(
+    build("atcoder", {
+      index: "A", problemId: "a_a", name: "X", rating: 1400,
+      ratingSource: "official", ratingConfidence: "experimental",
+    }),
+  );
+  assert.ok(isMarked(html));
+  assert.match(html, /Low-confidence estimate/);
+});
+
+test("a problem that is both experimental and estimated gets one mark, not two", () => {
+  const html = renderProblemRow(
+    build("codeforces", {
+      index: "A", name: "X", rating: 1400,
+      ratingSource: "estimated", ratingConfidence: "experimental",
+    }),
+  );
+  assert.equal(html.match(/is-estimated/g).length, 1);
+  assert.ok(isMarked(html));
+});
+
+test("a problem with no rating at all is not marked as an estimate", () => {
+  // "???" already says the number is absent; underlining it would claim there
+  // is a soft number when there is none.
+  for (const source of [null, "estimated"]) {
+    const html = renderProblemRow(
+      build("codeforces", { index: "A", name: "X", rating: null, ratingSource: source }),
+    );
+    assert.match(html, /\?\?\?</);
+    assert.ok(!isMarked(html), `rating null + ratingSource ${source}`);
+  }
+});
+
+/**
+ * `.contest-problems` declares four columns and each compact row borrows them
+ * with `subgrid`. A fifth child therefore drops onto an implicit row of its
+ * own, under the row it belongs to.
+ *
+ * This is not hypothetical. The "~" flag shipped as a fifth child and put a
+ * stray mark on the line below every estimated problem in a contest's
+ * expansion — while the unit tests, which matched the HTML string, passed.
+ * Counting children is the check that catches it; asserting where the mark
+ * sits would not.
+ */
+const compactChildren = (problem) => {
+  const html = renderProblemRow(build("codeforces", problem), { compact: true });
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  return [...doc.querySelector("a.problem-row").children];
+};
+
+test("a compact row has exactly four children, whatever marks it carries", () => {
+  const cases = {
+    plain: { index: "A", name: "X", rating: 1800, ratingSource: "official" },
+    estimated: { index: "A", name: "X", rating: 1800, ratingSource: "estimated" },
+    experimental: { index: "A", name: "X", rating: 1800, ratingConfidence: "experimental" },
+    unupsolvable: { index: "A", name: "X", rating: 1800, upsolvable: false },
+    both: {
+      index: "A", name: "X", rating: 1800,
+      ratingSource: "estimated", upsolvable: false,
+    },
+    unrated: { index: "A", name: "X", rating: null },
+  };
+  for (const [label, problem] of Object.entries(cases)) {
+    assert.equal(compactChildren(problem).length, 4, `${label} row broke the four-column grid`);
+  }
+});
+
+test("the compact marks sit inside a cell, not beside it", () => {
+  const [, nameCell, , ratingCell] = compactChildren({
+    index: "A", name: "X", rating: 1800,
+    ratingSource: "estimated", upsolvable: false,
+  });
+  // The ⚠ is still an element and still has to live inside the name cell: a
+  // fifth child of this four-column subgrid drops onto a row of its own.
+  assert.match(nameCell.innerHTML, /upsolve-warn/, "the warning belongs in the name cell");
+  // The estimate mark is no longer an element at all — it is a state on the
+  // cell, which is why it cannot land anywhere wrong.
+  assert.match(ratingCell.className, /is-estimated/);
+});
+
+test("marking a rating changes no text, so nothing can move", () => {
+  // The whole reason the "~" was abandoned. A mark that occupies width competes
+  // with the digits for space, and every arrangement of that competition broke
+  // an alignment somewhere. Identical text is what makes that impossible.
+  const cell = (ratingSource) =>
+    compactChildren({ index: "A", name: "X", rating: 1800, ratingSource })[3];
+  assert.equal(cell("official").textContent, cell("estimated").textContent);
+  assert.equal(cell("estimated").textContent.trim(), "1800");
+});
+
+test("the queue rating is the hover target, not some child of it", () => {
+  // On the old glyph the title made a ~6.7px target and hovering the number
+  // did nothing at all.
+  const problem = { index: "A", name: "X", rating: 1800, ratingSource: "estimated" };
+  const doc = new DOMParser().parseFromString(
+    `<body>${renderProblemRow(build("codeforces", problem), { position: 1 })}</body>`,
+    "text/html",
+  );
+  const rating = doc.querySelector(".rating");
+  assert.match(rating.getAttribute("title") ?? "", /Codeforces publishes no rating/);
+  assert.equal(rating.children.length, 0, "the number is a bare text node");
+});
+
+test("both layouts mark the same element, so the views can't drift", () => {
+  const problem = { index: "A", name: "X", rating: 1800, ratingSource: "estimated" };
+  const full = renderProblemRow(build("codeforces", problem), { position: 1 });
+  const doc = new DOMParser().parseFromString(`<body>${full}</body>`, "text/html");
+
+  assert.match(doc.querySelector(".rating").className, /is-estimated/);
+  assert.match(compactChildren(problem)[3].className, /is-estimated/);
 });

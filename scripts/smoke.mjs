@@ -90,7 +90,10 @@ const STORE = {
       id: "2237", platform: "codeforces", type: "OFFICIAL", name: "Codeforces Round 1",
       startTimeSeconds: 1_700_000_000, tagsSyncedAt: Date.now(),
       problems: [
-        { index: "A", name: "Duck Surplus", rating: 1000, tags: ["greedy"], solved: false },
+        // ratingSource "estimated" is what draws the underline. Seeded here so
+        // the queue holds both a marked and an unmarked rating — the checks
+        // below need a mix or they pass vacuously.
+        { index: "A", name: "Duck Surplus", rating: 1000, ratingSource: "estimated", tags: ["greedy"], solved: false },
         { index: "B", name: "Solved One", rating: 1200, tags: [], solved: true },
       ],
     },
@@ -239,6 +242,51 @@ const driver = `<script type="module">
       [...document.querySelectorAll(root)].map((el) => el.textContent.trim());
     if (view === "upsolve-queue-view") {
       window.__queueCodes = codes(".problem-row .source");
+
+      // Measured, not matched. The meta line is packed to the right, so every
+      // item's x is measured back from the rating cell — and when that cell
+      // sized to its content, a one-character difference ("~1000" against
+      // "1757", or a short "???") walked the platform mark sideways and the
+      // marks stopped forming a column. The HTML is identical either way, so
+      // only geometry catches it.
+      const marks = [...document.querySelectorAll(".meta-line .platform-icon")]
+        .map((el) => el.getBoundingClientRect().left);
+      const ratingTexts = [...document.querySelectorAll(".meta-line .rating")]
+        .map((el) => el.textContent.trim());
+      // Where each rating token's TEXT begins — "~1400" and "1400" alike. This
+      // is the "equal gap between the mark and the rating" invariant.
+      //
+      // Measured with a Range over the cell's contents, not the cell's own box:
+      // the box is a fixed-width column and does not move when the text inside
+      // it is realigned, so measuring it passed happily while every number sat
+      // shoved against the far side of its cell.
+      const tokenStarts = [...document.querySelectorAll(".meta-line .rating")]
+        .map((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return range.getBoundingClientRect().left;
+        });
+      window.__queueMarks = {
+        // The mark is a decoration now, so "is it applied" and "does it draw
+        // anything" are different questions — a class that styles nothing looks
+        // identical to no class in the HTML. Read the computed style.
+        estimatedRows: document.querySelectorAll(".meta-line .rating.is-estimated").length,
+        decorated: [...document.querySelectorAll(".meta-line .rating.is-estimated")]
+          .map((el) => {
+            const c = getComputedStyle(el);
+            return c.textDecorationLine + "/" + c.textDecorationStyle;
+          }),
+        plainDecorated: [...document.querySelectorAll(".meta-line .rating:not(.is-estimated)")]
+          .filter((el) => getComputedStyle(el).textDecorationLine !== "none").length,
+        count: marks.length,
+        spread: marks.length ? Math.max(...marks) - Math.min(...marks) : 0,
+        gapSpread: tokenStarts.length
+          ? Math.max(...tokenStarts) - Math.min(...tokenStarts)
+          : 0,
+        // Without a mix of widths every row measures the same and the check
+        // above proves nothing.
+        widths: [...new Set(ratingTexts.map((t) => t.length))].sort(),
+      };
     }
     if (view === "upsolve-contest-list") {
       // Measured, not matched in the HTML. The mark shipped once *after* the
@@ -323,7 +371,7 @@ const driver = `<script type="module">
     try { fonts[name] = (await document.fonts.load(spec)).length > 0; }
     catch { fonts[name] = false; }
   }
-  document.title = "SMOKE " + JSON.stringify({ errors: window.__errors, seen, drilled, fonts, waiting: window.__waiting ?? 0, banner, grew, queueCodes: window.__queueCodes ?? [], expansion: window.__expansion ?? null });
+  document.title = "SMOKE " + JSON.stringify({ errors: window.__errors, seen, drilled, fonts, waiting: window.__waiting ?? 0, banner, grew, queueCodes: window.__queueCodes ?? [], expansion: window.__expansion ?? null, queueMarks: window.__queueMarks ?? null });
 </script>`;
 
 writeFileSync(page, html.replace("<head>", "<head>\n" + stub).replace("</body>", driver + "</body>"));
@@ -340,7 +388,7 @@ if (!title) {
 }
 
 const decode = (s) => s.replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
-const { errors, seen, drilled, fonts, waiting, banner, grew, queueCodes, expansion } =
+const { errors, seen, drilled, fonts, waiting, banner, grew, queueCodes, expansion, queueMarks } =
   JSON.parse(decode(title[1]));
 
 // A problem CodeChef never mirrored to practice can no longer be submitted, so
@@ -378,6 +426,50 @@ if (!expansion) {
   }
   if (!expansion.visible) {
     console.error("smoke: the ⚠ is outside its name cell — clipped by the ellipsis, so nothing explains the muted row");
+    process.exitCode = 1;
+  }
+}
+
+// The platform mark has to land at the same x on every queue row, or the marks
+// stop reading as a column and start looking like drift. `.meta-line` packs to
+// the right, so a rating cell that sized to its content moved everything to its
+// left: "~1000" is one character wider than "1000" and "???" is two narrower.
+// Reserving the cell's widest form fixes it — and only geometry can tell, since
+// the HTML is byte-identical either way.
+const marks = queueMarks;
+if (!marks || marks.count < 3) {
+  console.error(`smoke: expected at least 3 queue rows to compare marks against, saw ${marks?.count ?? 0}`);
+  process.exitCode = 1;
+} else {
+  // A mix of widths is what gives the check something to fail on. All-equal
+  // ratings would align whatever the CSS did.
+  if (marks.widths.length < 2) {
+    console.error(`smoke: queue ratings are all ${marks.widths.join("/")} chars wide — nothing for the alignment check to catch`);
+    process.exitCode = 1;
+  }
+  if (marks.spread > 0.5) {
+    console.error(`smoke: platform marks drift ${marks.spread.toFixed(1)}px across queue rows — the rating cell is sizing to its content again`);
+    process.exitCode = 1;
+  }
+  // Both directions. Nothing marked and the mark is untested; everything marked
+  // and there is no unmarked row left for the leak check below to inspect, so
+  // it passes vacuously — which is exactly how a mutant slipped through once.
+  if (marks.estimatedRows < 1) {
+    console.error("smoke: no estimated row in the queue, so the mark is untested");
+    process.exitCode = 1;
+  } else if (marks.estimatedRows >= marks.count) {
+    console.error(`smoke: all ${marks.count} queue ratings are marked estimated — a published rating is being marked too`);
+    process.exitCode = 1;
+  } else if (!marks.decorated.every((d) => d.includes("underline"))) {
+    console.error(`smoke: an estimated rating draws no underline — computed ${marks.decorated.join(", ")}`);
+    process.exitCode = 1;
+  }
+  if (marks.plainDecorated > 0) {
+    console.error(`smoke: ${marks.plainDecorated} published rating(s) are underlined — the mark is leaking onto measured numbers`);
+    process.exitCode = 1;
+  }
+  if (marks.gapSpread > 0.5) {
+    console.error(`smoke: the gap between the platform mark and the rating varies by ${marks.gapSpread.toFixed(1)}px across queue rows`);
     process.exitCode = 1;
   }
 }

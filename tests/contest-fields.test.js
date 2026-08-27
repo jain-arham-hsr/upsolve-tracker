@@ -40,6 +40,7 @@ const API_PAYLOAD = [
   "ratingChanges",
   "standings",
   "start_epoch_second",
+  "status",
   "time",
 ];
 

@@ -434,6 +434,24 @@ upsolve-stats-view {
   /* Shared with --digit-ink-center's offset maths — do not inline this. */
   font-size: var(--rating-size);
   font-weight: 600;
+
+  /* .meta-line is packed to the right, so every item's position is measured
+     back from this cell's left edge. Letting it size to its content meant a
+     one-character difference in the rating walked the platform mark and the
+     solve chance sideways, and the marks stopped forming a column.
+
+     Four is the widest a rating gets — AtCoder's negatives included, "-817" —
+     with nothing beside it, since the estimate mark is a decoration rather than
+     a glyph. "???" for an unrated problem is shorter. `ch` is the advance of a
+     mono digit, so this is a font metric rather than a tuned pixel value, the
+     same rule the platform mark's own seating follows.
+
+     Left, not right: it puts every number's first digit at the same x, so the
+     gap between the platform mark and the number is identical on every row.
+     Right-aligning pins the last digit instead, which pushes a three-digit
+     rating like "654" an extra character away from its mark. */
+  min-width: 4ch;
+  text-align: left;
 }
 
 .rating.is-unrated {
@@ -447,6 +465,13 @@ upsolve-stats-view {
   font-size: var(--rating-size);
   font-weight: 700;
   color: var(--text-title);
+
+  /* Reserved for the same reason as .rating, at its own widest: "~99%". The
+     value is clamped to 1-99 (queue-order.js), so nothing longer can appear,
+     and the em dash for a missing probability is shorter. Right-aligned so the
+     percent signs line up rather than the tildes. */
+  min-width: 4ch;
+  text-align: right;
 }
 
 /* Which site a row came from. The mark carries it; the text chip is only a
@@ -474,11 +499,30 @@ upsolve-stats-view {
   color: var(--text-main);
 }
 
-/* Marks a low-confidence published difficulty rather than passing it off as
-   measured. AtCoder flags about 11% of its models this way. */
-.rating-flag {
-  color: var(--text-muted);
-  font-weight: 700;
+/* A rating the extension modelled rather than one a platform published:
+   AtCoder's own low-confidence models, and everything the Codeforces estimator
+   produced — which on a gym is most problems, at a measured mean error of 211.
+
+   A decoration, not a glyph. A "~" beside the number was tried and cost four
+   consecutive layout bugs, all from the same root: one character of width
+   competes with the digits for space, and every way of settling that
+   competition broke something else. It fell onto the next line as a fifth child
+   of a four-column subgrid; it detached across .meta-line's flex gap and shoved
+   its number sideways; reserving a column for it pushed every *unmarked* number
+   a character from its platform mark, which read as a right-aligned column; and
+   drawing it out of flow to reclaim that space wedged it against the mark with
+   its ink 0.7px inside. An underline occupies no width, so none of it arises —
+   and it doubles as the "there is an explanation attached" cue for the title,
+   which now sits on the number itself rather than on a 6.7px glyph.
+
+   currentColor, so a Codeforces rating keeps its rank tint through the rule.
+   The thickness and offset are explicit because the defaults are derived from
+   the font and land too tight to read at this size. */
+.rating.is-estimated,
+.compact-rating.is-estimated {
+  text-decoration: underline dotted currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
   cursor: help;
 }
 

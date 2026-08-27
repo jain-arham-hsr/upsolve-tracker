@@ -63,12 +63,43 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
   const ratingText = rated ? String(row.rating) : "???";
   const tone = rated ? (row.tone ?? "tone-neutral") : "is-unrated";
 
-  // ~11% of AtCoder's models are flagged low-confidence; marking them beats
-  // presenting an estimate as if it were measured.
-  const flag =
-    row.ratingConfidence === "experimental"
-      ? `<span class="rating-flag" title="Low-confidence estimate">~</span>`
-      : "";
+  // This number was modelled, not published.
+  //
+  // Two sources reach it. AtCoder flags ~11% of its own models low-confidence.
+  // And the Codeforces estimator runs wherever CF publishes nothing — which on
+  // a gym is most problems, and where its error was measured at a mean 211
+  // against the problems CF does rate. An unmarked number reads as exact, so a
+  // soft one has to say so.
+  //
+  // `ratingSource === "estimated"` is written only by the Codeforces adapter;
+  // AtCoder and CodeChef store "official" or null. So this marks exactly what
+  // the extension inferred and nothing that a platform published.
+  // `rated &&` because the mark qualifies a number: beside "???" it would claim
+  // there is a soft value where there is none. The adapters only ever set
+  // "estimated" alongside a real rating, so this is belt and braces.
+  const modelled =
+    rated &&
+    (row.ratingConfidence === "experimental" || row.ratingSource === "estimated");
+
+  // Carried as a *state on the number* — a dotted underline — rather than as a
+  // glyph beside it. A "~" was tried and cost four consecutive layout bugs,
+  // because one character of width competes with the digits for space and every
+  // way of resolving that competition broke something else: it fell onto the
+  // next line as a fifth child of a four-column subgrid; it detached across
+  // .meta-line's flex gap; reserving a column for it pushed every *unmarked*
+  // number away from its platform mark; and drawing it out of flow wedged it
+  // against that mark. A decoration occupies no width, so none of that arises.
+  //
+  // The title moves here too. On the glyph it made a ~6.7px hover target and
+  // hovering the number itself did nothing; an underline is also the
+  // conventional "there is an explanation attached" cue, so the indicator and
+  // the affordance are now the same object.
+  const estimated = modelled ? " is-estimated" : "";
+  const estimatedTitle = !modelled
+    ? ""
+    : row.ratingConfidence === "experimental"
+      ? ` title="Low-confidence estimate"`
+      : ` title="Estimated from this contest's results — Codeforces publishes no rating for it"`;
 
   // A problem the platform never mirrored to practice can't be submitted any
   // more, so it is dropped from the queue entirely (pending-problems.js) and
@@ -98,13 +129,19 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
       ? ""
       : `<div class="problem-index">${String(position).padStart(2, "0")}.</div>`;
 
+  // A compact row must have exactly four children. `.contest-problems` declares
+  // four columns and each row borrows them with `subgrid`, so a fifth drops onto
+  // an implicit row of its own — which is exactly what the old "~" flag did,
+  // leaving a stray mark on the line below every estimated problem. The `⚠`
+  // therefore lives *inside* the name cell, and the estimate mark is no longer
+  // an element at all.
   if (compact) {
     return `
     <a href="${escapeHtml(row.url)}" target="_blank" class="problem-row is-compact${rowClass}">
       <span class="compact-index">${escapeHtml(row.index ?? "")}</span>
       <span class="compact-name">${warn}${name}</span>
       <span class="compact-chance">${formatSolveProbability(row.solveProbability)}</span>
-      <span class="compact-rating ${tone}">${ratingText}</span>${flag}
+      <span class="compact-rating ${tone}${estimated}"${estimatedTitle}>${ratingText}</span>
     </a>`;
   }
 
@@ -119,7 +156,7 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
               row.solveProbability,
             )}</span>
             ${mark}
-            <span class="rating ${tone}">${ratingText}</span>${flag}
+            <span class="rating ${tone}${estimated}"${estimatedTitle}>${ratingText}</span>
           </span>
           <span class="meta-line">
             <span class="source">${escapeHtml(row.sourceLabel)}</span>

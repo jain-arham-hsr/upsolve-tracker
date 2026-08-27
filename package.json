@@ -1,6 +1,6 @@
 {
   "name": "upsolve-tracker",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "private": true,
   "description": "Chrome extension that builds an upsolving queue from Codeforces, AtCoder and CodeChef contests, ordered by how likely you are to solve each problem.",
   "main": "index.js",
