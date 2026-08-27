@@ -1,4 +1,4 @@
-import { sampleParticipantHandles } from "../../services/scraping-service.js";
+import { sampleParticipantHandles } from "./scraping.js";
 
 /**
  * A rating distribution the estimator can work from, as one or more strata.
@@ -82,7 +82,6 @@ async function sampleOfficialStandings(cfService, contestId, onProgress) {
 async function lookupRatings(cfService, handles) {
   const chunkSize = 250;
   const handleToRating = new Map();
-  const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
   for (let i = 0; i < handles.length; i += chunkSize) {
     try {
@@ -97,7 +96,6 @@ async function lookupRatings(cfService, handles) {
         `[Rating Dist] Chunk ${Math.floor(i / chunkSize) + 1} rejected. Skipping.`,
       );
     }
-    if (i + chunkSize < handles.length) await delay(2000);
   }
 
   return handleToRating;
@@ -155,7 +153,6 @@ async function ratePartyList(cfService, parties) {
 
   const chunkSize = 250;
   const handleToRating = {};
-  const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
   for (let i = 0; i < allHandles.length; i += chunkSize) {
     try {
@@ -170,7 +167,6 @@ async function ratePartyList(cfService, parties) {
         `[Rating Dist] Chunk ${Math.floor(i / chunkSize) + 1} rejected. Skipping.`,
       );
     }
-    if (i + chunkSize < allHandles.length) await delay(2000);
   }
 
   // An unknown handle counts as 800 rather than dropping out, or a party

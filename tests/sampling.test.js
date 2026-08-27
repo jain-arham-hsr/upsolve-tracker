@@ -15,7 +15,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { spreadPages } from "../core/services/scraping-service.js";
+import { spreadPages } from "../core/platforms/codeforces/scraping.js";
 import { estimateProblemRating } from "../core/rating-estimator.js";
 
 const PER_PAGE = 50;

@@ -15,7 +15,7 @@
  *  - **`/api/` paths only.** robots.txt disallows `/problems/*` and
  *    `/status/*`; `/api/` is not mentioned.
  *  - **Never evade a block.** A 403 stops and surfaces an error, exactly as
- *    http-client.js does for Codeforces. No retries, no header games.
+ *    codeforces/http.js does for Codeforces. No retries, no header games.
  *
  * Cookies are sent because `problemsstats` is per-user; everything else the
  * endpoints return is public.
@@ -44,7 +44,7 @@ const MAX_ATTEMPTED = 5000;
 /** Contest payloads are reused within a single add; nothing is kept long. */
 const CONTEST_TTL_MS = 60 * 1000;
 
-const paced = createPacer({ minGapMs: MIN_GAP_MS, credentials: "include" });
+const paced = createPacer({ gapMs: MIN_GAP_MS, credentials: "include" });
 const contestCache = new Map();
 
 async function getJson(path) {

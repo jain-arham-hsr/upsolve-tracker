@@ -21,6 +21,10 @@ function stubStorage(initial) {
         async get(query) {
           if (query === null || query === undefined) return structuredClone(store);
           if (typeof query === "string") return { [query]: store[query] };
+          // chrome.storage.local.get accepts an array of keys as well as a
+          // string or a defaults object; readSettingsValues uses that form.
+          if (Array.isArray(query))
+            return structuredClone(Object.fromEntries(query.map((k) => [k, store[k]])));
           const out = {};
           for (const [key, fallback] of Object.entries(query)) {
             out[key] = key in store ? store[key] : fallback;

@@ -14,7 +14,7 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { HttpClient } = await import("../core/services/http-client.js");
+const { CodeforcesHttp } = await import("../core/platforms/codeforces/http.js");
 const { readSolveStats } = await import("../core/platforms/codeforces/solve-stats.js");
 
 const PROBLEMS = [
@@ -74,7 +74,7 @@ const NO_TABLE = `<html><body><div class="caption">Hidden</div>
  */
 function serve({ standings, problems }) {
   const seen = [];
-  HttpClient.get = async (url) => {
+  CodeforcesHttp.get = async (url) => {
     seen.push(url);
     const body = url.includes("/standings") ? standings : problems;
     if (body instanceof Error) throw body;
@@ -272,7 +272,7 @@ test("gym 712373 end to end, against its real submissions", () => {
         <td><div><a href="/gym/712373/problem/${index}">${name}</a></div></td>
       </tr>`,
   ).join("");
-  HttpClient.get = async (url) =>
+  CodeforcesHttp.get = async (url) =>
     url.includes("/standings")
       ? NO_TABLE
       : `<html><body>${sidebar(712373)}

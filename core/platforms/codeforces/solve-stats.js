@@ -1,7 +1,7 @@
 import {
   scrapeContestProblems,
   scrapeProblemsPage,
-} from "../../services/scraping-service.js";
+} from "./scraping.js";
 import {
   summariseSubmissions,
   fetchContestSubmissions,
@@ -37,7 +37,7 @@ export async function readSolveStats(type, contestId, cfService = null) {
 
   if (type !== "gym") {
     // Official tags, ratings and start times come from bulk endpoints — see
-    // problemset-sync.js and start-time-service.js.
+    // problemset-sync.js and start-times.js.
     return {
       contestName,
       problems,

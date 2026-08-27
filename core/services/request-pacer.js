@@ -1,28 +1,99 @@
 /**
- * A paced fetch: requests queue behind one another with a minimum gap.
+ * A paced fetch: requests queue behind one another with an enforced gap.
  *
- * Each platform makes its own, so their budgets are independent. HttpClient's
- * counter is a single static shared by everything, which meant Codeforces
- * traffic could trigger a cooldown on an unrelated site's request.
+ * This is the **only** pacing mechanism in the codebase. It used to be one of
+ * two: Codeforces' standings scrape carried its own `HttpClient` with a
+ * hard-coded jitter range and a periodic cooldown, and the Codeforces API was
+ * paced by nothing at all — three hand-rolled `await delay(2000)` calls stood
+ * in for it at the call sites that had noticed. Every knob that client
+ * hard-coded is configuration here instead, so a platform states its own
+ * numbers and shared code never learns which platforms exist.
+ *
+ * Each caller makes its own pacer, so budgets are independent. `HttpClient`'s
+ * request counter was a single static shared by everything, which meant
+ * Codeforces traffic could trip a cooldown on an unrelated site's request;
+ * per-instance state makes that impossible rather than merely unlikely.
  *
  * Requests queue through a promise chain rather than each checking the clock.
  * The latter looks equivalent but lets concurrent callers all read the same
  * timestamp, wait the same interval and then fire together — the exact burst
- * the pacing exists to prevent.
+ * the pacing exists to prevent. `HttpClient` had a variant of that flaw: it
+ * slept a random interval per call with no queue, so two concurrent callers
+ * slept in parallel and then fired together. It was latent rather than live,
+ * since every scrape call site is a sequential `await`.
+ *
+ * ## `measureFrom` is not symmetry, it is a real difference
+ *
+ *   - **`"start"`** waits until `previousStart + gap`, so a slow request eats
+ *     into the next gap. Cheap sites where the gap is an etiquette floor.
+ *   - **`"end"`** waits the full gap *after the previous request finished*,
+ *     and waits it before the first request too. This is what `HttpClient`
+ *     did.
+ *
+ * They diverge exactly when a request takes longer than the gap. Collapsing
+ * them onto `"start"` would silently make the Codeforces scrape faster, and
+ * those delays are what keeps the extension from being blocked — so the
+ * distinction has to be stated rather than inherited.
+ *
+ * @param {object} options
+ * @param {number|[number, number]} options.gapMs - fixed, or `[min, max]` for
+ *   a jittered gap drawn per request.
+ * @param {"start"|"end"} [options.measureFrom]
+ * @param {{everyNth: number, gapMs: number|[number, number]}} [options.cooldown]
+ *   A longer pause every Nth request, *replacing* that request's normal gap.
+ * @param {"omit"|"include"|"same-origin"} [options.credentials]
+ * @param {(info: {count: number, ms: number, isCooldown: boolean}) => void} [options.onWait]
+ *   Called with the chosen delay before it is served. Only the Codeforces
+ *   scrape passes one; adding logging here unconditionally would put new
+ *   console output on platforms that have never emitted any.
  */
-export function createPacer({ minGapMs, credentials = "omit" }) {
-  let lastRequestAt = 0;
-  let gap = minGapMs;
+export function createPacer({
+  gapMs,
+  measureFrom = "start",
+  cooldown = null,
+  credentials = "omit",
+  onWait = null,
+}) {
+  // `"end"` waits before the very first request; `"start"` does not. Both
+  // reproduce what their callers did before this module absorbed them.
+  const initialMarker = measureFrom === "end" ? null : 0;
+
+  let marker = initialMarker;
+  let count = 0;
   let chain = Promise.resolve();
+  let fixedGap = null;
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const draw = (spec) =>
+    Array.isArray(spec) ? spec[0] + Math.random() * (spec[1] - spec[0]) : spec;
+
+  const nextDelay = () => {
+    count++;
+    if (fixedGap != null) return { ms: fixedGap, isCooldown: false };
+
+    const isCooldown = Boolean(cooldown) && count % cooldown.everyNth === 0;
+    return { ms: draw(isCooldown ? cooldown.gapMs : gapMs), isCooldown };
+  };
 
   const paced = (url, init = {}) => {
     const result = chain.then(async () => {
-      const wait = lastRequestAt + gap - Date.now();
-      if (wait > 0) await sleep(wait);
-      lastRequestAt = Date.now();
-      return fetch(url, { credentials, ...init });
+      const { ms, isCooldown } = nextDelay();
+
+      // `marker === null` only on the first request under `"end"`, where the
+      // full gap is owed with nothing to measure against.
+      const wait = marker === null ? ms : marker + ms - Date.now();
+
+      if (wait > 0) {
+        onWait?.({ count, ms: wait, isCooldown });
+        await sleep(wait);
+      }
+
+      if (measureFrom === "start") marker = Date.now();
+      try {
+        return await fetch(url, { credentials, ...init });
+      } finally {
+        if (measureFrom === "end") marker = Date.now();
+      }
     });
 
     // Keep the chain alive on failure, or one error stalls everything behind it.
@@ -33,13 +104,17 @@ export function createPacer({ minGapMs, credentials = "omit" }) {
     return result;
   };
 
-  /** Test seam. Production keeps the configured gap. */
+  /**
+   * Test seam. Pins every gap, cooldowns included, so a suite does not spend
+   * real seconds observing an etiquette rule it is not exercising.
+   */
   paced.setSpacing = (ms) => {
-    gap = ms;
+    fixedGap = ms;
   };
 
   paced.reset = () => {
-    lastRequestAt = 0;
+    marker = initialMarker;
+    count = 0;
     chain = Promise.resolve();
   };
 

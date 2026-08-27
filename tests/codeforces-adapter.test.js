@@ -17,7 +17,7 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { HttpClient } = await import("../core/services/http-client.js");
+const { CodeforcesHttp } = await import("../core/platforms/codeforces/http.js");
 const { fetchContestRecord } = await import(
   "../core/platforms/codeforces/adapter.js"
 );
@@ -101,7 +101,7 @@ const record = async (service) => {
 };
 
 test("a fully rated gym takes Codeforces' numbers and never measures the field", async () => {
-  HttpClient.get = async () => standingsPage("702859");
+  CodeforcesHttp.get = async () => standingsPage("702859");
 
   const contest = await record({
     getContestStandings: async () => standingsApi([1300, 900, 2100]),
@@ -122,7 +122,7 @@ test("a fully rated gym takes Codeforces' numbers and never measures the field",
 });
 
 test("a mixed gym estimates only what Codeforces leaves unrated", async () => {
-  HttpClient.get = async () => standingsPage("702859");
+  CodeforcesHttp.get = async () => standingsPage("702859");
   let fieldMeasured = 0;
 
   const contest = await record({
@@ -148,7 +148,7 @@ test("a hidden-standings gym recovers its field from who submitted", async () =>
   // The path that had never executed. Codeforces rates A and C but not B, so
   // B has to be estimated — and contest.standings answers FAILED here, so the
   // field can only come from the submissions.
-  HttpClient.get = async (url) =>
+  CodeforcesHttp.get = async (url) =>
     url.includes("/standings") ? NO_TABLE : problemsPage("712373");
 
   const submission = (index, party, rating, verdict = "OK") => ({
@@ -191,7 +191,7 @@ test("a hidden-standings gym recovers its field from who submitted", async () =>
 });
 
 test("a hidden-standings gym with nothing to estimate never asks for the field", async () => {
-  HttpClient.get = async (url) =>
+  CodeforcesHttp.get = async (url) =>
     url.includes("/standings") ? NO_TABLE : problemsPage("712373");
 
   const contest = await record({
@@ -227,7 +227,7 @@ test("an official round Codeforces has not published waits, and is not scraped",
   // The scrape is the expensive half — tens of deliberately throttled requests.
   // Asking the problemset first means a contest that is going to wait never
   // pays for it, and produces no estimate to be overwritten later.
-  HttpClient.get = async () => {
+  CodeforcesHttp.get = async () => {
     throw new Error("a waiting contest must not be scraped");
   };
   const result = await status(
@@ -243,7 +243,7 @@ test("an official round Codeforces has not published waits, and is not scraped",
 test("a gym is never asked about the problemset — it would never be in one", async () => {
   // Gyms are absent from problemset.problems entirely, so applying the official
   // gate to them would make every gym unaddable.
-  HttpClient.get = async () => standingsPage("702859");
+  CodeforcesHttp.get = async () => standingsPage("702859");
   const contest = await record({
     getProblemsetProblems: async () => {
       throw new Error("a gym must not consult the problemset");
@@ -258,7 +258,7 @@ test("a gym still running waits rather than storing estimates fitted to it", asy
   // The worst version of the bug: a running gym has visible standings carrying
   // partial solve counts, and a gym is the one contest nothing ever re-rates,
   // so anything derived now would be permanent.
-  HttpClient.get = async () => standingsPage("702859");
+  CodeforcesHttp.get = async () => standingsPage("702859");
   const running = standingsApi([null, null, null]);
   running.contest.phase = "CODING";
 
@@ -280,7 +280,7 @@ test("a finished gym with no visible field refuses instead of waiting forever", 
   // The fact that replaced `mayBeUnpublished("GYM") === false`. Private or
   // empty standings do not become visible later, so retrying cannot help —
   // and `unavailable` is the one status that does not wait.
-  HttpClient.get = async () => standingsPage("702859");
+  CodeforcesHttp.get = async () => standingsPage("702859");
   const empty = standingsApi([null, null, null]);
   empty.contest.phase = "FINISHED";
   empty.rows = [];
@@ -299,7 +299,7 @@ test("a finished gym with no visible field refuses instead of waiting forever", 
 test("an unreadable phase proceeds rather than blocking the add", async () => {
   // `finished === null` means the source did not say. Refusing then would make
   // a contest unaddable for a reason we cannot state.
-  HttpClient.get = async () => standingsPage("702859");
+  CodeforcesHttp.get = async () => standingsPage("702859");
   const noPhase = standingsApi([1300, 900, 2100]);
   delete noPhase.contest.phase;
 

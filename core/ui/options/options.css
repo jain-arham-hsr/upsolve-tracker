@@ -134,20 +134,21 @@ input:focus {
   margin-top: 12px;
 }
 
-/* All three platforms' verdicts in one rule, so "Connected as" and "Signed in
-   as" can't drift apart in size the way they had — AtCoder's had no rule at all
-   and was falling back to the body size. */
-#test-msg,
-#atcoder-status,
-#codechef-status {
+/* Every platform's verdict, in one rule that cannot be forgotten.
+   These were three parallel id rules and drifted exactly as that invites:
+   Codeforces and CodeChef each had their own 0.85rem block while AtCoder's had
+   *no rule at all* and fell back to the body's 16px. The sections are generated
+   from the descriptors now, so a new platform picks this up by existing rather
+   than by someone remembering to extend a selector list. */
+.status-text[data-status] {
   font-size: 0.85rem;
   line-height: 1.4;
 }
 
 /* A verdict about the field above it, not a caption crammed against it.
-   #test-msg is excluded: it sits inline in .test-row, which spaces itself. */
-#atcoder-status:not(:empty),
-#codechef-status:not(:empty) {
+   Scoped to a direct child of .form-group, which excludes the button's inline
+   verdict — that one sits in .test-row, which spaces itself with gap. */
+.form-group > .status-text[data-status]:not(:empty) {
   display: block;
   margin-top: 12px;
 }

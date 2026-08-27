@@ -34,7 +34,7 @@ const MAX_PAGES = 200;
 const cache = new Map();
 
 // Its own pacer, so AtCoder's budget is independent of the other platforms'.
-const paced = createPacer({ minGapMs: MIN_GAP_MS, credentials: "omit" });
+const paced = createPacer({ gapMs: MIN_GAP_MS, credentials: "omit" });
 
 /**
  * Fetches a static resource, revalidating with its ETag once the cached copy

@@ -101,3 +101,22 @@ export function formatSolveProbability(probability) {
   const percent = Math.min(99, Math.max(1, Math.round(probability * 100)));
   return `~${percent}%`;
 }
+
+/**
+ * Contests, newest first, with unknown start times sinking to the bottom
+ * rather than being treated as ancient.
+ *
+ * Lives here rather than beside the Codeforces code that *fetches* start
+ * times, because comparing epoch seconds is the one part of that file which
+ * was never Codeforces' own — and being the sole shared export was what kept
+ * a wholly-Codeforces module looking like shared infrastructure.
+ */
+export function byStartTimeDesc(a, b) {
+  const left = a.startTimeSeconds ?? null;
+  const right = b.startTimeSeconds ?? null;
+
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return right - left;
+}

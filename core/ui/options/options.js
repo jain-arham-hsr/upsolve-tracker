@@ -1,62 +1,69 @@
+/**
+ * The settings page.
+ *
+ * It knows about *fields*, not about platforms. Every platform section comes
+ * from `listPlatforms()` and each descriptor's `settingsFields`, and every
+ * check runs through `getAdapter()` — so adding a platform touches no file
+ * here. It used to import all three adapters plus Codeforces' API client
+ * directly, and hand-write three near-identical sections in the HTML.
+ *
+ * The verdicts are the adapters' own words. This page used to compose its own
+ * for CodeChef — re-checking `session.signedIn` and writing a "signed out"
+ * message that `verifyIdentity` already produces — so the same condition read
+ * differently here and in the queue's status strip. One message, one author.
+ */
+import { listPlatforms } from "../../platforms/registry.js";
+import { getAdapter } from "../../platforms/adapters.js";
 import {
   saveDirHandle,
   loadDirHandle,
   clearDirHandle,
-  saveCredentials,
-  loadCredentials,
+  readSettingsValues,
+  writeSettingsValues,
 } from "../../services/secure-store.js";
-import { CodeforcesService } from "../../services/codeforces-service.js";
-import * as codechefAdapter from "../../platforms/codechef/adapter.js";
-import * as codeforcesAdapter from "../../platforms/codeforces/adapter.js";
-import * as atcoderAdapter from "../../platforms/atcoder/adapter.js";
+import { renderPlatformSettings, describeIdentity } from "./platform-settings.js";
+
+const AUTO_EXPORT_KEY = "upsolve_tracker.auto_export";
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const handleInput = document.getElementById("cf-handle");
-  const atcoderHandleInput = document.getElementById("atcoder-handle");
-  const codechefHandleInput = document.getElementById("codechef-handle");
-  const apiKeyInput = document.getElementById("api-key");
-  const apiSecretInput = document.getElementById("api-secret");
+  const platforms = listPlatforms();
+  const mount = document.getElementById("platform-settings");
+  mount.innerHTML = renderPlatformSettings(platforms);
 
   const autoExportCheckbox = document.getElementById("auto-export-checkbox");
   const folderInfo = document.getElementById("folder-info");
   const folderStatus = document.getElementById("folder-status");
   const chooseFolderBtn = document.getElementById("choose-folder-btn");
-
-  const atcoderStatus = document.getElementById("atcoder-status");
-  const codechefStatus = document.getElementById("codechef-status");
-
   const saveBtn = document.getElementById("save-btn");
   const saveMsg = document.getElementById("save-msg");
 
-  const testBtn = document.getElementById("test-btn");
-  const testMsg = document.getElementById("test-msg");
+  const inputFor = (key) => mount.querySelector(`[data-field="${key}"]`);
+  const statusFor = (id) => mount.querySelector(`[data-status="${id}"]`);
+
+  /** What is currently *typed*, which is what a check must be run against. */
+  const typedValues = (platform) =>
+    Object.fromEntries(
+      platform.settingsFields.map((field) => [field.key, inputFor(field.key).value.trim()]),
+    );
 
   let pendingDirHandle = null;
 
   // ==========================================
   // JOB 1: LOAD EXISTING SETTINGS
   // ==========================================
-  const [storageResult, credentials, dirHandle] = await Promise.all([
-    chrome.storage.local.get([
-      "upsolve_tracker.handle",
-      "upsolve_tracker.atcoder_handle",
-      "upsolve_tracker.codechef_handle",
-      "upsolve_tracker.auto_export",
-    ]),
-    loadCredentials(),
+  const [saved, general, dirHandle] = await Promise.all([
+    Promise.all(platforms.map((platform) => readSettingsValues(platform))),
+    chrome.storage.local.get([AUTO_EXPORT_KEY]),
     loadDirHandle(),
   ]);
 
-  if (storageResult["upsolve_tracker.handle"])
-    handleInput.value = storageResult["upsolve_tracker.handle"];
-  if (storageResult["upsolve_tracker.atcoder_handle"])
-    atcoderHandleInput.value = storageResult["upsolve_tracker.atcoder_handle"];
-  if (storageResult["upsolve_tracker.codechef_handle"])
-    codechefHandleInput.value = storageResult["upsolve_tracker.codechef_handle"];
-  if (credentials.apiKey) apiKeyInput.value = credentials.apiKey;
-  if (credentials.apiSecret) apiSecretInput.value = credentials.apiSecret;
+  saved.forEach((values) => {
+    for (const [key, value] of Object.entries(values)) {
+      if (value) inputFor(key).value = value;
+    }
+  });
 
-  if (storageResult["upsolve_tracker.auto_export"]) {
+  if (general[AUTO_EXPORT_KEY]) {
     autoExportCheckbox.checked = true;
     folderInfo.classList.remove("hidden");
   }
@@ -96,156 +103,78 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // ==========================================
-  // JOB 3: VERIFY CREDENTIALS
+  // JOB 3: WHOSE ACCOUNT IS THIS?
   // ==========================================
-  /**
-   * All three answer the same question — which account this queue syncs
-   * against — so all three say it the same way. "Connected as" where the
-   * handle is looked up, "Signed in as" on CodeChef where the browser session
-   * really is the identity. Nothing else: the rating and the submission count
-   * were incidental to what the check establishes.
-   */
+  //
+  // One path for every platform, and deliberately **the same `verifyIdentity`
+  // the sync calls** — a check that exercises a different call can pass while
+  // the real path fails. It runs against the values typed here rather than the
+  // saved ones, so a wrong key tells you before you come to rely on it.
   const setStatus = (element, message, ok) => {
     element.textContent = message;
-    element.classList.remove("hidden");
+    element.classList.toggle("hidden", message === "");
     element.classList.toggle("success", ok === true);
     element.classList.toggle("failure", ok === false);
   };
 
-  const showTestResult = (message, ok) => {
-    testMsg.textContent = message;
-    testMsg.classList.remove("hidden");
-    testMsg.classList.toggle("success", ok);
-    testMsg.classList.toggle("failure", !ok);
-  };
+  async function verify(platform) {
+    const status = statusFor(platform.id);
+    const values = typedValues(platform);
 
-  testBtn.addEventListener("click", async () => {
-    const handle = handleInput.value.trim();
-    const apiKey = apiKeyInput.value.trim();
-    const apiSecret = apiSecretInput.value.trim();
-
-    if (!handle || !apiKey || !apiSecret) {
-      showTestResult("Fill in all three fields first.", false);
+    if (Object.values(values).some((value) => !value)) {
+      // A section you have not filled in yet is not a failure, so it says
+      // nothing — unless it asked you to press something, in which case it owes
+      // you an explanation for doing nothing.
+      setStatus(status, platform.verify.incomplete ?? "", false);
       return;
     }
 
-    testBtn.disabled = true;
-    showTestResult("Checking…", true);
+    setStatus(status, "Checking…");
+    const adapter = getAdapter(platform.id);
 
     try {
-      // Deliberately the same call the sync makes, on the values typed here
-      // rather than the saved ones: a check that exercises a different path
-      // can pass while the real one fails. It is signed, so a bad key, a bad
-      // secret and an unknown handle all surface here.
-      const identity = await codeforcesAdapter.verifyIdentity({
-        handle,
-        service: new CodeforcesService(apiKey, apiSecret),
-      });
-      showTestResult(`✓ Connected as ${identity.username}.`, true);
+      const identity = await adapter.verifyIdentity(await adapter.createSessionFrom(values));
+      setStatus(status, `✓ ${describeIdentity(adapter, identity)}`, true);
     } catch (error) {
-      // Codeforces explains the failure well; pass it through rather than
-      // guessing which field was wrong.
-      showTestResult(`✕ ${error.message}`, false);
-    } finally {
-      testBtn.disabled = false;
+      // The adapters explain their own failures well — an unknown handle, a
+      // bad key, a signed-out session, the wrong account. Passing the message
+      // through beats guessing which field was wrong.
+      setStatus(status, `✕ ${error.message}`, false);
     }
-  });
+  }
+
+  for (const platform of platforms) {
+    if (platform.verify.trigger === "button") {
+      const button = mount.querySelector(`[data-verify="${platform.id}"]`);
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await verify(platform);
+        } finally {
+          button.disabled = false;
+        }
+      });
+      continue;
+    }
+
+    // Checked on load as well as on change: the dangerous state on a
+    // session-based platform is being signed in as someone else, which
+    // otherwise looks exactly like a normal sync.
+    const last = platform.settingsFields.at(-1);
+    inputFor(last.key).addEventListener("change", () => verify(platform));
+    await verify(platform);
+  }
 
   // ==========================================
   // JOB 4: SAVE TO STORAGE
   // ==========================================
   saveBtn.addEventListener("click", async () => {
     await Promise.all([
-      chrome.storage.local.set({
-        "upsolve_tracker.handle": handleInput.value.trim(),
-        "upsolve_tracker.atcoder_handle": atcoderHandleInput.value.trim(),
-        "upsolve_tracker.codechef_handle": codechefHandleInput.value.trim(),
-        "upsolve_tracker.auto_export": autoExportCheckbox.checked,
-      }),
-      saveCredentials(apiKeyInput.value.trim(), apiSecretInput.value.trim()),
+      ...platforms.map((platform) => writeSettingsValues(platform, typedValues(platform))),
+      chrome.storage.local.set({ [AUTO_EXPORT_KEY]: autoExportCheckbox.checked }),
     ]);
 
     saveMsg.classList.remove("hidden");
     setTimeout(() => saveMsg.classList.add("hidden"), 2500);
   });
-
-  // ==========================================
-  // JOB 5: WHOSE CODECHEF ACCOUNT IS THIS?
-  // ==========================================
-  //
-  // CodeChef is the one platform whose identity is ambient — it comes from the
-  // browser session rather than anything typed here. That makes it the one
-  // worth showing plainly: the dangerous state is being signed in as someone
-  // else, which otherwise looks exactly like a normal sync.
-  await renderCodeChefStatus();
-  codechefHandleInput.addEventListener("change", () => renderCodeChefStatus());
-
-  async function renderCodeChefStatus() {
-    const handle = codechefHandleInput.value.trim();
-    if (!handle) {
-      setStatus(codechefStatus, "");
-      return;
-    }
-
-    let session;
-    try {
-      session = await codechefAdapter.createSession();
-    } catch {
-      setStatus(codechefStatus, "Couldn't reach codechef.com to check.", false);
-      return;
-    }
-
-    if (!session.signedIn) {
-      setStatus(
-        codechefStatus,
-        `Signed out — sign in as ${handle} at codechef.com to sync.`,
-        false,
-      );
-      return;
-    }
-
-    // The state this check exists for. CodeChef answers for whoever holds the
-    // session cookie, so a mismatch means the next sync would read somebody
-    // else's solved problems.
-    if (session.signedInAs !== handle) {
-      setStatus(
-        codechefStatus,
-        `✕ Signed in as ${session.signedInAs}, not ${handle}. Syncing is paused until they match.`,
-        false,
-      );
-      return;
-    }
-
-    setStatus(codechefStatus, `✓ Signed in as ${handle}.`, true);
-  }
-
-  // ==========================================
-  // JOB 6: WHICH ATCODER ACCOUNT IS THIS?
-  // ==========================================
-  //
-  // AtCoder had no confirmation at all: you typed a handle, saved, and were
-  // told nothing. Its history is read *about* a handle rather than from a
-  // session, so the extension cannot tell whose handle it is — which makes
-  // showing the account it resolved to the only thing standing between a typo
-  // and a queue quietly synced against a stranger.
-  await renderAtCoderStatus();
-  atcoderHandleInput.addEventListener("change", () => renderAtCoderStatus());
-
-  async function renderAtCoderStatus() {
-    const handle = atcoderHandleInput.value.trim();
-    if (!handle) {
-      setStatus(atcoderStatus, "");
-      return;
-    }
-
-    setStatus(atcoderStatus, "Checking…");
-    try {
-      // No new request: verifyIdentity is what the sync already calls, and it
-      // returns the rating along with the account.
-      const identity = await atcoderAdapter.verifyIdentity({ handle });
-      setStatus(atcoderStatus, `✓ Connected as ${identity.username}.`, true);
-    } catch (error) {
-      setStatus(atcoderStatus, `✕ ${error.message}`, false);
-    }
-  }
 });

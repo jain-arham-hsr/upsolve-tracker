@@ -19,68 +19,10 @@
       never clear, and it would look like the sync was merely slow.
     </p>
 
-    <section class="settings-section">
-      <h3 class="section-head">Codeforces</h3>
-
-      <div class="form-group">
-        <label for="cf-handle">Handle</label>
-        <p class="help-text">Used to look up your accepted submissions.</p>
-        <input type="text" id="cf-handle" placeholder="e.g., tourist" spellcheck="false" />
-      </div>
-
-      <div class="form-group">
-        <label for="api-key">API key</label>
-        <p class="help-text">
-          Generate a key pair at
-          <a href="https://codeforces.com/settings/api" target="_blank" rel="noreferrer">codeforces.com/settings/api</a>,
-          then paste both halves below. The pair is stored in this browser only, is used
-          to sign requests to codeforces.com, and is kept out of the JSON backup on purpose.
-        </p>
-        <input type="text" id="api-key" placeholder="e.g., 70f9b..." spellcheck="false" />
-      </div>
-
-      <div class="form-group">
-        <label for="api-secret">API secret</label>
-        <p class="help-text">The secret half of the same key pair.</p>
-        <input type="password" id="api-secret" placeholder="••••••••" spellcheck="false" />
-      </div>
-
-      <div class="form-group">
-        <p class="help-text">Checks the handle and key against Codeforces before you rely on them.</p>
-        <div class="test-row">
-          <button id="test-btn" class="btn secondary">Test connection</button>
-          <span id="test-msg" class="status-text hidden"></span>
-        </div>
-      </div>
-    </section>
-
-    <section class="settings-section">
-      <h3 class="section-head">AtCoder</h3>
-
-      <div class="form-group">
-        <label for="atcoder-handle">Handle</label>
-        <p class="help-text">
-          No key needed — the handle alone reads which problems you have solved.
-        </p>
-        <input type="text" id="atcoder-handle" placeholder="e.g., tourist" spellcheck="false" />
-        <div id="atcoder-status" class="status-text"></div>
-      </div>
-    </section>
-
-    <section class="settings-section">
-      <h3 class="section-head">CodeChef</h3>
-
-      <div class="form-group">
-        <label for="codechef-handle">Handle</label>
-        <p class="help-text">
-          No key needed. CodeChef answers for whoever is signed in at codechef.com,
-          so this handle is what that session gets checked against — if they don't
-          match, syncing stops rather than reading somebody else's solves.
-        </p>
-        <input type="text" id="codechef-handle" placeholder="e.g., tourist" spellcheck="false" />
-        <div id="codechef-status" class="status-text"></div>
-      </div>
-    </section>
+    <!-- One section per platform, built from each descriptor's settingsFields.
+         Hand-writing these is what let AtCoder ship with no verdict line and no
+         CSS rule for it; see options/platform-settings.js. -->
+    <div id="platform-settings"></div>
 
     <section class="settings-section">
       <h3 class="section-head">Backup</h3>

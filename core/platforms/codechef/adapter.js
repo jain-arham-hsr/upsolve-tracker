@@ -12,7 +12,6 @@ import {
   getProblem,
 } from "./api.js";
 import { extractSession } from "./page-data.js";
-import { codechef } from "./descriptor.js";
 import {
   ready,
   notEndedYet,
@@ -33,6 +32,9 @@ const NOT_RATED = new Set([-1, 9999]);
 /** Setter handles and contest codes get tagged alongside real topics. */
 const TAG_NOISE = /^(?:start|cook|ltime|snck)\d+$|_adm$/i;
 
+import { readSettingsValues } from "../../services/secure-store.js";
+import { codechef } from "./descriptor.js";
+
 export const HANDLE_KEY = "upsolve_tracker.codechef_handle";
 
 /**
@@ -43,10 +45,12 @@ export const HANDLE_KEY = "upsolve_tracker.codechef_handle";
  * solved status the API is about to hand back.
  */
 export async function createSession() {
-  const [settings, html] = await Promise.all([
-    chrome.storage.local.get(HANDLE_KEY),
-    getDashboardHtml(),
-  ]);
+  return createSessionFrom(await readSettingsValues(codechef));
+}
+
+/** The same session from unsaved values, so Settings can verify what you typed. */
+export async function createSessionFrom(values) {
+  const html = await getDashboardHtml();
 
   // extractSession returns null both when signed out and when the page shape
   // has changed. Either way the caller must not read an empty solved list as
@@ -54,11 +58,21 @@ export async function createSession() {
   const page = extractSession(html);
 
   return {
-    handle: settings[HANDLE_KEY],
+    handle: values[HANDLE_KEY],
     signedInAs: page?.username ?? null,
     rating: page?.rating ?? null,
     signedIn: Boolean(page?.username),
   };
+}
+
+/**
+ * CodeChef is the one platform where the browser session *is* the identity —
+ * the other two are asked *about* a handle, whoever is signed in. Settings says
+ * so in the verb, and that distinction is the adapter's to make rather than the
+ * page's, or it turns back into a branch on the platform.
+ */
+export function describeIdentity(identity) {
+  return `Signed in as ${identity.username}.`;
 }
 
 export async function fetchContestRecord({

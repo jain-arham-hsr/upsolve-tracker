@@ -11,10 +11,10 @@
  * their start time at add time instead, from the standings response
  * solve-stats.js already fetches (see populateStartTime there).
  *
- * syncStartTimes is Codeforces-only and matches on bare contest ids, so it
- * must be handed Codeforces contests exclusively (contestsOnPlatform in
- * platforms/registry.js). byStartTimeDesc below is platform-agnostic —
- * epoch seconds compare fine across sites.
+ * This matches on bare contest ids, so it must be handed Codeforces contests
+ * exclusively (contestsOnPlatform in platforms/registry.js). The comparator
+ * that used to sit at the bottom of this file is in core/queue-order.js: it
+ * compares epoch seconds and was never Codeforces' own.
  */
 
 /**
@@ -69,11 +69,11 @@ async function resolveGymsIndividually(cfService, unresolved, onProgress) {
   const gyms = unresolved.filter((contest) => contest.type === "GYM");
   if (gyms.length === 0) return 0;
 
-  const delay = (ms) => new Promise((res) => setTimeout(res, ms));
   let resolved = 0;
 
   for (const [index, contest] of gyms.entries()) {
-    // This loop is deliberately slow, so it counts itself off.
+    // Still deliberately slow — the API pacer spaces these 2s apart, the gap
+    // this loop used to hold itself — so it counts itself off.
     onProgress(`Dating gym ${index + 1} of ${gyms.length}…`);
     try {
       const standings = await cfService.getContestStandings(contest.id);
@@ -88,7 +88,6 @@ async function resolveGymsIndividually(cfService, unresolved, onProgress) {
         error.message,
       );
     }
-    if (index < gyms.length - 1) await delay(2000);
   }
 
   return resolved;
@@ -109,18 +108,4 @@ async function collectInto(startTimes, cfService, gym) {
       error.message,
     );
   }
-}
-
-/**
- * Newest first, with unknown start times sinking to the bottom rather than
- * being treated as ancient.
- */
-export function byStartTimeDesc(a, b) {
-  const left = a.startTimeSeconds ?? null;
-  const right = b.startTimeSeconds ?? null;
-
-  if (left === null && right === null) return 0;
-  if (left === null) return 1;
-  if (right === null) return -1;
-  return right - left;
 }

@@ -1,7 +1,7 @@
 import templateHtml from "./queue-view.html?raw";
 import { LocalDB } from "../../services/storage.js";
 import { hasCompleteSetup } from "../../services/secure-store.js";
-import { matchesFilter } from "../../platforms/registry.js";
+import { matchesFilter, listPlatforms } from "../../platforms/registry.js";
 import { collectPendingProblems } from "../../pending-problems.js";
 import {
   loadFilter,
@@ -23,6 +23,13 @@ export class QueueView extends HTMLElement {
     this.countLabel = this.querySelector("#pending-count");
     this.alertDiv = this.querySelector("#sync-alert");
     this.setupPrompt = this.querySelector("#setup-prompt");
+
+    // Written from the registry rather than spelled out in the template, which
+    // is how it came to offer two platforms out of three: CodeChef was added
+    // and this sentence was not.
+    this.querySelector("#setup-message").textContent =
+      "Add a handle in Settings so Upsolve Tracker can track what you've solved — " +
+      `${listNames(listPlatforms().map((platform) => platform.label))}.`;
 
     this.querySelector("#btn-open-settings").addEventListener("click", () => {
       chrome.runtime.openOptionsPage();
@@ -121,3 +128,9 @@ export class QueueView extends HTMLElement {
 }
 
 customElements.define("upsolve-queue-view", QueueView);
+
+/** "A, B or C" — prose, so no Oxford comma and no trailing "and". */
+function listNames(names) {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
+}

@@ -16,7 +16,7 @@ import {
   findStandingsTable,
   hasPageLink,
   highestPageNumber,
-} from "../core/services/standings-dom.js";
+} from "../core/platforms/codeforces/standings-dom.js";
 
 const parse = (body) =>
   new DOMParser().parseFromString(`<html><body>${body}</body></html>`, "text/html");

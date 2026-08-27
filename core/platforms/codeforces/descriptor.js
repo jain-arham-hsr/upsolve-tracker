@@ -158,6 +158,90 @@ export const codeforces = {
   },
 
 
+  /**
+   * Which origins this platform needs, composed into the manifest by
+   * vite.config.js. Chrome needs these declared statically, but the build can
+   * gather them — so adding a platform never means "and edit the manifest".
+   */
+  hostPermissions: ["*://*.codeforces.com/*"],
+
+  /**
+   * Its three bars, yellow/blue/red with blue tallest, which is exactly what
+   * its favicon shows. Drawn rather than bundled, but taken from the real
+   * mark rather than invented — see ui/platform-icons.js for why that
+   * distinction kept mattering.
+   */
+  icon: `
+    <svg viewBox="0 0 16 16" class="platform-icon" role="img" aria-label="Codeforces">
+      <rect x="0.8" y="6"   width="3.6" height="9"  rx="1.2" fill="#F8B00D" />
+      <rect x="6.2" y="2"   width="3.6" height="13" rx="1.2" fill="#1F8ACB" />
+      <rect x="11.6" y="8.5" width="3.6" height="6.5" rx="1.2" fill="#D6343B" />
+    </svg>`,
+
+  // Not drawn: AtCoder's own crest, shrunk. Six hand-drawn attempts each read
+  // as something else at this size — a security badge, then an apricot — while
+  // the real thing keeps a silhouette a reader recognises even when no
+  // individual element is legible.
+  //
+  // It needs some processing. The crest is line art on transparency and only
+  // 24% of its canvas is ink, so a plain downscale averages those thin strokes
+  // into grey haze — dilating them first preserves the mass. It is then
+  // inverted onto a rounded white plate to match the other two, which the
+  // original favicon does not have. Embedded at 2x rather than shipped as a
+  // file so this module stays pure: the tests import it with no extension APIs
+  // available.,
+
+  /**
+   * What Settings asks for, and where each answer is kept.
+   *
+   * `store: "secret"` means IndexedDB rather than chrome.storage.local, which
+   * is what keeps the key pair out of the exported JSON backup. The keys are
+   * the ones already in use, so nothing stored has to move.
+   *
+   * `help` is authored here, in the repo, and is injected as trusted HTML so
+   * it can carry a link — it is deliberately *not* run through escapeHtml,
+   * which everything originating outside the extension must be.
+   */
+  settingsFields: [
+    {
+      key: "upsolve_tracker.handle",
+      label: "Handle",
+      store: "local",
+      type: "text",
+      placeholder: "e.g., tourist",
+      help: "Used to look up your accepted submissions.",
+    },
+    {
+      key: "api_key",
+      label: "API key",
+      store: "secret",
+      type: "text",
+      placeholder: "e.g., 70f9b...",
+      help:
+        'Generate a key pair at <a href="https://codeforces.com/settings/api" target="_blank" rel="noreferrer">codeforces.com/settings/api</a>, then paste both halves below. The pair is stored in this browser only, is used to sign requests to codeforces.com, and is kept out of the JSON backup on purpose.',
+    },
+    {
+      key: "api_secret",
+      label: "API secret",
+      store: "secret",
+      type: "password",
+      placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+      help: "The secret half of the same key pair.",
+    },
+  ],
+
+  /**
+   * A button rather than verifying on change, because three fields have to be
+   * filled before the check can mean anything — and a signed request fired
+   * after each one would mostly be asking with an incomplete key pair.
+   */
+  verify: {
+    trigger: "button",
+    label: "Test connection",
+    help: "Checks the handle and key against Codeforces before you rely on them.",
+    incomplete: "Fill in all three fields first.",
+  },
+
   capabilities: {
     // problemset.problems carries tags. Gyms sit outside CF's taxonomy and
     // are usually bare, but the vocabulary exists, so the section belongs.

@@ -162,7 +162,7 @@ test("an estimated rating is marked", () => {
     build("codeforces", { index: "A", name: "X", rating: 1400, ratingSource: "estimated" }),
   );
   assert.ok(isMarked(html));
-  assert.match(html, /Codeforces publishes no rating/);
+  assert.match(html, /the platform publishes no rating/);
 });
 
 test("a published rating is not marked at all", () => {
@@ -275,7 +275,7 @@ test("the queue rating is the hover target, not some child of it", () => {
     "text/html",
   );
   const rating = doc.querySelector(".rating");
-  assert.match(rating.getAttribute("title") ?? "", /Codeforces publishes no rating/);
+  assert.match(rating.getAttribute("title") ?? "", /the platform publishes no rating/);
   assert.equal(rating.children.length, 0, "the number is a bare text node");
 });
 

@@ -133,6 +133,38 @@ export const codechef = {
    */
 
 
+  hostPermissions: ["*://*.codechef.com/*"],
+
+  /**
+   * `CC` on brown, which *is* its favicon, in its own colours (#583722 /
+   * #FAFAED, sampled from it). A toque was drawn three times and read as a
+   * cloud, then a muffin, then a mushroom: at 12px a lobed crown over a band
+   * is food, whatever the intent.
+   */
+  icon: `
+    <svg viewBox="0 0 16 16" class="platform-icon" role="img" aria-label="CodeChef">
+      <rect width="16" height="16" rx="3.5" fill="#583722" />
+      <text x="8" y="8.6" font-family="Helvetica, Arial, sans-serif" font-size="10.5"
+            font-weight="700" fill="#FAFAED" text-anchor="middle"
+            dominant-baseline="central" letter-spacing="-0.7">CC</text>
+    </svg>`,
+
+  settingsFields: [
+    {
+      key: "upsolve_tracker.codechef_handle",
+      label: "Handle",
+      store: "local",
+      type: "text",
+      placeholder: "e.g., tourist",
+      help:
+        "No key needed. CodeChef answers for whoever is signed in at codechef.com, " +
+        "so this handle is what that session gets checked against \u2014 if they don't " +
+        "match, syncing stops rather than reading somebody else's solves.",
+    },
+  ],
+
+  verify: { trigger: "change" },
+
   capabilities: {
     // Tags come back with each problem, mixed with the setter's handle and
     // the contest code; cleanTags strips those.

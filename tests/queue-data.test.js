@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { describeBackupProblem } from "../core/backup-validation.js";
 import { countPendingTags } from "../core/tag-service.js";
-import { byStartTimeDesc } from "../core/start-time-service.js";
+import { byStartTimeDesc } from "../core/queue-order.js";
 
 const contest = (over = {}) => ({
   id: "2193",

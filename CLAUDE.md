@@ -16,7 +16,7 @@ npm run build:chrome    # -> dist/chrome
 npm test                # node --test over tests/ — no framework, no browser
 ```
 
-`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, the sampling arithmetic (via `scraping-service.test.js`, which stubs `HttpClient` so no network is touched), backup validation and queue ordering. There is no linter or formatter configured.
+`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, the sampling arithmetic (via `scraping.test.js`, which stubs `CodeforcesHttp` so no network is touched), backup validation and queue ordering. There is no linter or formatter configured.
 
 **Adapter fixtures must be cloned per test, not shared.** `codechef-adapter.test.js` keeps its payloads in module-level consts (`PROBLEMS`, `DETAILS`) that the `fetch` stub reads directly, so a test modelling "CodeChef published this later" — flipping `is_added_to_practice`, or filling in a `difficulty_rating` — mutates the fixture for every test that runs after it. The suite then passes or fails on *ordering*. `beforeEach` deep-copies both; do the same for any fixture a test writes to.
 
@@ -28,7 +28,7 @@ npm run build:chrome && npm run smoke   # loads the built panel in headless Chro
 
 It exists because of a specific escape: `contest.tagsSyncedAt == nullAt` is valid JavaScript (that field is `publishedDataCheckedAt` now), so `node --check` passed, the build succeeded, the whole unit suite stayed green, and the Stats tab threw on render for every user. Reintroduce that bug and the unit tests still pass while the smoke run fails — that is the gap, and it is worth re-checking that way after changing the harness.
 
-Two things it needs that are easy to get wrong: the built HTML uses absolute `/assets/` paths that `file://` cannot resolve, and `window.indexedDB` must be installed with `Object.defineProperty` — it is getter-only, so assignment fails silently, and real IndexedDB is unavailable on `file://`, which makes `loadCredentials()` reject and leaves the queue stuck on its setup prompt.
+Two things it needs that are easy to get wrong: the built HTML uses absolute `/assets/` paths that `file://` cannot resolve, and `window.indexedDB` must be installed with `Object.defineProperty` — it is getter-only, so assignment fails silently, and real IndexedDB is unavailable on `file://`, which makes the secret read behind `readSettingsValues()` reject and leaves the queue stuck on its setup prompt.
 
 The store seeds two waiting contests with the strip open, and the run fails if the strip draws no rows — collapsed it is a single button, and a typo inside a row would ship unseen, which is precisely the escape this harness exists for.
 
@@ -46,7 +46,11 @@ The second measures **two things down the queue**: that the platform marks share
 
 It carries the same second check as the `⚠` does: the store seeds one problem with `ratingSource: "estimated"` so a `~` actually renders next to unflagged rows, and the run **fails if the queue's ratings are all one width** — without a mix, every row aligns whatever the CSS does and the measurement proves nothing.
 
-**Known gap: smoke loads the side panel only, never `core/ui/options/index.html`.** The options page carries real logic — three `verifyIdentity` paths, credential save/load, the folder picker — and none of it is executed by any automated check. A `nullAt`-class typo there would ship. Checking it by hand means the same recipe smoke uses: copy `dist/chrome`, rewrite `/assets/` to a relative path *at the right depth* (`core/ui/options/` is three levels down, not two), and run Chrome with `--allow-file-access-from-files` — without that flag the `crossorigin` attribute CRXJS puts on the `<link>` makes Chrome CORS-block the stylesheet under `file://`, and the page renders in Times with every computed style wrong. That failure looks exactly like a CSS bug.
+**The run makes a second pass over `core/ui/options/index.html`**, which for a long time nothing executed at all — three `verifyIdentity` paths, credential load/save and the folder picker, none of it reached by any automated check, so a `nullAt`-class typo there would have shipped. It asserts one section per registered platform, that the stored key pair actually loads into the form, and that pressing Codeforces' **Test connection** produces a verdict rather than throwing.
+
+Three things that pass are easy to get wrong there. The page sits **three levels down**, so `/assets/` rewrites to `../../../assets/` and not the panel's two. `--allow-file-access-from-files` is required, or the `crossorigin` attribute CRXJS puts on the `<link>` makes Chrome CORS-block the stylesheet under `file://` and the page renders in Times with every computed style wrong — a failure that looks exactly like a CSS bug. And `fetch` is stubbed to **reject**, because every change-triggered platform verifies on load and the run would otherwise sit waiting on atcoder.jp; rejecting drives the failure branch, which is the one that has to render a verdict instead of throwing. Errors the stub itself causes are filtered out by message, since a failed verify legitimately logs.
+
+Confirmed the usual way: renaming a descriptor's `api_secret` key reports *"the stored API key pair did not load into the form"*, which is the one failure here that is otherwise silent — a secret read under the wrong key comes back empty and looks exactly like a setting you never saved.
 
 `tests/sampling.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
 
@@ -70,11 +74,18 @@ The test step is the gate: before it existed the workflow would happily build an
 
 `vite.config.js` reads `targets/$TARGET/manifest.json` and hands it to `@crxjs/vite-plugin`, outputting to `dist/$TARGET`. Consequences:
 
+- **`host_permissions` is composed at build time**, not listed in the manifest. `vite.config.js` imports `registry.js` — which is pure ES modules and loads under plain Node — and flattens each descriptor's `hostPermissions` into the manifest it already reads. Chrome needs these declared statically, but nothing requires a human to keep the list in step, and "remember to also edit the manifest" is exactly the step that gets missed. The composed list is verified against the previously hand-written one by diffing `dist/chrome/manifest.json`; note AtCoder contributes **two** origins (`atcoder.jp` and `kenkoooo.com`), which is why the descriptor key is a list.
 - The manifest is the entry-point graph. HTML entries (`side_panel.default_path`, `options_ui.page`) and the service worker point at **source** paths (`core/ui/index.html`, `targets/chrome/background.js`); CRXJS crawls and rewrites them. A new page must be registered in the manifest to be built.
 - `@core` aliases to `core/`, though most existing imports use relative paths.
 - `core/` is target-agnostic business logic; `targets/<browser>/` holds only the manifest and background worker. Keep browser-specific glue in `targets/`.
-- **`core/` is platform-agnostic too, and that is now enforced.** Three wholly-Codeforces modules used to sit directly under it — solve stats, the rating distribution and the problemset sync — imported by nothing but `codeforces/adapter.js`. The cost was not tidiness: beside `queue-order.js` they could not say "codeforces" in their names without looking odd, nor say what they were without it, which is how `get-prob-stats.js` ended up describing almost nothing. `tests/module-boundaries.test.js` asserts the boundary by **imports**, not by prose — every module here discusses all three platforms in its comments, so scanning for names would fail on documentation and prove nothing. `start-time-service.js` stays: `contest-list.js` imports `byStartTimeDesc`, and though it is Codeforces-only in substance it takes the service as a parameter and carries no import coupling.
-- `linkedom` is a devDependency used only by the tests (`standings-dom.test.js`, `scraping-service.test.js`) to parse HTML in Node; shipped code uses the browser's `DOMParser`.
+- **Everything outside `core/platforms/` is platform-agnostic, and that is now enforced across the whole subtree.** `registry.js` and `adapters.js` are the only two modules allowed to know which platforms exist; everything else asks them. Five wholly-Codeforces modules used to sit in shared space — the signed API client, the scrape, its HTML parser, its HTTP client and the start-time sync — plus `secure-store.js` hardcoding three ids and their storage keys, `platform-icons.js` as a three-key map, and a settings page importing all three adapters by name.
+
+  `start-time-service.js` was the instructive one, and an earlier version of this file argued it should stay. It exported `syncStartTimes` (Codeforces-only) *and* `byStartTimeDesc` (a pure comparator `contest-list.js` uses). One genuinely shared export is what kept a Codeforces module looking like shared infrastructure. It is split: the comparator is in `queue-order.js`, the rest is `platforms/codeforces/start-times.js`.
+
+  **`tests/module-boundaries.test.js` previously asserted almost nothing**, and passing green is what made that expensive. It read *one directory* — files directly under `core/` — so `core/services/` and `core/ui/` were never examined; and it recognised a violation by import **path shape** (`./platforms/<id>/…`), which a platform-specific module living outside `platforms/` never has. It could only flag the problem after the move that fixes it. It now walks recursively and checks three things: no import from inside a platform folder, no platform id in comment-stripped code, and no use of a platform's **subtype vocabulary** (`"OFFICIAL"`, `"GYM"`, `"ABC"`) — the leak with no platform name in it. Comment-stripping is essential rather than convenient: every shared module discusses all three platforms in its prose, so a raw scan would fail on documentation and prove nothing.
+
+  There is **one named exception**, `stats-view.js#renderHint`, with its reason recorded beside it and a test that fails if the file stops needing it. A named exception is a debt the suite keeps visible; the version being replaced hid a whole subtree by accident.
+- `linkedom` is a devDependency used only by the tests (`standings-dom.test.js`, `scraping.test.js`, `options-settings.test.js`) to parse HTML in Node; shipped code uses the browser's `DOMParser`.
 
 ## Architecture
 
@@ -82,7 +93,19 @@ Vanilla ES modules and custom elements — no framework, no bundled UI library.
 
 ### Platform registry
 
-`core/platforms/registry.js` owns which sites exist; `core/platforms/codeforces.js` is the only descriptor so far. A descriptor answers everything that depends on *where a contest came from*: `matchUrl`, `contestUrl`, `problemUrl`, `sourceLabel`, `contestLabel`, `solvedKey`, `problemKey`, and a `capabilities` block. Nothing outside `core/platforms/` should branch on the platform.
+`core/platforms/registry.js` owns which sites exist. A descriptor answers everything that depends on *where a contest came from*: `matchUrl`, `contestUrl`, `problemUrl`, `sourceLabel`, `contestLabel`, `solvedKey`, `problemKey`, and a `capabilities` block.
+
+It also answers everything shared code used to hardcode about a platform, which is what makes the boundary hold rather than merely be stated:
+
+| key | what it stops shared code doing |
+|---|---|
+| `icon` | keeping a three-key map of marks in `ui/platform-icons.js` |
+| `chartColor`, `ratingBandClass` | assigning colours or rank tints by id |
+| `hostPermissions` | hand-listing origins in `targets/chrome/manifest.json` |
+| `settingsFields` | naming three ids and their storage keys in `secure-store.js` |
+| `verify` | branching on which section has a button |
+
+`registry.js` and `adapters.js` are the **only** two modules allowed to enumerate platforms. Nothing else — not a view, not a service, not the build — should branch on one, and `tests/module-boundaries.test.js` fails if it does.
 
 This replaced two copies of the same Codeforces URL regex (`contest-manager.js` and `contest-list.js`) and three hardcoded `https://codeforces.com` origins, so a URL change is now one edit.
 
@@ -143,7 +166,7 @@ The guarantee rests on three independent layers, each confirmed by removing it a
 
 `updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption. The shell reports them **last**, after the backup write and the view refresh — reporting earlier let `"Writing backup…"` overwrite the message for exactly the users whose backup was at risk.
 
-Note the Codeforces scrape sends cookies (`http-client.js:32`), but `standings-dom.js` reads only the contest name, problems, *competitors'* handles, solve counts and pagination — nothing about the viewer. So it needs no identity, and neither do the public bulk endpoints or kenkoooo's static files.
+Note the Codeforces scrape sends cookies (`platforms/codeforces/http.js`), but `standings-dom.js` reads only the contest name, problems, *competitors'* handles, solve counts and pagination — nothing about the viewer. So it needs no identity, and neither do the public bulk endpoints or kenkoooo's static files.
 
 ### Platform adapters
 
@@ -280,10 +303,25 @@ Note the expansion's opt-in is the one part of this **no unit test reaches** —
 
 ### Data acquisition on Codeforces: two channels, both required
 
-1. **Signed API** (`core/services/codeforces-service.js`) — builds the `apiSig` (SHA-512 over `rand/method?sortedParams#secret`) via `crypto.subtle`. Used for `user.status`, `contest.ratingChanges`, `contest.standings`, `user.info`.
-2. **HTML scraping** (`core/services/scraping-service.js` → `core/services/http-client.js`, parsing in `core/services/standings-dom.js`) — the standings page is the only source for problem names/URLs and official in-contest solve counts. `problemStatistics.solvedCount` is *not* a substitute: it counts all-time solves including practice, which the estimator can't use.
+1. **Signed API** (`core/platforms/codeforces/api.js`) — builds the `apiSig` (SHA-512 over `rand/method?sortedParams#secret`) via `crypto.subtle`. Used for `user.status`, `contest.ratingChanges`, `contest.standings`, `user.info`.
+2. **HTML scraping** (`core/platforms/codeforces/scraping.js` → `core/platforms/codeforces/http.js`, parsing in `core/platforms/codeforces/standings-dom.js`) — the standings page is the only source for problem names/URLs and official in-contest solve counts. `problemStatistics.solvedCount` is *not* a substitute: it counts all-time solves including practice, which the estimator can't use.
 
-Each platform paces its own requests through `services/request-pacer.js`, so their budgets are independent — `HttpClient`'s counter is a single static shared by everything. `HttpClient.get` deliberately throttles: 1–2.5 s jitter before *every* request and a 6–12 s cooldown every 15 requests, with `credentials: "include"` so the user's Codeforces session cookie is sent, plus 403 / "Just a moment" detection that surfaces a "visit codeforces.com" error. Even sampled, adding a contest issues tens of requests, so these delays are what keeps the extension from being blocked — do not remove or shorten them when optimizing.
+**`services/request-pacer.js` is the only pacing mechanism**, and every caller configures it. An earlier version of this file claimed each platform already paced through it; that was false for Codeforces, which had two paths and used neither. The scrape carried its own `HttpClient` with a hard-coded jitter range and cooldown, and **the signed API was paced by nothing at all** — the tell being three hand-rolled `await delay(2000)` calls standing in for it at the call sites that had noticed.
+
+| caller | configuration |
+|---|---|
+| `atcoder/problems-api.js` | `gapMs: 1100` |
+| `codechef/api.js` | `gapMs: 1500` |
+| `codeforces/http.js` (scrape) | `gapMs: [1000, 2500]`, `measureFrom: "end"`, `cooldown: { everyNth: 15, gapMs: [6000, 12000] }`, `credentials: "include"` |
+| `codeforces/api.js` (signed) | `gapMs: 2000` |
+
+Each caller makes its own pacer, so budgets are independent — `HttpClient`'s counter was a single static shared by everything, which is now per-instance state and structurally impossible to cross.
+
+**`measureFrom` exists because of a real difference, not for symmetry.** `"start"` waits until `previousStart + gap`, so a slow request eats into the next gap. `"end"` waits the full gap after the previous request *finished*, and waits it before the first request too — which is what `HttpClient` did. They diverge exactly when a request outlasts the gap, and collapsing them onto `"start"` silently makes the Codeforces scrape **faster**. Even sampled, adding a contest issues tens of requests, and these delays are what keeps the extension from being blocked — do not remove or shorten them when optimizing. `tests/request-pacer.test.js` fails on that specific collapse; it was confirmed by making it and watching exactly those two assertions go red.
+
+Requests queue through a promise chain rather than each checking the clock. `HttpClient` had a variant of the flaw that guards against: it slept a random interval per call with no queue, so two concurrent callers slept in parallel and then fired together. It was latent rather than live, since every scrape call site is a sequential `await` — but absorbing it closed the hole rather than preserving it.
+
+Codeforces' own half stays in `codeforces/http.js`: `credentials: "include"` so the user's session cookie is sent, plus 403 / "Just a moment" detection that surfaces a "visit codeforces.com" error. The cooldown logs at `console.info` rather than `console.warn`, because `chrome://extensions` collects warnings alongside errors and a normal add was otherwise filing a row there every 15 requests — the same trap the waiting-contest logging was fixed for.
 
 ### Rating estimation pipeline
 
@@ -325,7 +363,7 @@ with one of the five statuses above. Given a `/contest/<id>` or `/gym/<id>` URL:
    every problem has a rating (`canEstimate: true`, see above); there is intentionally no
    default-1500 fallback, and reintroducing one would silently corrupt the queue's sort order.
 
-### Sampling the field (`scraping-service.js`)
+### Sampling the field (`codeforces/scraping.js`)
 
 When `contest.ratingChanges` is empty — which is exactly the freshly-finished contest you most want to upsolve — the participant distribution has to come from the standings pages. Reading all of them costs one throttled request per 50 competitors, so a big round ran to hundreds of requests. `sampleParticipantHandles` reads ~32 instead, regardless of turnout.
 
@@ -413,9 +451,9 @@ from the captured sidebar markup.
 
 `codeforces.com/contest/<id>/standings` answers a plain `curl`/`fetch` with a Cloudflare interstitial — HTTP 403 and a "Just a moment" body — regardless of User-Agent headers. Browser-like headers don't help; the extension only gets through because it runs inside a browser with a real session. **Don't burn time trying**; the API (`codeforces.com/api/*`) is unaffected and answers fine.
 
-The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/scraping-service.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live standings page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: an understated page count either takes the walk-every-page branch or trips the `hasPageLink` guard (slow but correct), a missing contest name falls back to `Contest <id>`, and an unreadable totals row refuses loudly. The residual risk is a slow add, not a wrong rating. Adding a just-finished contest in the real extension is the only way to confirm it.
+The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/scraping.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live standings page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: an understated page count either takes the walk-every-page branch or trips the `hasPageLink` guard (slow but correct), a missing contest name falls back to `Contest <id>`, and an unreadable totals row refuses loudly. The residual risk is a slow add, not a wrong rating. Adding a just-finished contest in the real extension is the only way to confirm it.
 
-### Scraped markup is quarantined in `services/standings-dom.js`
+### Scraped markup is quarantined in `codeforces/standings-dom.js`
 
 Every CSS selector and parsing rule for Codeforces' HTML lives in that one file, with ordered fallback chains (contest name tries `.contest-name`, then `.caption`, then `<title>`). A CF layout change should be a one-file fix.
 
@@ -446,7 +484,7 @@ CF tags are editable after publication, so a problem can gain tags days later �
 
 ### Start times
 
-`start-time-service.js` fills `contest.startTimeSeconds`, which orders the contest list. Contest IDs are *not* chronological (2205 ran a day before 2200), so sorting by ID is not a substitute.
+`platforms/codeforces/start-times.js` fills `contest.startTimeSeconds`, which orders the contest list. Contest IDs are *not* chronological (2205 ran a day before 2200), so sorting by ID is not a substitute.
 
 - **Official** — `contest.list`, one ~400 KB request. A finished contest's start time never changes, so unlike tags there's no re-check: a contest is asked about once and only if the field is missing.
 - **Gym** — `contest.list?gym=true`, but private gyms and mashups (the 6xxxxx IDs) don't appear there at all. Those are covered at add time from `standings.contest.startTimeSeconds`, which `solve-stats.js` already has in hand. Anything still unresolved sorts to the bottom rather than being treated as ancient.
@@ -633,9 +671,21 @@ Two apparent duplicates are deliberate and should stay: `.contest-type` appears 
 
 The rank-band colours live in `--band-*` variables so the histogram fills (`.band-*`) and the queue's rating text (`.tone-*`) cannot drift apart.
 
-### The settings page styles its three verdicts as one rule
+### The settings page is generated, one section per platform
 
-`options.css` gives `#test-msg`, `#atcoder-status` and `#codechef-status` their size in a **single grouped selector**, and the standalone two their spacing in a second. Not three parallel rules: that is precisely how they drifted — Codeforces and CodeChef each had their own `0.85rem` block while AtCoder's status had *no rule at all*, so it fell back to the body's 16px and sat flush against its input. `#test-msg` is deliberately excluded from the spacing rule because it sits inline inside `.test-row`, which spaces itself with `gap`. A fourth platform picks up the correct treatment by being added to those two selectors, and nothing else.
+`options/index.html` holds only the intro and the Backup section. Everything platform-shaped is rendered by `options/platform-settings.js` from each descriptor's **`settingsFields`**, and every check runs through `getAdapter()` — so adding a platform touches no file on this page. It used to import all three adapters plus Codeforces' API client directly and hand-write three near-identical sections.
+
+A field declares `key`, `label`, `type`, `placeholder`, `help` and **`store`**: `"local"` for `chrome.storage.local`, `"secret"` for IndexedDB, which is what keeps a key pair out of the exported backup. The keys are the ones already in use (`upsolve_tracker.handle`, `api_key`, `api_secret`), so nothing stored had to move — and a **typo in a secret's key is the one failure here that is silent**, since the value comes back empty and reads as a setting you never saved. `npm run smoke` checks exactly that.
+
+`help` and `label` are authored in the descriptors, in this repo, and are injected as **trusted HTML** so the Codeforces key-pair note can carry a link to its API settings page. That is the deliberate exception to the escaping rule; anything originating outside the extension still goes through `escape-html.js`.
+
+**Verification is four lines, because the adapters already word every failure well** — no handle, unknown handle, signed out, wrong account. Adapters gained `createSessionFrom(values)`, building a session from what is *typed* rather than what is stored, so a wrong key tells you before you rely on it; `createSession()` is now that same function over saved values. This deleted real duplication: the page used to re-check `session.signedIn` itself and compose its own CodeChef "signed out" message, so one condition read differently here and in the queue's status strip. Settings now shows the adapter's wording, which is what the queue already showed.
+
+The *"Connected as"* / *"Signed in as"* distinction survives as `describeIdentity` on the adapter — the handle is looked up on two platforms and **is** the session on CodeChef — because putting it anywhere else makes it a branch on the platform in shared code.
+
+**How a section verifies is the descriptor's call too.** `verify: { trigger: "button", label, help, incomplete }` for Codeforces, where three fields must be filled before a signed request means anything; `{ trigger: "change" }` for the other two, which check on load and on change. That keeps the *"Test connection"* button rather than unifying it away.
+
+The CSS is now one rule, `.status-text[data-status]`, with spacing scoped to `.form-group > …` so the button's inline verdict — which `.test-row` already spaces with `gap` — is excluded. The three parallel id rules this replaces are precisely how they drifted: Codeforces and CodeChef each had their own `0.85rem` block while AtCoder's had **no rule at all** and fell back to the body's 16px. The old instruction to "add a fourth platform to those two selectors" is gone; a new platform picks the treatment up by existing.
 
 ### UI shell
 
@@ -648,7 +698,7 @@ Two conventions the shell depends on:
 - **`refreshData()`** — called on the current view after a global refresh. A view that needs post-sync updates must expose it; `queue-view` also takes the removed-contest list to announce.
 - **`cf-status` event** — views report long operations by dispatching a bubbling `CustomEvent` that the shell renders in its status strip (`null` clears it). That's how adding a contest narrates its stages without each view growing its own progress UI. The same `onProgress` callback is threaded through `processNewContest` and `updateSolvedStatus`; stages that no-op stay silent rather than claiming work they skipped.
 
-`queue-view` flattens all unsolved problems across contests and sorts by solve probability (see above), and shows a setup prompt when `hasCompleteSetup()` is false — which now means *any* platform is usable, not specifically Codeforces, since AtCoder needs only a handle and CodeChef needs nothing at all — without it, a missing handle or API key made refresh look like a dead button. The platform filter (`ui/platform-filter.js`) is shared by both list views. It is a **dropdown**, not a chip row: chips grew with every platform added and competed for width with the very list they filter, whereas one control stays one line however many platforms exist. The collapsed button shows the active selection as marks plus "2 of 4", so what is filtered stays readable without opening it.
+`queue-view` flattens all unsolved problems across contests and sorts by solve probability (see above), and shows a setup prompt when `hasCompleteSetup()` is false — which now means *any* platform is usable, not specifically Codeforces, since AtCoder needs only a handle and CodeChef needs nothing at all — without it, a missing handle or API key made refresh look like a dead button. **The prompt names the platforms from `listPlatforms()`** rather than spelling them out in `queue-view.html`, which is how it came to offer two out of three: CodeChef was added and that sentence was not. The platform filter (`ui/platform-filter.js`) is shared by both list views. It is a **dropdown**, not a chip row: chips grew with every platform added and competed for width with the very list they filter, whereas one control stays one line however many platforms exist. The collapsed button shows the active selection as marks plus "2 of 4", so what is filtered stays readable without opening it.
 
 Its groups come from `listFilterPlatforms()`, so a new platform appears without touching either view. The list is **flat**: every group is one row carrying its platform's mark and naming itself in full, so no row depends on a header above it. Codeforces contributes two rows (Official and Gym) because that distinction is worth practising against; platforms with many subtypes contribute one, since nobody wants five AtCoder rows. An empty selection means **no filter**, not "show nothing".
 
@@ -664,7 +714,7 @@ The row carries a **⋮ menu** holding *Open contest* and *Remove from queue*; t
 
 ### Platform marks
 
-`core/ui/platform-icons.js` holds a small inline SVG per platform, used wherever a row has to say which site it came from. They are **drawn, not the real logos** — those are someone else's artwork and don't survive being shrunk to 12px — but each keeps the recognisable shape and colours: Codeforces' three bars, AtCoder's letterform, CodeChef's toque.
+Each mark lives on its **descriptor**, beside `chartColor` — a platform's own appearance is its own to declare. `core/ui/platform-icons.js` keeps only the fallback and the design rules that apply to all of them, and asks the registry. It uses `listPlatforms().find(...)` rather than `getPlatform()`, which **throws** on an id it does not know: the text-chip fallback is the whole point of the function, so a platform without a mark yet must show something rather than take the panel down.
 
 AtCoder's is deliberately light-on-dark, inverting its black-on-white branding, because a `#222` square on the `#1e1e1e` panel is close to invisible.
 

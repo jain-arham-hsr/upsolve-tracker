@@ -1,3 +1,5 @@
+import { createPacer } from "../../services/request-pacer.js";
+
 /**
  * problemset.problems is ~2MB and an add now reads it twice: once to ask
  * whether Codeforces has published the contest, once to apply the ratings it
@@ -6,6 +8,22 @@
  * published" would strand a contest for the length of the TTL.
  */
 const PROBLEMSET_TTL_MS = 60 * 1000;
+
+/**
+ * The signed API used to be paced by nothing at all.
+ *
+ * Its calls happened to be spaced out in practice, because the throttled
+ * standings scrape usually ran between them — so an add never looked bursty
+ * even though nothing was enforcing it. The places where no scrape sat in
+ * between had each grown their own `await delay(2000)`: two in
+ * rating-distribution.js, one in start-times.js. Three local patches for one
+ * missing rule is what a missing rule looks like.
+ *
+ * Module-level, so every CodeforcesService shares one budget. Settings builds a
+ * second instance through `createSessionFrom` to check credentials you have
+ * typed but not saved, and that must not come with a fresh allowance.
+ */
+const paced = createPacer({ gapMs: 2000 });
 
 export class CodeforcesService {
   static #problemsetCache = null;
@@ -140,7 +158,7 @@ export class CodeforcesService {
     const finalUrl = `${this.baseUrl}${methodName}?${queryString}&apiSig=${apiSig}`;
 
     try {
-      const response = await fetch(finalUrl);
+      const response = await paced(finalUrl);
       const data = await response.json();
 
       if (data.status !== "OK") {
@@ -163,4 +181,11 @@ export class CodeforcesService {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   }
+}
+
+/** Test seam, matching `codechef/api.js` and `atcoder/problems-api.js`. */
+export function resetApiState() {
+  CodeforcesService.clearProblemsetCache();
+  paced.reset();
+  paced.setSpacing(0);
 }

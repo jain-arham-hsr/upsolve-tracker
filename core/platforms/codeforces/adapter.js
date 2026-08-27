@@ -21,15 +21,15 @@ import {
 } from "./rating-distribution.js";
 import { readSolveStats } from "./solve-stats.js";
 import { syncOfficialProblemData, isInProblemset } from "./problemset-sync.js";
-import { syncStartTimes } from "../../start-time-service.js";
+import { syncStartTimes } from "./start-times.js";
 import {
   ready,
   notEndedYet,
   notPublishedYet,
   unavailable,
 } from "../../contest-status.js";
-import { CodeforcesService } from "../../services/codeforces-service.js";
-import { loadCredentials } from "../../services/secure-store.js";
+import { CodeforcesService } from "./api.js";
+import { readSettingsValues } from "../../services/secure-store.js";
 import { codeforces } from "./descriptor.js";
 
 /**
@@ -42,10 +42,22 @@ import { codeforces } from "./descriptor.js";
  * @throws when the extension hasn't been configured yet.
  */
 export async function createSession() {
-  const [settings, { apiKey, apiSecret }] = await Promise.all([
-    chrome.storage.local.get("upsolve_tracker.handle"),
-    loadCredentials(),
-  ]);
+  return createSessionFrom(await readSettingsValues(codeforces));
+}
+
+/**
+ * The same session, built from values that have not been saved yet.
+ *
+ * Settings needs this: it verifies what you have *typed*, not what is stored,
+ * so that a wrong key tells you before you rely on it. Without it that page
+ * had to construct a CodeforcesService itself — reaching straight past the
+ * adapter into a platform's API client, which is the coupling this removes.
+ *
+ * @param {Record<string, string|null>} values - keyed by `settingsFields` key.
+ */
+export function createSessionFrom(values) {
+  const apiKey = values.api_key;
+  const apiSecret = values.api_secret;
 
   if (!apiKey || !apiSecret) {
     throw new Error(
@@ -55,7 +67,7 @@ export async function createSession() {
 
   return {
     service: new CodeforcesService(apiKey, apiSecret),
-    handle: settings["upsolve_tracker.handle"],
+    handle: values["upsolve_tracker.handle"],
   };
 }
 

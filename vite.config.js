@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import { crx } from "@crxjs/vite-plugin";
 import { resolve } from "path";
 import fs from "fs";
+import { listPlatforms } from "./core/platforms/registry.js";
 
 // Fallback to chrome if no target is specified
 const target = process.env.TARGET || "chrome";
@@ -11,6 +12,13 @@ const manifestPath = resolve(__dirname, `targets/${target}/manifest.json`);
 
 // Read and parse the manifest manually so we can feed it to the CRX plugin
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+
+// Which origins the extension may talk to is the sum of what its platforms
+// need, so it is composed here rather than hand-listed in the manifest. Chrome
+// requires these declared statically, but nothing requires a human to keep the
+// list in step — and "remember to also edit the manifest" is exactly the kind
+// of step that gets missed when a platform is added.
+manifest.host_permissions = listPlatforms().flatMap((platform) => platform.hostPermissions);
 
 export default defineConfig({
   plugins: [crx({ manifest })],

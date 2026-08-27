@@ -69,7 +69,7 @@ export function makeContestKey(platformId, contestId) {
 /**
  * The subset of `contests` belonging to one platform.
  *
- * Per-platform sync helpers (problemset-sync.js, start-time-service.js) are
+ * Per-platform sync helpers (problemset-sync.js, start-times.js) are
  * Codeforces implementations, not generic services — handing them another
  * platform's contests would have them match on bare contest ids across
  * namespaces. Callers filter first.

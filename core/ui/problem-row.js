@@ -90,6 +90,10 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
   // number away from its platform mark; and drawing it out of flow wedged it
   // against that mark. A decoration occupies no width, so none of that arises.
   //
+  // The wording names no platform, for the same reason the `⚠` below does not:
+  // this renderer is shared by all three, and naming one here would be the one
+  // place a view branches on the platform.
+  //
   // The title moves here too. On the glyph it made a ~6.7px hover target and
   // hovering the number itself did nothing; an underline is also the
   // conventional "there is an explanation attached" cue, so the indicator and
@@ -99,7 +103,7 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
     ? ""
     : row.ratingConfidence === "experimental"
       ? ` title="Low-confidence estimate"`
-      : ` title="Estimated from this contest's results — Codeforces publishes no rating for it"`;
+      : ` title="Estimated from this contest's results — the platform publishes no rating for it"`;
 
   // A problem the platform never mirrored to practice can't be submitted any
   // more, so it is dropped from the queue entirely (pending-problems.js) and

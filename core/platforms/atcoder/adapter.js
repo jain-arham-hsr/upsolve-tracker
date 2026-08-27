@@ -7,9 +7,11 @@
  * endpoint cover everything.
  */
 import { getResources, getAcceptedProblemIds } from "./problems-api.js";
-import { atcoder } from "./descriptor.js";
 import { extractRating } from "./profile.js";
 import { ready, notPublishedYet } from "../../contest-status.js";
+
+import { readSettingsValues } from "../../services/secure-store.js";
+import { atcoder } from "./descriptor.js";
 
 export const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
 
@@ -18,8 +20,12 @@ export const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
  * Everything else is public.
  */
 export async function createSession() {
-  const settings = await chrome.storage.local.get(HANDLE_KEY);
-  return { handle: settings[HANDLE_KEY] };
+  return createSessionFrom(await readSettingsValues(atcoder));
+}
+
+/** The same session from unsaved values, so Settings can verify what you typed. */
+export function createSessionFrom(values) {
+  return { handle: values[HANDLE_KEY] };
 }
 
 export async function fetchContestRecord({

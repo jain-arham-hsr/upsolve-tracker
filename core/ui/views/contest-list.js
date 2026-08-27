@@ -5,7 +5,7 @@ import {
   verifyExportPermission,
   writeBackup,
 } from "../../services/auto-export.js";
-import { byStartTimeDesc } from "../../start-time-service.js";
+import { byStartTimeDesc } from "../../queue-order.js";
 import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
 import {

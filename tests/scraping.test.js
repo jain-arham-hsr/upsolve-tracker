@@ -12,9 +12,9 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { HttpClient } = await import("../core/services/http-client.js");
+const { CodeforcesHttp } = await import("../core/platforms/codeforces/http.js");
 const { scrapeContestProblems, sampleParticipantHandles } = await import(
-  "../core/services/scraping-service.js"
+  "../core/platforms/codeforces/scraping.js"
 );
 
 const PER_PAGE = 50;
@@ -30,7 +30,7 @@ function serveContest(total, opts = {}) {
   const lastPage = Math.ceil(total / PER_PAGE);
   const requested = [];
 
-  HttpClient.get = async (url) => {
+  CodeforcesHttp.get = async (url) => {
     const page = Number(url.match(/page\/(\d+)/)?.[1] ?? 1);
     requested.push(page);
 
@@ -101,7 +101,7 @@ test("reports unreadable solve counts instead of inventing zeroes", async () => 
 });
 
 test("throws when the standings table can't be found at all", async () => {
-  HttpClient.get = async () => "<html><body><p>Just a page</p></body></html>";
+  CodeforcesHttp.get = async () => "<html><body><p>Just a page</p></body></html>";
   await assert.rejects(() => scrapeContestProblems("contest", "1"), /standings/i);
 });
 

@@ -50,7 +50,7 @@ only source for problem names, problem URLs, and how many people solved each pro
 *during* the contest. The API's `solvedCount` counts practice solves too, which is no good
 for estimating difficulty.
 
-All the HTML parsing lives in **one file**, `core/services/standings-dom.js`. If Codeforces
+All the HTML parsing lives in **one file**, `core/platforms/codeforces/standings-dom.js`. If Codeforces
 changes its layout, that's the only place to look.
 
 > **Why it can be slow.** Reading standings costs one request per 50 competitors, so a big

@@ -541,4 +541,158 @@ if (errors.length) {
   process.exit(1);
 }
 
+// ---------------------------------------------------------------------------
+// The options page, which nothing else executes.
+//
+// CLAUDE.md carried this as a known gap for a long time: three verifyIdentity
+// paths, credential load/save and the folder picker all live there, and a
+// `nullAt`-class typo would have shipped. It is worth covering now for a second
+// reason — the platform sections are generated from the descriptors, so a
+// descriptor that declares a field the page cannot render fails here.
+//
+// Two things this needs that are easy to get wrong. The page sits three levels
+// down, so `/assets/` rewrites to `../../../assets/` and not the panel's two.
+// And `--allow-file-access-from-files` is already passed below: without it the
+// `crossorigin` attribute CRXJS puts on the stylesheet link makes Chrome
+// CORS-block it under file://, and the page renders in Times with every
+// computed style wrong — a failure that looks exactly like a CSS bug.
+const optionsPage = path.join(work, "core/ui/options/index.html");
+const optionsHtml = readFileSync(optionsPage, "utf8")
+  .replaceAll('src="/assets/', 'src="../../../assets/')
+  .replaceAll('href="/assets/', 'href="../../../assets/');
+
+// Verification runs on load for every change-triggered platform, so without
+// this the run would sit waiting on atcoder.jp and codechef.com. Rejecting is
+// the useful stub: it drives the failure branch, which is the one that has to
+// render a verdict rather than throw.
+const offline = `<script>
+  window.fetch = () => Promise.reject(new Error("offline in smoke"));
+  window.showDirectoryPicker = () => Promise.reject(new Error("no picker in smoke"));
+</script>`;
+
+const optionsDriver = `<script type="module">
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  await wait(1500);
+
+  // A button-triggered section is deliberately blank until pressed, so press
+  // it — otherwise the only verify path with a control of its own goes
+  // unexercised, which is the half most likely to break.
+  for (const button of document.querySelectorAll("[data-verify]")) button.click();
+  await wait(1200);
+
+  const sections = [...document.querySelectorAll(".settings-section[data-platform]")].map((s) => ({
+    id: s.getAttribute("data-platform"),
+    head: s.querySelector(".section-head")?.textContent ?? null,
+    inputs: [...s.querySelectorAll("input")].map((i) => ({
+      key: i.getAttribute("data-field"), type: i.getAttribute("type"), value: i.value,
+    })),
+    button: s.querySelector("[data-verify]")?.textContent ?? null,
+    // Whether a verdict was actually written, which is what proves the whole
+    // verify path ran rather than silently doing nothing.
+    verdict: s.querySelector("[data-status]")?.textContent ?? "",
+  }));
+
+  document.title = "SMOKE " + JSON.stringify({ errors: window.__errors, sections });
+</script>`;
+
+writeFileSync(
+  optionsPage,
+  optionsHtml
+    .replace("<head>", "<head>\n" + stub + "\n" + offline)
+    .replace("</body>", optionsDriver + "</body>"),
+);
+
+const optionsDom = execFileSync(chrome, [
+  "--headless", "--disable-gpu", "--allow-file-access-from-files",
+  "--virtual-time-budget=20000", "--dump-dom", `file://${optionsPage}`,
+], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 });
+
+const optionsTitle = optionsDom.match(/<title>SMOKE ([\s\S]*?)<\/title>/);
+if (!optionsTitle) {
+  console.error("smoke: the options page never finished booting — no report was produced");
+  process.exit(1);
+}
+
+const optionsReport = JSON.parse(decode(optionsTitle[1]));
+
+if (optionsReport.sections.length !== 3) {
+  console.error(
+    `smoke: expected a section per platform, got ${optionsReport.sections.length}` +
+      ` — [${optionsReport.sections.map((s) => s.id).join(", ")}]`,
+  );
+  process.exit(1);
+}
+
+for (const section of optionsReport.sections) {
+  if (!section.head) {
+    console.error(`smoke: the ${section.id} section rendered without a heading`);
+    process.exitCode = 1;
+  }
+  if (section.inputs.length === 0) {
+    console.error(`smoke: the ${section.id} section rendered no fields`);
+    process.exitCode = 1;
+  }
+  // Every platform has to say *something* about the account it resolved, or the
+  // page silently tells you nothing — which is the state AtCoder shipped in.
+  // The driver has already pressed the button-triggered ones, so by now a blank
+  // verdict means the path did not run rather than that it was not asked to.
+  if (!section.verdict) {
+    console.error(`smoke: the ${section.id} section produced no verdict at all`);
+    process.exitCode = 1;
+  }
+  // Everything is offline in this harness, so every verdict must be the failure
+  // branch. A "✓" here would mean a check that never actually asked anything.
+  if (!section.verdict.startsWith("✕")) {
+    console.error(
+      `smoke: the ${section.id} verdict should report the offline failure, got "${section.verdict}"`,
+    );
+    process.exitCode = 1;
+  }
+}
+
+// The one failure here that is silent rather than loud: a secret read under the
+// wrong key comes back empty and looks exactly like a setting you never saved.
+const secretFields = optionsReport.sections
+  .flatMap((s) => s.inputs)
+  .filter((i) => i.key === "api_key" || i.key === "api_secret");
+if (secretFields.length !== 2 || secretFields.some((i) => !i.value)) {
+  console.error(
+    "smoke: the stored API key pair did not load into the form — " +
+      JSON.stringify(secretFields),
+  );
+  process.exitCode = 1;
+}
+
+// And the loud one: a handle kept in chrome.storage.local rather than IndexedDB.
+const handle = optionsReport.sections
+  .flatMap((s) => s.inputs)
+  .find((i) => i.key === "upsolve_tracker.handle");
+if (handle?.value !== "tourist") {
+  console.error(`smoke: the saved handle did not load — got ${JSON.stringify(handle)}`);
+  process.exitCode = 1;
+}
+
+// Errors the offline stub itself causes are the point of it, not a fault: a
+// failed verify legitimately logs. Anything else is a real escape.
+const optionsErrors = optionsReport.errors.filter((e) => !e.includes("offline in smoke"));
+
+if (optionsErrors.length) {
+  console.error("smoke: the options page raised errors while rendering:");
+  for (const error of optionsErrors) console.error("  " + error);
+  process.exit(1);
+}
+
+// Only claim it is clean if it is. The checks above set exitCode and keep
+// going, so an unguarded success line reports "clean" directly underneath the
+// failures it is contradicting.
+const buttons = optionsReport.sections.filter((s) => s.button).length;
+if (process.exitCode) {
+  console.error("smoke: the options page failed the checks above");
+  process.exit(1);
+}
+console.log(
+  `smoke: options page clean — ${optionsReport.sections.length} sections,` +
+    ` ${optionsReport.sections.flatMap((s) => s.inputs).length} fields, ${buttons} verify button(s)`,
+);
+
 console.log("smoke: views clean, fonts loaded —", seen.join("  "), " drilled:" + drilled);

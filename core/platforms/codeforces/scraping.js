@@ -1,4 +1,4 @@
-import { HttpClient } from "./http-client.js";
+import { CodeforcesHttp } from "./http.js";
 import {
   extractHandles,
   extractProblems,
@@ -21,7 +21,7 @@ import {
 async function fetchStandingsPage(type, contestId, page = null) {
   const pageStr = page ? `/page/${page}` : "";
   const showUnofficial = type === "gym";
-  const rawHtml = await HttpClient.get(
+  const rawHtml = await CodeforcesHttp.get(
     `https://codeforces.com/${type}/${contestId}/standings${pageStr}?showUnofficial=${showUnofficial}`,
   );
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
@@ -99,7 +99,7 @@ export async function scrapeContestProblems(type, contestId) {
  */
 export async function scrapeProblemsPage(type, contestId) {
   const path = `/${type}/${contestId}`;
-  const rawHtml = await HttpClient.get(`https://codeforces.com${path}`);
+  const rawHtml = await CodeforcesHttp.get(`https://codeforces.com${path}`);
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
 
   const parsed = extractProblemsFromList(doc);
