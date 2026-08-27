@@ -231,3 +231,41 @@ test("waiting entries never touch the tracked queue", async () => {
   assert.equal(store.trackedContests, undefined);
   assert.ok(Array.isArray(store[WAITING_STORAGE_KEY]));
 });
+
+test("an entry that becomes unavailable stops waiting", async () => {
+  // The asymmetry that makes `unavailable` worth having. Every other failure
+  // keeps an entry — a 503 or an expired session is not a verdict — but a
+  // source that will never produce what we need is, and retrying it would cost
+  // requests on every refresh forever.
+  await addWaiting({ url: ATC("abc999"), platformId: "atcoder", contestId: "abc999" });
+
+  const { dropped, stillWaiting } = await retryWaitingContests(() => {}, {
+    addContest: async () => {
+      throw Object.assign(new Error("its participants aren't visible"), {
+        contestStatus: "unavailable",
+      });
+    },
+  });
+
+  assert.equal(dropped.length, 1);
+  assert.equal(stillWaiting.length, 0);
+  assert.match(dropped[0].lastError, /participants aren't visible/);
+});
+
+test("a merely unreachable source keeps waiting", async () => {
+  // The contrast that makes the test above mean something: without it, "drops
+  // on failure" and "drops on unavailable" look the same.
+  await addWaiting({ url: ATC("abc999"), platformId: "atcoder", contestId: "abc999" });
+
+  const { dropped, stillWaiting } = await retryWaitingContests(() => {}, {
+    addContest: async () => {
+      throw Object.assign(new Error("couldn't reach it"), {
+        contestStatus: "sourceUnreachable",
+      });
+    },
+  });
+
+  assert.equal(dropped.length, 0);
+  assert.equal(stillWaiting.length, 1);
+});
+

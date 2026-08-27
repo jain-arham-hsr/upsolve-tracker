@@ -45,6 +45,9 @@ export async function readSolveStats(type, contestId, cfService = null) {
       startTimeSeconds: null,
       solveCountsRead,
       partyHandles: null,
+      // Official rounds are gated on the problemset instead, which a running
+      // contest cannot be in — so this path needs no phase of its own.
+      finished: null,
     };
   }
 
@@ -80,6 +83,10 @@ export async function readSolveStats(type, contestId, cfService = null) {
     startTimeSeconds,
     solveCountsRead: true,
     partyHandles: null,
+    // The same response the solve counts came from carries the phase.
+    finished: standings?.contest?.phase
+      ? standings.contest.phase === "FINISHED"
+      : null,
   };
 }
 
@@ -144,6 +151,9 @@ async function statsFromContestStatus(contestId, cfService, standingsError) {
     // would read as maximally hard and sort to the *front* of the queue.
     solveCountsRead: derived.partyHandles.length > 0,
     partyHandles: derived.partyHandles,
+    // No contest.standings to ask here, so it comes off the problems page the
+    // list was read from — the sidebar says "Finished" or otherwise.
+    finished: page.finished,
   };
 }
 
@@ -166,7 +176,7 @@ async function statsFromContestStatus(contestId, cfService, standingsError) {
  * before, which is the other two thirds.
  *
  * @returns {boolean} whether the API answered with problems at all, which is
- *   what `tagsSyncedAt` records.
+ *   what `publishedDataCheckedAt` records.
  */
 function applyStandingsProblemData(standings, problems) {
   const apiProblems = standings?.problems;

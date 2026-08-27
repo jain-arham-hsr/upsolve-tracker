@@ -10,7 +10,7 @@
  * Returns a record whose problems all carry `rating`, `ratingSource`, `tags`
  * and `officialSolves`. A problem may still have `rating: null` if nothing
  * could rate it — deciding whether that is acceptable is the caller's job
- * (see `capabilities.allowsPartialRatings`).
+ * (see `capabilities.canEstimate`).
  */
 import { estimateProblemRating } from "../../rating-estimator.js";
 import {
@@ -20,8 +20,14 @@ import {
   distributionSize,
 } from "./rating-distribution.js";
 import { readSolveStats } from "./solve-stats.js";
-import { syncOfficialProblemData } from "./problemset-sync.js";
+import { syncOfficialProblemData, isInProblemset } from "./problemset-sync.js";
 import { syncStartTimes } from "../../start-time-service.js";
+import {
+  ready,
+  notEndedYet,
+  notPublishedYet,
+  unavailable,
+} from "../../contest-status.js";
 import { CodeforcesService } from "../../services/codeforces-service.js";
 import { loadCredentials } from "../../services/secure-store.js";
 import { codeforces } from "./descriptor.js";
@@ -87,6 +93,25 @@ export async function fetchContestRecord({
   const { service } = session;
   const type = subtype === "OFFICIAL" ? "contest" : "gym";
 
+  // problemset.problems is where Codeforces publishes an official contest's
+  // problems, and it publishes them already rated — a contest present but
+  // unrated is a permanent oddity, not a stage it passes through. So its
+  // absence is the whole "not published yet" question for an official round,
+  // answered in one cached call before any scraping happens.
+  //
+  // Gyms are never in the problemset at all, so they must skip this: the same
+  // check would make every gym unaddable.
+  if (subtype === "OFFICIAL") {
+    onProgress("Checking whether Codeforces has published it…");
+    const published = await isInProblemset(service, contestId);
+    if (!published) {
+      return notPublishedYet(
+        `Codeforces hasn't published contest ${contestId} yet. It'll be added ` +
+          `on a refresh once it appears.`,
+      );
+    }
+  }
+
   onProgress("Reading the standings…");
   const {
     contestName,
@@ -95,7 +120,22 @@ export async function fetchContestRecord({
     startTimeSeconds,
     solveCountsRead,
     partyHandles,
+    finished,
   } = await readSolveStats(type, contestId, service);
+
+  // A running gym has visible standings carrying partial solve counts, so the
+  // estimator would fit them and store inflated difficulties — and a gym is the
+  // one contest nothing ever re-rates, so those would be permanent. An official
+  // round cannot reach here while running: it would not be in the problemset.
+  //
+  // `finished === null` means the source didn't say, and must proceed: refusing
+  // on an unreadable phase would make a contest unaddable for a reason we
+  // cannot state.
+  if (subtype === "GYM" && finished === false) {
+    return notEndedYet(
+      `Gym ${contestId} is still running. It'll be added once it ends.`,
+    );
+  }
 
   const contest = {
     id: contestId,
@@ -103,7 +143,7 @@ export async function fetchContestRecord({
     name: contestName,
     type: subtype,
     problems,
-    tagsSyncedAt: tagsSynced ? Date.now() : null,
+    publishedDataCheckedAt: tagsSynced ? Date.now() : null,
     startTimeSeconds,
     addedAt: Date.now(),
   };
@@ -119,10 +159,11 @@ export async function fetchContestRecord({
   // matters. Estimating from counts we failed to parse would silently invent
   // ratings, so refuse instead.
   if (needsEstimate.length > 0 && !solveCountsRead) {
-    throw new Error(
+    // Nobody competed, or nobody we can see. For a finished contest that will
+    // not change, so waiting cannot help.
+    return unavailable(
       `Couldn't read the solve counts for ${type} ${contestId}, and ${needsEstimate.length} ` +
-        `problem(s) have no published rating to fall back on. Codeforces may have changed ` +
-        `its standings layout.`,
+        `problem(s) have no published rating to fall back on.`,
     );
   }
 
@@ -139,7 +180,19 @@ export async function fetchContestRecord({
 
   await syncStartTimes(service, [contest], onProgress);
 
-  return contest;
+  // A gym reaching here with gaps has no measurable field and never will —
+  // private or empty standings do not become visible later. Naming that fact
+  // is what removed the need for a per-platform waiting policy: it used to be
+  // approximated by asking whether the subtype was a gym.
+  const stillMissing = problems.filter((problem) => problem.rating === null);
+  if (stillMissing.length > 0 && subtype === "GYM") {
+    return unavailable(
+      `Couldn't rate ${type} ${contestId}: its participants aren't visible, so ` +
+        `there is no field to measure against.`,
+    );
+  }
+
+  return ready(contest);
 }
 
 async function estimateMissingRatings({

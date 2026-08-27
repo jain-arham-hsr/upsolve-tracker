@@ -13,6 +13,13 @@ import {
 } from "./api.js";
 import { extractSession } from "./page-data.js";
 import { codechef } from "./descriptor.js";
+import {
+  ready,
+  notEndedYet,
+  notPublishedYet,
+  sourceUnreachable,
+  unavailable,
+} from "../../contest-status.js";
 
 /**
  * `difficulty_rating` arrives as a string and uses two out-of-band values:
@@ -62,10 +69,26 @@ export async function fetchContestRecord({
 }) {
   onProgress("Reading the contest…");
   const payload = await resolveDivision(contestId, session, onProgress);
+  if (payload.status) return payload;
+
+  // CodeChef reports its own clock alongside the contest's end, so this asks
+  // *its* time rather than ours — a skewed local clock cannot mis-decide it.
+  // Free: the payload is already in hand. Without this the problems are listed
+  // during the contest and the add succeeds against in-contest data.
+  const time = payload.contest.time ?? {};
+  if (time.current != null && time.end != null && time.current <= time.end) {
+    return notEndedYet(
+      `"${payload.code}" is still running. It'll be added once it ends.`,
+    );
+  }
 
   const problems = Object.values(payload.contest.problems ?? {});
   if (problems.length === 0) {
-    throw new Error(`CodeChef lists no problems for "${payload.code}".`);
+    // Previously a bare throw, which is why CodeChef never joined the waiting
+    // mechanism at all: unflagged, it failed hard where AtCoder waits.
+    return notPublishedYet(
+      `CodeChef hasn't listed the problems for "${payload.code}" yet.`,
+    );
   }
 
   const solved = solvedCodes(payload.contest);
@@ -73,10 +96,22 @@ export async function fetchContestRecord({
   const built = [];
   for (const [index, problem] of problems.entries()) {
     onProgress(`Reading problem ${index + 1} of ${problems.length}…`);
-    built.push(await buildProblem(payload.code, problem, solved));
+    try {
+      built.push(await buildProblem(payload.code, problem, solved));
+    } catch (error) {
+      if (!error?.isSourceUnreachable) throw error;
+      // Fail fast: the remaining requests would be spent on an add that is
+      // going to be discarded. A failure here is "we couldn't ask", which must
+      // never become a "???" — that would report a problem CodeChef has rated
+      // as one it hasn't, and send exactly the wrong signal.
+      return sourceUnreachable(
+        `Couldn't reach CodeChef for every problem in "${payload.code}". ` +
+          `(${error.message})`,
+      );
+    }
   }
 
-  return {
+  return ready({
     id: payload.code,
     platform: codechef.id,
     // A parent contest resolves to one of its divisions, so the id stored is
@@ -86,10 +121,10 @@ export async function fetchContestRecord({
     name: payload.contest.name ?? `Contest ${payload.code}`,
     type: subtype,
     problems: built,
-    tagsSyncedAt: Date.now(),
+    publishedDataCheckedAt: Date.now(),
     startTimeSeconds: payload.contest.time?.start ?? null,
     addedAt: Date.now(),
-  };
+  });
 }
 
 /**
@@ -104,13 +139,16 @@ async function resolveDivision(contestId, session, onProgress) {
 
   const children = Object.values(contest.child_contests ?? {});
   if (children.length === 0) {
-    throw new Error(`"${contestId}" has no divisions listed.`);
+    return notPublishedYet(`CodeChef hasn't listed the divisions of "${contestId}" yet.`);
   }
 
   const codes = children.map((child) => child.contest_code).join(", ");
   const rating = session?.rating;
   if (rating == null) {
-    throw new Error(
+    // Needs you to choose, so retrying silently would be wrong. `unavailable`
+    // carries its reason precisely so an actionable refusal needs no category
+    // of its own.
+    return unavailable(
       `"${contestId}" is a parent contest. Open the division you competed in ` +
         `(${codes}) and add that instead.`,
     );
@@ -122,7 +160,7 @@ async function resolveDivision(contestId, session, onProgress) {
       rating <= (child.div?.max_rating ?? Infinity),
   );
   if (!match) {
-    throw new Error(
+    return unavailable(
       `Couldn't tell which division of "${contestId}" matches your rating (${rating}). ` +
         `Open one of ${codes} and add that instead.`,
     );
@@ -161,15 +199,25 @@ async function buildProblem(contestCode, problem, solved) {
   let rating = null;
   let tags = [];
 
+  // Only the request is guarded, and it is re-thrown rather than swallowed.
+  // Swallowing it set rating to null, which is indistinguishable from CodeChef
+  // answering "-1" — so one timed-out request out of nine showed "???" for a
+  // problem CodeChef *has* rated, and it stayed wrong for up to a week.
+  //
+  // No transient/permanent split: a 404 means "couldn't find out" just as much
+  // as a 500 does, so neither may become a "???". The caller waits and retries
+  // on the next refresh instead.
+  let detail;
   try {
-    const detail = await getProblem(contestCode, code);
-    rating = parseDifficulty(detail?.difficulty_rating);
-    tags = cleanTags(detail, contestCode);
+    detail = await getProblem(contestCode, code);
   } catch (error) {
-    // A missing difficulty is recoverable — it stores as null, shows "???"
-    // and is re-checked later. Failing the whole add over one problem is not.
-    console.warn(`[CodeChef] ${code} details failed:`, error.message);
+    throw Object.assign(error, { isSourceUnreachable: true });
   }
+
+  // Reached only when CodeChef answered. A -1 or 9999 sentinel here is a real
+  // "this problem is unrated", which is the one thing that may become "???".
+  rating = parseDifficulty(detail?.difficulty_rating);
+  tags = cleanTags(detail, contestCode);
 
   return {
     index: code,
@@ -291,7 +339,7 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
   const stale = contests.filter(
     (contest) =>
       contest.problems.some((problem) => problem.rating === null) &&
-      now - (contest.tagsSyncedAt ?? 0) > RECHECK_AFTER_MS,
+      now - (contest.publishedDataCheckedAt ?? 0) > RECHECK_AFTER_MS,
   );
   if (stale.length === 0) return updated;
 
@@ -313,7 +361,7 @@ export async function syncMetadata(session, contests, onProgress = () => {}) {
         console.warn(`[CodeChef] re-check of ${problem.index} failed:`, error.message);
       }
     }
-    contest.tagsSyncedAt = now;
+    contest.publishedDataCheckedAt = now;
   }
 
   return updated;

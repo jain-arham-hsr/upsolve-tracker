@@ -18,6 +18,7 @@
 import { LocalDB } from "./services/storage.js";
 import { makeContestKey, findTrackedContest } from "./platforms/registry.js";
 import { processNewContest } from "./contest-manager.js";
+import { UNAVAILABLE } from "./contest-status.js";
 
 const WAITING_KEY = "upsolve_tracker.waiting_contests";
 
@@ -148,7 +149,13 @@ export async function retryWaitingContests(
       const contest = await addContest(entry.url, onProgress, { revalidate });
       added.push({ platform: entry.platform, id: contest.id, contest });
     } catch (error) {
-      if (error?.isAlreadySolved) {
+      // Two reasons a wait may end rather than continue, and both mean the
+      // same thing: another attempt cannot change the answer. `isAlreadySolved`
+      // is a contest we will never be given; `unavailable` is a source that
+      // will never produce what we need — a finished gym whose participants
+      // are private, say. Everything else keeps waiting, because a 503 or an
+      // expired session is not a verdict.
+      if (error?.isAlreadySolved || error?.contestStatus === UNAVAILABLE) {
         dropped.push({ ...entry, lastError: error.message });
         continue;
       }

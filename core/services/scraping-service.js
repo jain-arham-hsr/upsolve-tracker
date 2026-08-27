@@ -4,6 +4,7 @@ import {
   extractProblems,
   extractProblemsFromList,
   extractSolveCounts,
+  hasFinished,
   findContestName,
   findContestNameOnProblemsPage,
   findStandingsTable,
@@ -110,6 +111,7 @@ export async function scrapeProblemsPage(type, contestId) {
     contestName:
       findContestNameOnProblemsPage(doc, path) ?? `Contest ${contestId}`,
     problems: parsed.map(blankProblem),
+    finished: hasFinished(doc),
   };
 }
 

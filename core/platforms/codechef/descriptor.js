@@ -132,15 +132,6 @@ export const codechef = {
    * Codeforces' scale imports a meaning that does not transfer.
    */
 
-  /**
-   * Every CodeChef contest may wait, though nothing reaches this today:
-   * `allowsPartialRatings` is true here, so an unrated problem stores as null
-   * rather than refusing the add. Kept true so a future publication-delay
-   * failure is retried rather than silently declared permanent.
-   */
-  mayBeUnpublished() {
-    return true;
-  },
 
   capabilities: {
     // Tags come back with each problem, mixed with the setter's handle and
@@ -151,9 +142,10 @@ export const codechef = {
     bulkProblemData: false,
     // The start time arrives with the contest payload itself.
     bulkStartTimes: false,
-    // 74% of the catalogue carries a -1 sentinel, and there is no estimator
-    // fallback here, so a contest may store with gaps.
-    allowsPartialRatings: true,
+    // No estimator: /api/rankings/ answers 403, so there is no field to fit
+    // against. A -1 or 9999 sentinel therefore stores as null and renders
+    // "???" rather than being guessed at.
+    canEstimate: false,
   },
 };
 

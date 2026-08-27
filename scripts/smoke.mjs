@@ -2,7 +2,8 @@
 /**
  * Loads the built panel in headless Chrome and clicks through it.
  *
- * This exists because of a real escape: `contest.tagsSyncedAt == nullAt` is
+ * This exists because of a real escape: `contest.tagsSyncedAt == nullAt` (the
+ * field is `publishedDataCheckedAt` now) is
  * valid JavaScript, so `node --check` passed, the build succeeded and 192 unit
  * tests stayed green — and the Stats tab threw on render for every user. The
  * unit suite cannot catch that class of bug because it never executes a view.
@@ -88,7 +89,7 @@ const STORE = {
   trackedContests: [
     {
       id: "2237", platform: "codeforces", type: "OFFICIAL", name: "Codeforces Round 1",
-      startTimeSeconds: 1_700_000_000, tagsSyncedAt: Date.now(),
+      startTimeSeconds: 1_700_000_000, publishedDataCheckedAt: Date.now(),
       problems: [
         // ratingSource "estimated" is what draws the underline. Seeded here so
         // the queue holds both a marked and an unmarked rating — the checks
@@ -99,7 +100,7 @@ const STORE = {
     },
     {
       id: "709413", platform: "codeforces", type: "GYM", name: "ICPC Regional",
-      startTimeSeconds: 1_690_000_000, tagsSyncedAt: null,
+      startTimeSeconds: 1_690_000_000, publishedDataCheckedAt: null,
       problems: [{ index: "A", name: "Untagged", rating: null, tags: [], solved: false }],
     },
     {
@@ -109,7 +110,7 @@ const STORE = {
     },
     {
       id: "START252D", platform: "codechef", type: "STARTERS", name: "Starters 252",
-      sourceId: "START252", startTimeSeconds: 1_720_000_000, tagsSyncedAt: Date.now(),
+      sourceId: "START252", startTimeSeconds: 1_720_000_000, publishedDataCheckedAt: Date.now(),
       problems: [
         { index: "MODSUB", name: "Modify and Subtract", rating: 1757, tags: ["dp"], solved: false },
         // Never mirrored to CodeChef's practice archive, so it can't be

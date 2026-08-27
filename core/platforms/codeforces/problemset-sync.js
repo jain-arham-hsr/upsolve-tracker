@@ -31,7 +31,7 @@ function needsSync(contest, now) {
   if (contest.type !== "OFFICIAL") return false;
 
   // Pre-timestamp records used a boolean; treat those as synced long ago.
-  const syncedAt = contest.tagsSyncedAt ?? null;
+  const syncedAt = contest.publishedDataCheckedAt ?? null;
   if (syncedAt === null) return true;
 
   const incomplete = contest.problems.some(
@@ -90,11 +90,31 @@ export async function syncOfficialProblemData(
         prob.ratingSource = "official";
       }
     });
-    contest.tagsSyncedAt = now;
+    contest.publishedDataCheckedAt = now;
   });
 
   console.log(
     `[Problemset] Synced ${pending.length} contest(s); ${ratingsApplied} rating(s) replaced with published values.`,
   );
   return pending.length;
+}
+
+/**
+ * Whether Codeforces has published this contest's problems yet.
+ *
+ * The publication check for an official round, and the whole of it: problems
+ * enter the problemset already rated, so "present" and "rated" arrive together
+ * — 1,965 of 2,005 contests are fully rated, one is partly, and the 39 with
+ * nothing rated are April Fools and Testing Rounds that were never going to be.
+ * A contest present but unrated is therefore a permanent oddity rather than a
+ * stage on the way, which is why absence is the only question worth asking.
+ *
+ * Gyms are absent from the problemset entirely and must never be asked.
+ */
+export async function isInProblemset(cfService, contestId) {
+  const problemset = await cfService.getProblemsetProblems();
+  const wanted = String(contestId);
+  return (problemset?.problems ?? []).some(
+    (problem) => String(problem.contestId) === wanted,
+  );
 }

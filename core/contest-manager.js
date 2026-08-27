@@ -8,6 +8,7 @@
 import { LocalDB } from "./services/storage.js";
 import { matchContestUrl } from "./platforms/registry.js";
 import { getAdapter } from "./platforms/adapters.js";
+import { READY, isKnownStatus, shouldWait } from "./contest-status.js";
 import { storeFetchedRatings } from "./services/user-ratings.js";
 import {
   settleIdentity,
@@ -37,7 +38,7 @@ export async function processNewContest(
     // on refresh.
     await establishIdentity(platform, adapter, session);
 
-    const contest = await adapter.fetchContestRecord({
+    const result = await adapter.fetchContestRecord({
       contestId,
       subtype,
       session,
@@ -47,6 +48,28 @@ export async function processNewContest(
       revalidate,
       onProgress,
     });
+
+    // The one place a status becomes an outcome, and it consults nothing about
+    // the platform. That is the property the vocabulary exists to give: a fact
+    // named precisely enough implies the same policy everywhere, so there is no
+    // per-platform judgement left for an adapter to make on its own — which is
+    // how AtCoder used to grant itself waiting by setting the flag directly.
+    if (!isKnownStatus(result?.status)) {
+      throw new Error(
+        `${platform.label} returned an unrecognised status for ${contestId}. ` +
+          `This is a bug in its adapter.`,
+      );
+    }
+    if (result.status !== READY) {
+      const error = new Error(result.reason);
+      // `shouldWait` is a property of the fact. `unavailable` is the one
+      // failure retrying cannot fix, so it alone reaches the user as a refusal.
+      if (shouldWait(result.status)) error.isNotPublishedYet = true;
+      error.contestStatus = result.status;
+      throw error;
+    }
+
+    const contest = result.contest;
 
     const solvedKeys = await adapter.fetchSolvedKeys(session, [contest], onProgress);
 
@@ -69,31 +92,30 @@ export async function processNewContest(
       throw error;
     }
 
-    // There is deliberately no default rating here. A fabricated number would
-    // sort like a real one and quietly corrupt the queue's whole point.
-    // Platforms that publish their own difficulty may store a contest with
-    // gaps — those show as "???" and converge on a later refresh — while
-    // Codeforces, where the estimator fills every gap, refuses loudly.
+    // Rule 2. There is deliberately no default rating: a fabricated number
+    // would sort like a real one and quietly corrupt the queue's whole point.
+    //
+    // What a gap means follows from one fact — can this platform estimate?
+    // Where it can, the estimator should already have filled the gap, so one
+    // left over means something broke and the contest is refused. Where it
+    // cannot, the site simply has not rated that problem, and it stores as null
+    // and shows "???". Deriving both from `canEstimate` is what stops the two
+    // being declared separately and drifting apart.
     const missing = contest.problems.filter((problem) => problem.rating === null);
 
-    if (missing.length > 0 && !platform.capabilities.allowsPartialRatings) {
+    if (missing.length > 0 && platform.capabilities.canEstimate) {
       console.warn("[Contest Manager] Skipping storage. Missing ratings.");
-      const error = new Error(
+      // Not a waiting case. Reaching here means the platform can estimate and
+      // still left a gap, which is a fault rather than a delay — an adapter
+      // that knows the data is merely late says so with `notPublishedYet`
+      // before ever getting this far.
+      throw new Error(
         missing.length === contest.problems.length
-          ? `Couldn't rate this contest: ${platform.label} returned no participant ratings for ${contestId}. Private or unrated standings can't be measured.`
+          ? `Couldn't rate this contest: ${platform.label} produced no rating for any problem in ${contestId}.`
           : `Couldn't rate ${missing.length} of ${contest.problems.length} problems (${missing
               .map((p) => p.index)
               .join(", ")}), so the contest wasn't added.`,
       );
-
-      // A round can refuse this way purely because its standings have not
-      // settled yet, which resolves on its own — but only for the contest
-      // kinds the platform says so of. A Codeforces gym answers false, since
-      // private or unrated standings can never be measured and retrying tens
-      // of throttled requests every refresh would never end.
-      if (platform.mayBeUnpublished(subtype)) error.isNotPublishedYet = true;
-
-      throw error;
     }
 
     onProgress("Saving to your queue…");

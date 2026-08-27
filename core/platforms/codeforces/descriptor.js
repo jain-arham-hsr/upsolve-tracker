@@ -157,21 +157,6 @@ export const codeforces = {
     );
   },
 
-  /**
-   * Whether a failure to rate this contest could resolve on its own.
-   *
-   * Official rounds can refuse at add time because the standings totals row
-   * has not settled and `contest.ratingChanges` is still empty — a publication
-   * delay, so it is worth retrying on later refreshes.
-   *
-   * Gyms answer **false**, and that distinction is what keeps waiting
-   * affordable here: a private or unrated gym can never be measured, and a CF
-   * add costs tens of deliberately throttled requests, so an entry that could
-   * never resolve would slow every refresh forever.
-   */
-  mayBeUnpublished(subtype) {
-    return subtype === "OFFICIAL";
-  },
 
   capabilities: {
     // problemset.problems carries tags. Gyms sit outside CF's taxonomy and
@@ -181,10 +166,12 @@ export const codeforces = {
     bulkProblemData: true,
     // contest.list / contest.list?gym=true.
     bulkStartTimes: true,
-    // The estimator fills anything CF leaves unrated, so a gap here is a bug
-    // worth refusing on rather than storing. AtCoder and CodeChef have no
-    // estimator and set this true.
-    allowsPartialRatings: false,
+    // Codeforces is the only platform whose participant field is readable, so
+    // it is the only one that can estimate a difficulty the site has not
+    // published. That single fact decides what a gap means: here the estimator
+    // should have filled it, so a hole left over is a bug worth refusing on;
+    // elsewhere it is simply a problem the site has not rated, and shows "???".
+    canEstimate: true,
   },
 };
 

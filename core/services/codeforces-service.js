@@ -1,4 +1,15 @@
+/**
+ * problemset.problems is ~2MB and an add now reads it twice: once to ask
+ * whether Codeforces has published the contest, once to apply the ratings it
+ * carries. Without a cache that doubles the cost of every official add.
+ * Short-lived on purpose — it is a publication check, and a stale "not
+ * published" would strand a contest for the length of the TTL.
+ */
+const PROBLEMSET_TTL_MS = 60 * 1000;
+
 export class CodeforcesService {
+  static #problemsetCache = null;
+
   /**
    * @param {string} apiKey - Your CF API Key
    * @param {string} apiSecret - Your CF API Secret
@@ -76,7 +87,17 @@ export class CodeforcesService {
    * a single Div. 3).
    */
   async getProblemsetProblems() {
-    return this._callMethod("problemset.problems", {});
+    const cached = CodeforcesService.#problemsetCache;
+    if (cached && Date.now() - cached.at < PROBLEMSET_TTL_MS) return cached.body;
+
+    const body = await this._callMethod("problemset.problems", {});
+    CodeforcesService.#problemsetCache = { body, at: Date.now() };
+    return body;
+  }
+
+  /** Test seam, and the way a retry gets a genuinely fresh read. */
+  static clearProblemsetCache() {
+    CodeforcesService.#problemsetCache = null;
   }
 
   /**

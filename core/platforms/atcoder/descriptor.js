@@ -126,14 +126,6 @@ export const atcoder = {
    * Ratings render neutral instead; see problem-row.js.
    */
 
-  /**
-   * Every AtCoder contest may wait. AtCoder Problems indexes a round some time
-   * after it ends, so an add that lands in that window fails purely because
-   * kenkoooo has not caught up yet — the case this whole mechanism exists for.
-   */
-  mayBeUnpublished() {
-    return true;
-  },
 
   capabilities: {
     // AtCoder publishes no problem tags at all — not "none yet", none ever.
@@ -143,10 +135,10 @@ export const atcoder = {
     // AtCoder Problems publishes difficulty for every rated contest.
     bulkProblemData: true,
     bulkStartTimes: true,
-    // Difficulty appears only once a problem has run in a rated contest, so a
-    // round added the evening it ends may have gaps. Those store as null,
-    // render as "???" and converge on a later refresh — never as a guess.
-    allowsPartialRatings: true,
+    // No estimator: AtCoder's standings need a login, so there is no field to
+    // fit against. A problem the site has not rated therefore stores as null
+    // and renders "???" — never as a guess — and converges on a later refresh.
+    canEstimate: false,
   },
 };
 

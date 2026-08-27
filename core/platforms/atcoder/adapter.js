@@ -9,6 +9,7 @@
 import { getResources, getAcceptedProblemIds } from "./problems-api.js";
 import { atcoder } from "./descriptor.js";
 import { extractRating } from "./profile.js";
+import { ready, notPublishedYet } from "../../contest-status.js";
 
 export const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
 
@@ -37,21 +38,25 @@ export async function fetchContestRecord({
 
   const meta = contests.find((contest) => contest.id === contestId);
   if (!meta) {
-    // Flagged rather than matched on later by message text: kenkoooo indexes a
-    // round some time after it ends, so this resolves on its own and the
-    // contest is worth remembering. See core/waiting-contests.js.
-    throw notPublishedYet(
-      `AtCoder Problems doesn't list contest "${contestId}". A contest that just ` +
-        `started may not be indexed yet.`,
+    // kenkoooo indexes a round some time after it ends, so this resolves on its
+    // own. Reported as a fact rather than decided here — what a status means is
+    // contest-manager's to say, identically for every platform.
+    return notPublishedYet(
+      `AtCoder Problems doesn't list contest "${contestId}" yet. A contest that ` +
+        `just started may not be indexed.`,
     );
   }
+
+  // A running contest is not in contest-problem.json either, so it answers
+  // notPublishedYet below rather than needing its own end-check: AtCoder simply
+  // does not publish a contest's problems while it is on.
 
   // contest-problem.json, not problems.json: a problem can belong to several
   // contests and problems.json only records its debut. Reading the latter
   // alone under-reports rerun contests by more than half.
   const entries = contestProblems.filter((row) => row.contest_id === contestId);
   if (entries.length === 0) {
-    throw notPublishedYet(
+    return notPublishedYet(
       `AtCoder Problems lists no problems for "${contestId}" yet.`,
     );
   }
@@ -64,31 +69,19 @@ export async function fetchContestRecord({
     .sort((a, b) => String(a.problem_index).localeCompare(String(b.problem_index)))
     .map((entry) => buildProblem(entry, problemsById, models));
 
-  return {
+  return ready({
     id: contestId,
     platform: atcoder.id,
     name: meta.title ?? `Contest ${contestId}`,
     type: subtype,
     problems: built,
     // AtCoder publishes no tags at all, so there is nothing to come back for.
-    tagsSyncedAt: Date.now(),
+    publishedDataCheckedAt: Date.now(),
     startTimeSeconds: meta.start_epoch_second ?? null,
     addedAt: Date.now(),
-  };
+  });
 }
 
-/**
- * Marks a failure as a publication delay rather than a permanent refusal.
- *
- * Same idiom as CodeChef's `isIdentityMismatch`: a flag on the error, so
- * callers branch on a fact rather than on a string that a copy edit would
- * silently break.
- */
-function notPublishedYet(message) {
-  const error = new Error(message);
-  error.isNotPublishedYet = true;
-  return error;
-}
 
 function buildProblem(entry, problemsById, models) {
   const problemId = entry.problem_id;

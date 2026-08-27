@@ -3,7 +3,7 @@
  *
  * This exists because of a real escape: removing the `tagsSynced` fallback left
  * a read of it behind, and the edit that removed its sibling line also mangled
- * the line above into `contest.tagsSyncedAt == nullAt`. Both are valid
+ * the line above into `contest.publishedDataCheckedAt == nullAt`. Both are valid
  * JavaScript, so `node --check` passed and the build succeeded; the failure
  * only appeared as "Sync failed: nullAt is not defined" at runtime, in the one
  * layer with no automated coverage.
@@ -26,7 +26,7 @@ const STORED = [
   "type",
   "problems",
   "startTimeSeconds",
-  "tagsSyncedAt",
+  "publishedDataCheckedAt",
 ];
 
 /**
@@ -37,6 +37,7 @@ const API_PAYLOAD = [
   "child_contests",
   "is_a_parent_contest",
   "list",
+  "phase",
   "ratingChanges",
   "standings",
   "start_epoch_second",
@@ -82,6 +83,6 @@ test("no code reads a contest field that is not part of the shape", () => {
 test("the retired tag-sync flag is gone", () => {
   // The stored shape carries a timestamp, never a boolean: the timestamp is
   // what distinguishes "never fetched" from "fetched, genuinely untagged".
-  assert.ok(ALLOWED.has("tagsSyncedAt"));
+  assert.ok(ALLOWED.has("publishedDataCheckedAt"));
   assert.ok(!ALLOWED.has("tagsSynced"));
 });

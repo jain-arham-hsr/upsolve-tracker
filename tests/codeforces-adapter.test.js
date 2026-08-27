@@ -82,8 +82,23 @@ function standingsApi(ratings) {
   };
 }
 
-const record = (service) =>
-  fetchContestRecord({ contestId: "702859", subtype: "GYM", session: { service } });
+/**
+ * fetchContestRecord answers with one of the statuses in
+ * core/contest-status.js. These tests are about the record it builds, so this
+ * unwraps a "ready" and throws otherwise. Status handling is asserted
+ * directly, below.
+ */
+const record = async (service) => {
+  const result = await fetchContestRecord({
+    contestId: "702859",
+    subtype: "GYM",
+    session: { service },
+  });
+  if (result.status !== "ready") {
+    throw Object.assign(new Error(result.reason), { contestStatus: result.status });
+  }
+  return result.contest;
+};
 
 test("a fully rated gym takes Codeforces' numbers and never measures the field", async () => {
   HttpClient.get = async () => standingsPage("702859");
@@ -200,3 +215,98 @@ test("a hidden-standings gym with nothing to estimate never asks for the field",
 
   assert.deepEqual(contest.problems.map((p) => p.rating), [1000, 1100, 1200]);
 });
+
+// ---------------------------------------------------------------------------
+// Statuses: the answers that are not a contest.
+// ---------------------------------------------------------------------------
+
+const status = (args, service) =>
+  fetchContestRecord({ session: { service }, ...args });
+
+test("an official round Codeforces has not published waits, and is not scraped", async () => {
+  // The scrape is the expensive half — tens of deliberately throttled requests.
+  // Asking the problemset first means a contest that is going to wait never
+  // pays for it, and produces no estimate to be overwritten later.
+  HttpClient.get = async () => {
+    throw new Error("a waiting contest must not be scraped");
+  };
+  const result = await status(
+    { contestId: "9999", subtype: "OFFICIAL" },
+    {
+      getProblemsetProblems: async () => ({ problems: [{ contestId: 2193, index: "A" }] }),
+    },
+  );
+  assert.equal(result.status, "notPublishedYet");
+  assert.match(result.reason, /hasn't published/);
+});
+
+test("a gym is never asked about the problemset — it would never be in one", async () => {
+  // Gyms are absent from problemset.problems entirely, so applying the official
+  // gate to them would make every gym unaddable.
+  HttpClient.get = async () => standingsPage("702859");
+  const contest = await record({
+    getProblemsetProblems: async () => {
+      throw new Error("a gym must not consult the problemset");
+    },
+    getContestStandings: async () => standingsApi([1300, 900, 2100]),
+    getContestList: async () => [],
+  });
+  assert.equal(contest.problems.length, 3);
+});
+
+test("a gym still running waits rather than storing estimates fitted to it", async () => {
+  // The worst version of the bug: a running gym has visible standings carrying
+  // partial solve counts, and a gym is the one contest nothing ever re-rates,
+  // so anything derived now would be permanent.
+  HttpClient.get = async () => standingsPage("702859");
+  const running = standingsApi([null, null, null]);
+  running.contest.phase = "CODING";
+
+  const result = await status(
+    { contestId: "702859", subtype: "GYM" },
+    {
+      getContestStandings: async () => running,
+      getUsersInfo: async () => {
+        throw new Error("a running gym must not measure the field");
+      },
+      getContestList: async () => [],
+    },
+  );
+  assert.equal(result.status, "notEndedYet");
+  assert.match(result.reason, /still running/);
+});
+
+test("a finished gym with no visible field refuses instead of waiting forever", async () => {
+  // The fact that replaced `mayBeUnpublished("GYM") === false`. Private or
+  // empty standings do not become visible later, so retrying cannot help —
+  // and `unavailable` is the one status that does not wait.
+  HttpClient.get = async () => standingsPage("702859");
+  const empty = standingsApi([null, null, null]);
+  empty.contest.phase = "FINISHED";
+  empty.rows = [];
+
+  const result = await status(
+    { contestId: "702859", subtype: "GYM" },
+    {
+      getContestStandings: async () => empty,
+      getUsersInfo: async () => [],
+      getContestList: async () => [],
+    },
+  );
+  assert.equal(result.status, "unavailable");
+});
+
+test("an unreadable phase proceeds rather than blocking the add", async () => {
+  // `finished === null` means the source did not say. Refusing then would make
+  // a contest unaddable for a reason we cannot state.
+  HttpClient.get = async () => standingsPage("702859");
+  const noPhase = standingsApi([1300, 900, 2100]);
+  delete noPhase.contest.phase;
+
+  const contest = await record({
+    getContestStandings: async () => noPhase,
+    getContestList: async () => [],
+  });
+  assert.equal(contest.problems.length, 3);
+});
+

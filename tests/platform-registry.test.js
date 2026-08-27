@@ -80,7 +80,7 @@ test("every registered platform implements the descriptor contract", () => {
       assert.equal(typeof platform[method], "function", `${platform.id}.${method}`);
     }
     assert.ok(platform.capabilities, `${platform.id}.capabilities`);
-    assert.equal(typeof platform.capabilities.allowsPartialRatings, "boolean");
+    assert.equal(typeof platform.capabilities.canEstimate, "boolean");
   }
 });
 
@@ -155,21 +155,18 @@ test("only Codeforces hashes its contest id", () => {
   assert.equal(label("codechef", { id: "LTIME108" }), "LTIME108");
 });
 
-test("a Codeforces gym may never wait, but an official round may", () => {
-  // This is the rule that keeps waiting affordable. A CF add costs tens of
-  // deliberately throttled requests, and a private or unrated gym can never be
-  // measured — so a gym allowed to wait would slow every refresh, forever, for
-  // a result that is never coming. An official round refusing the same way is
-  // usually just standings that have not settled.
-  const mayWait = (platform, subtype) =>
-    getPlatform(platform).mayBeUnpublished(subtype);
-
-  assert.equal(mayWait("codeforces", "OFFICIAL"), true);
-  assert.equal(mayWait("codeforces", "GYM"), false);
-
-  // The other two have nothing to gain from the distinction: AtCoder's whole
-  // failure mode is a publication delay, and CodeChef stores partial ratings
-  // rather than refusing.
-  assert.equal(mayWait("atcoder", "ABC"), true);
-  assert.equal(mayWait("codechef", "STARTERS"), true);
+test("no descriptor decides whether a contest may wait", () => {
+  // `mayBeUnpublished(subtype)` used to answer this, false for gyms so a
+  // private one could never wait forever. It is gone: the distinction it drew
+  // is now carried by the fact an adapter reports. A gym still running is
+  // `notEndedYet` and bounded, because contests end; a finished gym with no
+  // measurable field is `unavailable` and refuses outright. Naming the facts
+  // precisely removed the need for a per-platform policy at all.
+  for (const id of listPlatforms().map((p) => p.id)) {
+    assert.equal(
+      getPlatform(id).mayBeUnpublished,
+      undefined,
+      `${id} still declares a waiting policy of its own`,
+    );
+  }
 });

@@ -73,7 +73,11 @@ test("a problem with no task id degrades to the contest link, not a wrong one", 
   );
 });
 
-test("partial ratings are allowed — difficulty lands days after a round", () => {
-  assert.equal(atcoder.capabilities.allowsPartialRatings, true);
-  assert.equal(getPlatform("codeforces").capabilities.allowsPartialRatings, false);
+test("no estimator here, which is what permits a \"???\"", () => {
+  // One declared fact rather than two that must agree. It used to be
+  // `allowsPartialRatings`, separately declared and the exact inverse of this
+  // on all three platforms — so a fourth could have set them inconsistently
+  // and made every partly-rated contest silently unaddable.
+  assert.equal(atcoder.capabilities.canEstimate, false);
+  assert.equal(getPlatform("codeforces").capabilities.canEstimate, true);
 });

@@ -120,6 +120,20 @@ beforeEach(() => {
   stub();
 });
 
+/**
+ * fetchContestRecord answers with one of the statuses in
+ * core/contest-status.js. Most tests here are about the record it builds, so
+ * this unwraps a "ready" and throws otherwise — the shape contest-manager
+ * gives the rest of the app. Status handling is asserted directly, below.
+ */
+const record = async (args) => {
+  const result = await fetchContestRecord(args);
+  if (result.status !== "ready") {
+    throw Object.assign(new Error(result.reason), { contestStatus: result.status });
+  }
+  return result.contest;
+};
+
 test("the bootstrap object is sliced on balanced braces, not a lazy regex", () => {
   // The real payload nests objects and contains braces inside strings.
   const session = extractSession(
@@ -140,7 +154,7 @@ test("a changed page shape returns null rather than a plausible session", () => 
 test("solved is read from an object, which is the shape that carries data", () => {
   // Signed out it is [], signed in it is {code: true}. Array methods would see
   // nothing on the second — the one that matters.
-  return fetchContestRecord({ contestId: "START252D", subtype: "STARTERS", session: {} })
+  return record({ contestId: "START252D", subtype: "STARTERS", session: {} })
     .then((contest) => {
       const byCode = Object.fromEntries(contest.problems.map((p) => [p.index, p]));
       assert.equal(byCode.IOI7.solved, true);
@@ -149,7 +163,7 @@ test("solved is read from an object, which is the shape that carries data", () =
 });
 
 test("partially solved stays in the queue — scoring subtasks isn't finishing", () => {
-  return fetchContestRecord({ contestId: "START252D", subtype: "STARTERS", session: {} })
+  return record({ contestId: "START252D", subtype: "STARTERS", session: {} })
     .then((contest) => {
       const modsub = contest.problems.find((p) => p.index === "MODSUB");
       assert.equal(modsub.solved, false);
@@ -157,7 +171,7 @@ test("partially solved stays in the queue — scoring subtasks isn't finishing",
 });
 
 test("both difficulty sentinels become null, never a rating", async () => {
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   const byCode = Object.fromEntries(contest.problems.map((p) => [p.index, p]));
@@ -171,7 +185,7 @@ test("both difficulty sentinels become null, never a rating", async () => {
 });
 
 test("contest-code and setter-handle noise is stripped from tags", async () => {
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   const byCode = Object.fromEntries(contest.problems.map((p) => [p.index, p]));
@@ -182,7 +196,7 @@ test("contest-code and setter-handle noise is stripped from tags", async () => {
 test("a parent contest resolves to the division matching your rating", async () => {
   // /START252 returns an empty problem list rather than an error, so without
   // this it would store as a contest with no problems.
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252", subtype: "STARTERS", session: { rating: 1450 },
   });
   assert.equal(contest.id, "START252C");
@@ -192,7 +206,7 @@ test("a parent contest resolves to the division matching your rating", async () 
 test("a resolved parent records the id the user navigated from", async () => {
   // Without this the add banner compares /START252 against a stored START252D
   // and offers to add an already-tracked contest.
-  const viaParent = await fetchContestRecord({
+  const viaParent = await record({
     contestId: "START252", subtype: "STARTERS", session: { rating: 1450 },
   });
   assert.equal(viaParent.id, "START252C");
@@ -200,7 +214,7 @@ test("a resolved parent records the id the user navigated from", async () => {
 });
 
 test("a contest added directly carries no sourceId", async () => {
-  const direct = await fetchContestRecord({
+  const direct = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   assert.equal(direct.sourceId, undefined);
@@ -208,7 +222,7 @@ test("a contest added directly carries no sourceId", async () => {
 
 test("a parent contest with no known rating names the divisions instead of guessing", async () => {
   await assert.rejects(
-    () => fetchContestRecord({ contestId: "START252", subtype: "STARTERS", session: {} }),
+    () => record({ contestId: "START252", subtype: "STARTERS", session: {} }),
     /START252A, START252C/,
   );
 });
@@ -309,7 +323,7 @@ test("the listing is scoped to the signed-in account and includes unrated proble
  * 404s at /problems/.
  */
 test("a problem never added to practice is flagged, and no other problem is", async () => {
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   const byCode = Object.fromEntries(contest.problems.map((p) => [p.index, p]));
@@ -325,7 +339,7 @@ test("a problem never added to practice is flagged, and no other problem is", as
 
 test("detecting it costs no extra request", async () => {
   requestLog = [];
-  await fetchContestRecord({ contestId: "START252D", subtype: "STARTERS", session: {} });
+  await record({ contestId: "START252D", subtype: "STARTERS", session: {} });
 
   // One contest payload plus one detail per problem — the flag rides along on
   // the payload that was already being fetched.
@@ -334,7 +348,7 @@ test("detecting it costs no extra request", async () => {
 });
 
 test("a problem CodeChef later mirrors comes back to the queue", async () => {
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   const updqs = contest.problems.find((p) => p.index === "UPDQS");
@@ -353,11 +367,11 @@ test("a problem CodeChef later mirrors comes back to the queue", async () => {
 });
 
 test("the re-check runs every refresh, not on the weekly rating stamp", async () => {
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   // Freshly stamped, so the weekly rating re-check is skipped entirely.
-  contest.tagsSyncedAt = Date.now();
+  contest.publishedDataCheckedAt = Date.now();
 
   resetApiState();
   contests.START252D.problems.UPDQS.is_added_to_practice = true;
@@ -371,7 +385,7 @@ test("a contest with nothing flagged is never asked about", async () => {
   // one. Asking about every tracked contest on every refresh would be a request
   // each, forever, to find something that does not happen — CodeChef does not
   // pull problems back out of practice.
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252C", subtype: "STARTERS", session: {},
   });
   assert.deepEqual(contest.problems.filter((p) => p.upsolvable === false), []);
@@ -383,7 +397,7 @@ test("a contest with nothing flagged is never asked about", async () => {
 });
 
 test("a flagged contest is re-checked until it clears, then stops costing anything", async () => {
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
@@ -411,7 +425,7 @@ test("a flagged contest is re-checked until it clears, then stops costing anythi
 test("a failed re-check leaves the flag alone rather than clearing it", async () => {
   // The contest is not in the stub, so getContest throws. Guessing the problem
   // back into the queue on a network blip would undo the whole point.
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   resetApiState();
@@ -426,7 +440,7 @@ test("a problem missing from the payload keeps its flag rather than being guesse
   // Distinct from a failed request: the response arrives and simply does not
   // mention the problem. Treating that as "mirrored" would put a problem that
   // cannot be submitted back into the queue on a payload shape change.
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   resetApiState();
@@ -444,7 +458,7 @@ test("a problem missing from the payload keeps its flag rather than being guesse
  * request per still-unrated problem rather than one per contest.
  */
 test("a difficulty published after the contest was added is filled in", async () => {
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   const modsub = contest.problems.find((p) => p.index === "MODSUB");
@@ -453,7 +467,7 @@ test("a difficulty published after the contest was added is filled in", async ()
   // Rated since, and the contest has not been looked at for a fortnight.
   resetApiState();
   details.MODSUB = { difficulty_rating: "1500", user_tags: ["greedy", "start252"] };
-  contest.tagsSyncedAt = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  contest.publishedDataCheckedAt = Date.now() - 14 * 24 * 60 * 60 * 1000;
 
   await syncMetadata({}, [contest]);
 
@@ -463,12 +477,12 @@ test("a difficulty published after the contest was added is filled in", async ()
 });
 
 test("the difficulty re-check is throttled to a week, unlike the practice one", async () => {
-  const contest = await fetchContestRecord({
+  const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: {},
   });
   // Looked at today. The practice pass still runs — UPDQS is flagged — so this
   // pins that the two cadences really are independent rather than both firing.
-  contest.tagsSyncedAt = Date.now();
+  contest.publishedDataCheckedAt = Date.now();
 
   resetApiState();
   details.MODSUB = { difficulty_rating: "1500", user_tags: [] };
@@ -482,3 +496,87 @@ test("the difficulty re-check is throttled to a week, unlike the practice one", 
     "no per-problem request: the weekly gate held",
   );
 });
+
+// ---------------------------------------------------------------------------
+// Statuses: the answers that are not a contest.
+// ---------------------------------------------------------------------------
+
+const statusOf = (contestId = "START252D") =>
+  fetchContestRecord({ contestId, subtype: "STARTERS", session: {} });
+
+test("a contest still running waits, and its problems are never fetched", async () => {
+  // CodeChef reports its own clock beside the contest's end, so this asks *its*
+  // time rather than ours. Nothing checked this before, and the payload lists
+  // problems during the contest — so the add succeeded against in-contest data.
+  contests.START252D.time = { start: 100, end: 200, current: 150 };
+  stub();
+
+  const result = await statusOf();
+  assert.equal(result.status, "notEndedYet");
+  assert.match(result.reason, /still running/);
+  assert.equal(
+    requestLog.filter((url) => url.includes("/problems/")).length,
+    0,
+    "a running contest must not cost one request per problem",
+  );
+});
+
+test("a contest whose problems are not listed yet waits rather than failing", async () => {
+  // Previously a bare throw, unflagged — the reason CodeChef never joined the
+  // waiting mechanism at all, while AtCoder waits for exactly this.
+  contests.START252D.time = { start: 100, end: 200, current: 300 };
+  contests.START252D.problems = {};
+  stub();
+
+  const result = await statusOf();
+  assert.equal(result.status, "notPublishedYet");
+  assert.match(result.reason, /hasn't listed the problems/);
+});
+
+test("a failed problem request waits — it is not evidence of an unrated problem", async () => {
+  // The conflation this removes. Swallowing the failure set rating to null,
+  // which is indistinguishable from CodeChef answering "-1", so one timed-out
+  // request showed "???" for a problem CodeChef *has* rated — and it stayed
+  // wrong for up to a week.
+  for (const httpStatus of [403, 500, 404]) {
+    stub();
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (url) =>
+      url.includes("/problems/IOI7")
+        ? { ok: false, status: httpStatus }
+        : inner(url);
+
+    const result = await statusOf();
+    assert.equal(result.status, "sourceUnreachable", `HTTP ${httpStatus}`);
+  }
+});
+
+test("but CodeChef answering -1 still stores the contest, with ???", async () => {
+  // The one path that may produce a "???", and the reason none of the others
+  // may: here the site answered, and what it said was "unrated".
+  stub();
+  const contest = await record({
+    contestId: "START252D",
+    subtype: "STARTERS",
+    session: {},
+  });
+
+  const modsub = contest.problems.find((p) => p.index === "MODSUB");
+  assert.equal(modsub.rating, null, "-1 means unrated, which renders ???");
+  assert.equal(modsub.ratingSource, null);
+});
+
+test("a parent contest with no rating refuses outright rather than waiting", async () => {
+  // It needs you to pick a division, so retrying silently would never resolve.
+  // `unavailable` carries its reason precisely so an actionable refusal needs
+  // no category of its own.
+  stub();
+  const result = await fetchContestRecord({
+    contestId: "START252",
+    subtype: "STARTERS",
+    session: {},
+  });
+  assert.equal(result.status, "unavailable");
+  assert.match(result.reason, /Open the division/);
+});
+

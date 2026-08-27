@@ -28,6 +28,9 @@ const SELECTORS = {
    */
   problemsPageContestName: ["#sidebar .rtable th a", "#sidebar .rtable th"],
 
+  /** "Finished", "Running", "Before start" — the sidebar's own phase label. */
+  contestPhase: [".contest-state-phase"],
+
   problemLink: 'a[href*="/problem/"]',
   profileLink: 'a[href*="/profile/"]',
   pageLink: 'a[href*="standings/page/"]',
@@ -123,6 +126,23 @@ export function findContestNameOnProblemsPage(doc, contestPath) {
  * @returns {Array<{index: string, name: string, url: string}>|null}
  *   null when the table is missing or a row can't be read.
  */
+/**
+ * Whether the contest has finished, read off the page rather than the API.
+ *
+ * The hidden-standings path has no `contest.standings` to ask, and adding a
+ * contest mid-flight is not harmless: the estimator would fit partial solve
+ * counts, and on a gym nothing ever corrects the result.
+ *
+ * @returns {boolean|null} null when the page doesn't say, which callers must
+ *   treat as "proceed" — refusing on an unreadable label would make a contest
+ *   unaddable for a reason we cannot even state.
+ */
+export function hasFinished(doc) {
+  const label = cleanText(queryFirst(doc, SELECTORS.contestPhase));
+  if (!label) return null;
+  return /finished/i.test(label);
+}
+
 export function extractProblemsFromList(doc) {
   const table = queryFirst(doc, SELECTORS.problemsTable);
   if (!table) return null;

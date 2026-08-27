@@ -80,16 +80,31 @@ beforeEach(() => {
   stubFetch();
 });
 
+/**
+ * fetchContestRecord answers with one of the five statuses in
+ * core/contest-status.js. Most tests here are about the record it builds, so
+ * this unwraps a "ready" and throws otherwise — the same shape
+ * contest-manager gives the rest of the app. Status handling itself is
+ * asserted directly, further down.
+ */
+const record = async (args) => {
+  const result = await fetchContestRecord(args);
+  if (result.status !== "ready") {
+    throw Object.assign(new Error(result.reason), { contestStatus: result.status });
+  }
+  return result.contest;
+};
+
 test("a contest is built from contest-problem, so reruns are complete", async () => {
   // problems.json says "rerun" has no problems at all — every one of them
   // debuted elsewhere. Reading it instead would produce an empty contest.
-  const contest = await fetchContestRecord({ contestId: "rerun", subtype: "OTHER" });
+  const contest = await record({ contestId: "rerun", subtype: "OTHER" });
   assert.deepEqual(contest.problems.map((p) => p.index), ["C", "D"]);
   assert.deepEqual(contest.problems.map((p) => p.problemId), ["abc471_a", "old_x"]);
 });
 
 test("published difficulty is taken as-is, including negatives", async () => {
-  const contest = await fetchContestRecord({ contestId: "abc471", subtype: "ABC" });
+  const contest = await record({ contestId: "abc471", subtype: "ABC" });
   const [a, b] = contest.problems;
   assert.equal(a.rating, -320, "a negative difficulty was clamped");
   assert.equal(a.ratingSource, "official");
@@ -97,13 +112,13 @@ test("published difficulty is taken as-is, including negatives", async () => {
 });
 
 test("a low-confidence model is recorded as such, not passed off as measured", async () => {
-  const contest = await fetchContestRecord({ contestId: "abc471", subtype: "ABC" });
+  const contest = await record({ contestId: "abc471", subtype: "ABC" });
   assert.equal(contest.problems[0].ratingConfidence, null);
   assert.equal(contest.problems[1].ratingConfidence, "experimental");
 });
 
 test("a model without a difficulty leaves the rating null, never a guess", async () => {
-  const contest = await fetchContestRecord({ contestId: "rerun", subtype: "OTHER" });
+  const contest = await record({ contestId: "rerun", subtype: "OTHER" });
   const reused = contest.problems.find((p) => p.problemId === "old_x");
   assert.equal(reused.rating, null);
   assert.equal(reused.ratingSource, null);
@@ -111,20 +126,20 @@ test("a model without a difficulty leaves the rating null, never a guess", async
 
 test("an unindexed contest fails loudly rather than storing an empty one", async () => {
   await assert.rejects(
-    () => fetchContestRecord({ contestId: "abc999", subtype: "ABC" }),
+    () => record({ contestId: "abc999", subtype: "ABC" }),
     /doesn't list contest/,
   );
 });
 
-test("both not-yet-indexed refusals are flagged as publication delays", async () => {
-  // The flag, not the sentence, is what core/waiting-contests.js branches on:
-  // a copy edit to either message must not silently turn a contest that would
-  // have resolved on its own into one that is never retried.
+test("both not-yet-indexed cases answer notPublishedYet", async () => {
+  // The status, not the sentence, is what contest-manager branches on: a copy
+  // edit to either message must not silently turn a contest that would have
+  // resolved on its own into one that is never retried.
   const missingContest = await fetchContestRecord({
     contestId: "abc999",
     subtype: "ABC",
-  }).catch((error) => error);
-  assert.equal(missingContest.isNotPublishedYet, true);
+  });
+  assert.equal(missingContest.status, "notPublishedYet");
 
   // Listed in contests.json, but contest-problem.json has not caught up.
   RESOURCES["contests.json"].push({ id: "abc998", title: "Fresh", start_epoch_second: 1 });
@@ -132,11 +147,11 @@ test("both not-yet-indexed refusals are flagged as publication delays", async ()
   const noProblems = await fetchContestRecord({
     contestId: "abc998",
     subtype: "ABC",
-  }).catch((error) => error);
+  });
   RESOURCES["contests.json"].pop();
 
-  assert.match(noProblems.message, /lists no problems/);
-  assert.equal(noProblems.isNotPublishedYet, true);
+  assert.match(noProblems.reason, /lists no problems/);
+  assert.equal(noProblems.status, "notPublishedYet");
 });
 
 test("a retry revalidates rather than answering from the cached copy", async () => {
@@ -144,12 +159,12 @@ test("a retry revalidates rather than answering from the cached copy", async () 
   // contest inside that window re-reads the same stale array, fails on the
   // same missing row, and looks like the check happened — so the wait could
   // never end while the panel stayed open.
-  await assert.rejects(() => fetchContestRecord({ contestId: "abc998", subtype: "ABC" }));
+  await assert.rejects(() => record({ contestId: "abc998", subtype: "ABC" }));
   const before = requestLog.filter((url) => url.endsWith("contests.json")).length;
 
   RESOURCES["contests.json"].push({ id: "abc998", title: "Fresh", start_epoch_second: 7 });
   try {
-    const contest = await fetchContestRecord({
+    const contest = await record({
       contestId: "abc998",
       subtype: "ABC",
       revalidate: true,
@@ -165,7 +180,7 @@ test("a retry revalidates rather than answering from the cached copy", async () 
 });
 
 test("start time and name come from the contest list", async () => {
-  const contest = await fetchContestRecord({ contestId: "abc471", subtype: "ABC" });
+  const contest = await record({ contestId: "abc471", subtype: "ABC" });
   assert.equal(contest.name, "AtCoder Beginner Contest 471");
   assert.equal(contest.startTimeSeconds, 1_755_000_000);
   assert.equal(contest.platform, "atcoder");

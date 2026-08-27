@@ -225,7 +225,7 @@ export class StatsView extends HTMLElement {
       (contest) =>
         platformOf(contest).id === "codeforces" &&
         contest.type === "OFFICIAL" &&
-        contest.tagsSyncedAt == null,
+        contest.publishedDataCheckedAt == null,
     ).length;
 
     if (untagged === 0) {
