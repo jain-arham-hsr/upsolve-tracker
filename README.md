@@ -63,8 +63,9 @@ needs its handle before you can add any of its contests.
 | **AtCoder** | Your handle |
 | **CodeChef** | Your handle, and be signed in to codechef.com in this browser |
 
-Each section confirms the account it found — *“✓ Connected as tourist”* — so a typo shows up
-straight away. Your Codeforces key and secret stay in this browser, are only used to sign
+Each section confirms the account it found — *“✓ Connected as tourist”*, or *“✓ Signed in as
+tourist”* on CodeChef, where the browser session really is the identity rather than something
+looked up — so a typo shows up straight away. Your Codeforces key and secret stay in this browser, are only used to sign
 requests to codeforces.com, and are deliberately kept out of the backup file.
 
 ## Using it
@@ -142,8 +143,8 @@ Requires Node 20.19+ or 22.12+.
 ```bash
 npm install
 npm run build:chrome    # -> dist/chrome
-npm test                # rating maths, adapters, queue ordering
-npm run smoke           # loads the built panel in headless Chrome
+npm test                # rating maths, adapters, request pacing, queue ordering
+npm run smoke           # loads the built panel and settings page in headless Chrome
 ```
 
 Then load `dist/chrome` with **Load unpacked** as above.

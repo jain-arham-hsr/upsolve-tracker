@@ -207,8 +207,9 @@ against the new account.
 | `upsolve_tracker.handle` / `.atcoder_handle` / `.codechef_handle` | Your handles |
 | `upsolve_tracker.platform_ratings` | Your rating on each site |
 | `upsolve_tracker.platform_identity` | Which account each site's solved flags belong to |
+| `upsolve_tracker.waiting_contests` | Contests you asked for that the site hasn't published yet, retried on every refresh |
 | `upsolve_tracker.auto_export` | Whether the backup file is kept current |
-| `upsolve_tracker.platform_filter`, `.stats_scope`, `.expanded_contests`, `.tag_rating_range.*` | UI state that should survive switching tabs |
+| `upsolve_tracker.platform_filter`, `.stats_scope`, `.expanded_contests`, `.waiting_expanded`, `.tag_rating_range.*` | UI state that should survive switching tabs |
 
 **IndexedDB** (`upsolve_tracker_db`) — deliberately separate, because it must **not** appear
 in an exported backup:
