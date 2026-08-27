@@ -74,6 +74,13 @@ the panel offering to add it. Working out the difficulties takes a few seconds a
 narrates each step. CodeChef Starters split into divisions — open the parent contest and it
 picks the division matching your rating.
 
+**If you add a round the moment it ends**, the site may not have published its problem data
+yet. Rather than making you come back and try again, the contest is parked in a **Waiting**
+strip at the top of the Contests tab and retried every time you refresh — it joins the queue
+by itself once the data appears. The row shows why it's still waiting. If one is clearly
+never going to resolve, drop it from the same **⋮** menu you'd use to remove a contest;
+that's worth doing for a Codeforces round, where each retry costs a burst of requests.
+
 **Work the queue.** The **Queue** tab lists every unsolved problem you're tracking, easiest
 first. The dropdown at the top right filters to one or more sites.
 
