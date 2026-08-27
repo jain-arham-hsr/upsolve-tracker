@@ -681,6 +681,8 @@ A field declares `key`, `label`, `type`, `placeholder`, `help` and **`store`**: 
 
 **Verification is four lines, because the adapters already word every failure well** — no handle, unknown handle, signed out, wrong account. Adapters gained `createSessionFrom(values)`, building a session from what is *typed* rather than what is stored, so a wrong key tells you before you rely on it; `createSession()` is now that same function over saved values. This deleted real duplication: the page used to re-check `session.signedIn` itself and compose its own CodeChef "signed out" message, so one condition read differently here and in the queue's status strip. Settings now shows the adapter's wording, which is what the queue already showed.
 
+Three CodeChef *failure* verdicts changed wording as a result — signed out, wrong account, and site unreachable. The success line did not: it read "✓ Signed in as <handle>" and still does, because `verifyIdentity` throws unless the two match, so the resolved account and the configured handle are the same string by the time it renders. Codeforces' transient "Checking…" also lost a green tint it should never have had; it is not a success.
+
 The *"Connected as"* / *"Signed in as"* distinction survives as `describeIdentity` on the adapter — the handle is looked up on two platforms and **is** the session on CodeChef — because putting it anywhere else makes it a branch on the platform in shared code.
 
 **How a section verifies is the descriptor's call too.** `verify: { trigger: "button", label, help, incomplete }` for Codeforces, where three fields must be filled before a signed request means anything; `{ trigger: "change" }` for the other two, which check on load and on change. That keeps the *"Test connection"* button rather than unifying it away.
@@ -723,6 +725,8 @@ A platform with no mark yet falls back to a text chip rather than rendering noth
 ### Untrusted input
 
 Views build rows with template strings and `innerHTML`, so anything originating outside the extension goes through `ui/escape-html.js` first. That covers contest names, problem names and tags (scraped or API-supplied), and the problem URL and source label, which are both built from a scraped problem index. Values the extension derives itself — counts, ratings, the type badge — don't need it.
+
+**One deliberate exception, and it is the only one:** the settings page injects each descriptor's `label` and `help` as trusted HTML, so the Codeforces key-pair note can carry a link to its API settings page. That text is authored in this repo, in `platforms/<id>/descriptor.js`. Nothing reaching that path comes from a platform or a user — and if a descriptor ever grows a field whose text does, it must be escaped like everything else.
 
 `backup-validation.js` guards Import, which writes straight into `chrome.storage.local` with no undo. Note it uses `.some()`, not `.find()`: a `null` entry in `trackedContests` is itself falsy, so a truthiness check on `find`'s return value silently accepted malformed backups. There's a test for exactly that case.
 

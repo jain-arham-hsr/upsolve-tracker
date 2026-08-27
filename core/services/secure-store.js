@@ -70,8 +70,11 @@ export const clearDirHandle = () => remove(KEYS.DIR_HANDLE);
 // A secret lives here rather than in chrome.storage.local specifically so it
 // never lands in an exported backup.
 
-export const putSecret = (key, value) => put(key, value);
-export const getSecret = (key) => get(key);
+// Not exported. Everything goes through readSettingsValues/writeSettingsValues
+// below, so a caller cannot reach a secret without going via the descriptor
+// that declared it — which is what keeps the key names in one place.
+const putSecret = (key, value) => put(key, value);
+const getSecret = (key) => get(key);
 
 /**
  * Every value a platform declared in `settingsFields`, keyed by field key.

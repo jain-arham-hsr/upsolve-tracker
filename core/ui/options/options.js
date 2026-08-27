@@ -124,8 +124,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (Object.values(values).some((value) => !value)) {
       // A section you have not filled in yet is not a failure, so it says
       // nothing — unless it asked you to press something, in which case it owes
-      // you an explanation for doing nothing.
-      setStatus(status, platform.verify.incomplete ?? "", false);
+      // you an explanation for doing nothing. `ok` stays undefined when there is
+      // no message, or an empty line would still be marked red.
+      const message = platform.verify.incomplete ?? "";
+      setStatus(status, message, message ? false : undefined);
       return;
     }
 

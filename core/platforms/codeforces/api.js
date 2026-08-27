@@ -183,9 +183,13 @@ export class CodeforcesService {
   }
 }
 
-/** Test seam, matching `codechef/api.js` and `atcoder/problems-api.js`. */
-export function resetApiState() {
+/**
+ * Test seam. Takes a spacing for the same reason `codeforces/http.js` does:
+ * proving the signed API is paced needs an observable gap, and it was paced by
+ * nothing at all until recently, so that is worth an assertion of its own.
+ */
+export function resetApiState(spacingMs = 0) {
   CodeforcesService.clearProblemsetCache();
   paced.reset();
-  paced.setSpacing(0);
+  paced.setSpacing(spacingMs);
 }

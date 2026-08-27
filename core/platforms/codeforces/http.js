@@ -60,8 +60,12 @@ export const CodeforcesHttp = {
   },
 };
 
-/** Test seam, matching `codechef/api.js` and `atcoder/problems-api.js`. */
-export function resetHttpState() {
+/**
+ * Test seam. Takes a spacing rather than always pinning zero: a test that wants
+ * to prove this module *is* paced needs a gap it can observe, and one that only
+ * wants the requests needs it out of the way.
+ */
+export function resetHttpState(spacingMs = 0) {
   paced.reset();
-  paced.setSpacing(0);
+  paced.setSpacing(spacingMs);
 }
