@@ -112,8 +112,10 @@ Settings and it stays current by itself.
 - **Chrome only.** The side panel uses an API Firefox doesn't have an equivalent for.
 - **It's deliberately unhurried.** Requests are spaced out so the sites don't rate-limit you.
   Adding a contest is not instant, and that's on purpose.
-- **`???` instead of a rating** means the site hasn't published a difficulty yet. It fills in
-  on a later refresh. AtCoder in particular rates a round a few days after it runs.
+- **`???` instead of a rating** means the site has published the contest but says that
+  particular problem has no difficulty — not that something failed. It's rare, because in
+  practice difficulties arrive at the same time as the problem list. A contest the extension
+  simply hasn't been able to read yet waits instead, and says so.
 - **No topic tags on AtCoder.** It doesn't publish any. Codeforces gym problems usually have
   none either.
 - **A dotted underline under a difficulty means it's an estimate**, not a number the site

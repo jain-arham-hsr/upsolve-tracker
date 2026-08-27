@@ -37,7 +37,7 @@ Signed with your key and secret. Seven methods, each for one job:
 |:--|:--|
 | `user.info` | Verifying your handle, and reading your rating |
 | `user.status` | Your accepted submissions — this is what clears problems from the queue |
-| `problemset.problems` | Official difficulties and tags, all ~11k problems in one request |
+| `problemset.problems` | Official difficulties and tags, all ~11k problems in one request — and the check for whether a contest has been published at all |
 | `contest.list` | When a contest started, so the Contests tab can sort by date |
 | `contest.ratingChanges` | Everyone's rating *before* a contest, used to estimate difficulty |
 | `contest.standings` | Gym participants and their ratings, plus gym problem tags **and difficulties** |
@@ -141,6 +141,19 @@ own front end calls, and only ever for things you're already tracking.
 | `/api/contests/<code>/problems/<code>` | Difficulty and tags — one request per problem |
 | `/api/list/problems?group=attempted` | **Every problem you've attempted**, which is how solves clear |
 | `/dashboard` | Reading which account is signed in |
+
+### When a CodeChef contest isn't ready
+
+Two cases, and neither adds the contest:
+
+- **It's still running.** The payload lists the problems during a contest, so nothing used to
+  stop an add mid-flight — which would have recorded in-contest results as if they were final.
+  CodeChef reports its own clock beside the contest's end time, so this is decided by *its*
+  time, not your computer's.
+- **A problem's details couldn't be fetched.** Difficulty costs one request per problem, and if
+  one of them fails the contest waits and retries rather than storing that problem as unrated.
+  A failed request is not evidence that CodeChef has no rating for it — conflating the two
+  showed `???` for problems CodeChef *had* rated.
 
 ### Why solved status works differently here
 

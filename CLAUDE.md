@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-The extension is **Upsolve Tracker**; the repo and directory were renamed to match. It covers Codeforces, AtCoder and CodeChef. Storage keys are `upsolve_tracker.*`, custom elements are `upsolve-*`, the IndexedDB store is `upsolve_tracker_db` and the backup file is `upsolve_tracker_backup.json`. **There is no back-compatibility code anywhere**, deliberately: this was a single-user project at the point of the rename, so the one existing install's data was canonicalised once by hand rather than leaving normalisers in the tree forever. A stored contest therefore always carries its `platform`, and tag-sync state is always `tagsSyncedAt` — code may read both as guaranteed, and anything malformed should fail loudly rather than be quietly repaired.
+The extension is **Upsolve Tracker**; the repo and directory were renamed to match. It covers Codeforces, AtCoder and CodeChef. Storage keys are `upsolve_tracker.*`, custom elements are `upsolve-*`, the IndexedDB store is `upsolve_tracker_db` and the backup file is `upsolve_tracker_backup.json`. **There is no back-compatibility code anywhere**, deliberately: this was a single-user project at the point of the rename, so the one existing install's data was canonicalised once by hand rather than leaving normalisers in the tree forever. A stored contest therefore always carries its `platform`, and the metadata timestamp is always `publishedDataCheckedAt` — code may read both as guaranteed, and anything malformed should fail loudly rather than be quietly repaired.
 
 ## Commands
 
@@ -287,13 +287,43 @@ Each platform paces its own requests through `services/request-pacer.js`, so the
 
 ### Rating estimation pipeline
 
-`core/contest-manager.js#processNewContest(url)` is the orchestrator. Given a `/contest/<id>` or `/gym/<id>` URL:
+`core/contest-manager.js#processNewContest(url)` is the orchestrator, and the adapter answers it
+with one of the five statuses above. Given a `/contest/<id>` or `/gym/<id>` URL:
 
-1. `platforms/codeforces/solve-stats.js` — scrape problems from the standings header row. Official contests read solve counts from the "Accepted" totals row; gyms instead count `bestSubmissionTimeSeconds` in `contest.standings`, excluding ghost parties. Returns `solveCountsRead`, which is false when the totals row wouldn't parse.
-2. `platforms/codeforces/problemset-sync.js` — apply Codeforces' published ratings and tags. Anything rated here needs no estimate, which is why this runs *before* the expensive steps. Only now, knowing what still needs estimating, does `contest-manager` refuse an unreadable totals row — and only if some problem has no published rating to fall back on.
-3. `platforms/codeforces/rating-distribution.js` — produce the participant rating distribution, as **strata**: `{ strata: [{ ratings, scale }] }`, where `scale` is how many real competitors one read competitor stands for. Official: `contest.ratingChanges` `oldRating`s at scale 1; if empty, fall back to sampling the standings (below). Gym/ICPC: build from `contest.standings`, collapsing each team into one effective rating via `computeTeamRating` (binary search for R where the product of per-member loss probabilities is 0.5).
-4. `rating-estimator.js` — binary-search the rating R whose Elo-expected solve count, summed over the strata and weighted by each one's scale, matches actual solves; round to the nearest 100, floor 800. Zero solves targets 0.5 expected solves rather than 0.
-5. Mark already-solved problems from `user.status`, then **store only if every problem got a rating** — a partial result throws instead of persisting. There is intentionally no default-1500 fallback (see the comments in `contest-manager.js`); reintroducing one would silently corrupt the queue's sort order.
+1. **Is it ready at all?** — asked before any work, because the answer is usually cheap and the
+   work is not.
+   - *Official*: is the contest in `problemset.problems`? Codeforces publishes problems there
+     already rated, so present-and-rated arrive together and absence is the whole question. Absent →
+     `notPublishedYet`, and **nothing is scraped** — the alternative was tens of throttled requests
+     spent producing an estimate that `problemset-sync` would overwrite. The response is cached for
+     60 s so the check and step 3 don't fetch ~2 MB twice.
+   - *Gym*: has it finished? Gyms are never in the problemset, so they skip that check entirely —
+     applying it would make every gym unaddable. Phase comes from `contest.standings`' own `contest`
+     object, or from the problems-page sidebar (`.contest-state-phase`) when standings are hidden.
+     Still running → `notEndedYet`. An unreadable phase proceeds: refusing on a label we can't read
+     would make a contest unaddable for a reason we can't state.
+2. `platforms/codeforces/solve-stats.js` — scrape problems from the standings header row. Official
+   contests read solve counts from the "Accepted" totals row; gyms instead count
+   `bestSubmissionTimeSeconds` in `contest.standings`, excluding ghost parties. Returns
+   `solveCountsRead`, false when the totals row wouldn't parse.
+3. `platforms/codeforces/problemset-sync.js` — apply Codeforces' published ratings and tags.
+   Anything rated here needs no estimate, which is why it runs *before* the expensive steps.
+4. `platforms/codeforces/rating-distribution.js` — produce the participant rating distribution, as
+   **strata**: `{ strata: [{ ratings, scale }] }`, where `scale` is how many real competitors one
+   read competitor stands for. Official: `contest.ratingChanges` `oldRating`s at scale 1; if empty,
+   fall back to sampling the standings (below). Gym/ICPC: build from `contest.standings`, collapsing
+   each team into one effective rating via `computeTeamRating` (binary search for R where the
+   product of per-member loss probabilities is 0.5). Hidden-standings gyms recover the same field
+   from who submitted, via `getGymRatingDistFromParties`.
+5. `rating-estimator.js` — binary-search the rating R whose Elo-expected solve count, summed over
+   the strata and weighted by each one's scale, matches actual solves; round to the nearest 100,
+   floor 800. Zero solves targets 0.5 expected solves rather than 0 — which drives the estimate to
+   the **ceiling**, not the floor.
+6. Mark already-solved problems from `user.status`. A gap surviving all of that means no measurable
+   field, and for a **gym** that is permanent — private or empty standings don't become visible
+   later — so it answers `unavailable` and refuses rather than waiting. Codeforces stores only when
+   every problem has a rating (`canEstimate: true`, see above); there is intentionally no
+   default-1500 fallback, and reintroducing one would silently corrupt the queue's sort order.
 
 ### Sampling the field (`scraping-service.js`)
 
@@ -318,10 +348,10 @@ became a waiting entry. It now answers `notEndedYet` while running and `unavaila
 with no visible field. Verified on gym 712373.
 
 **`contest.status` still answers**, and it carries everything the standings response was mined for.
-`platforms/codeforces/contest-status.js` derives it, pure over the submission array so it tests
+`platforms/codeforces/contest-submissions.js` derives it — `summariseSubmissions` is pure over the submission array so it tests
 without a network stack. Against 712373's real 103 rows it reproduces the contest page exactly —
 A x12, B x12, C x12, D x4, E x6, F x1 — which is the fixture `tests/fixtures/gym-standings-hidden.json`
-and the thing `tests/contest-status.test.js` pins.
+and the thing `tests/contest-submissions.test.js` pins.
 
 Five things there are easy to get wrong:
 
