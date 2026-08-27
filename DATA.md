@@ -17,7 +17,7 @@ is inline SVG, and the only remote addresses in the build are the data APIs list
 | What you see | Where it comes from |
 |:--|:--|
 | Problem names and IDs | The contest page or API of the site it belongs to |
-| Difficulty (the number beside the mark) | Published by the site — except unrated Codeforces contests, which are **estimated** |
+| Difficulty (the number beside the mark) | Published by the site, except where Codeforces hasn't rated it — those are **estimated** and shown with a dotted underline |
 | The `~72%` chance | Calculated locally from that difficulty and your rating on that site |
 | Your rating | Fetched from each site when the identity is verified |
 | Whether you solved something | Your submission history on that site |
@@ -31,7 +31,7 @@ Two channels are needed, because neither alone is enough.
 
 ### The API (`codeforces.com/api/…`)
 
-Signed with your key and secret. Six methods, each for one job:
+Signed with your key and secret. Seven methods, each for one job:
 
 | Method | Used for |
 |:--|:--|
@@ -40,14 +40,15 @@ Signed with your key and secret. Six methods, each for one job:
 | `problemset.problems` | Official difficulties and tags, all ~11k problems in one request |
 | `contest.list` | When a contest started, so the Contests tab can sort by date |
 | `contest.ratingChanges` | Everyone's rating *before* a contest, used to estimate difficulty |
-| `contest.standings` | Gym participants and their ratings, plus gym problem tags |
+| `contest.standings` | Gym participants and their ratings, plus gym problem tags **and difficulties** |
+| `contest.status` | Every submission to a gym whose standings are hidden — see below |
 
 ### The standings page (scraped)
 
-`codeforces.com/contest/<id>/standings` is fetched as HTML and parsed. It is the **only**
-source for problem names, problem URLs, and how many people solved each problem *during*
-the contest. The API's `solvedCount` counts practice solves too, which is no good for
-estimating difficulty.
+`codeforces.com/contest/<id>/standings` is fetched as HTML and parsed. It is normally the
+only source for problem names, problem URLs, and how many people solved each problem
+*during* the contest. The API's `solvedCount` counts practice solves too, which is no good
+for estimating difficulty.
 
 All the HTML parsing lives in **one file**, `core/services/standings-dom.js`. If Codeforces
 changes its layout, that's the only place to look.
@@ -58,17 +59,39 @@ changes its layout, that's the only place to look.
 
 ### Estimated difficulty
 
-Codeforces doesn't rate gym contests at all, and rates new rounds a few days late. For those,
-difficulty is **calculated, not fetched**: given everyone who competed and how many solved a
-problem, there's exactly one rating at which the Elo model predicts that many solves, and the
-code searches for it.
+Codeforces rates new rounds a few days late, and rates only *some* gym problems. For the
+rest, difficulty is **calculated, not fetched**: given everyone who competed and how many
+solved a problem, there's exactly one rating at which the Elo model predicts that many
+solves, and the code searches for it.
 
 Each problem records which it was — `ratingSource: "official"` or `"estimated"` — and an
-estimate is replaced by the real number as soon as Codeforces publishes one.
+estimate is replaced by the real number as soon as Codeforces publishes one. **In the panel,
+an estimated difficulty is underlined with a dotted line**; hover it for the reason.
 
-> **Known bias:** estimates come out low, by up to ~300 on the hardest problems. The model
-> assumes everyone attempted every problem, when most never open the hard ones. Documented in
-> `tests/estimator-accuracy.test.js`.
+> **Gyms are not all unrated.** About a third of gym problems carry Codeforces' own published
+> difficulty — those are the ones a setter picked from the archive rather than writing
+> themselves, so Codeforces still recognises them. That number arrives on the same response
+> the tags do, and is preferred over an estimate. The other two thirds are problems written
+> for that contest, and those are estimated.
+
+> **How good the estimates are.** On a full official round the model is excellent: it
+> reproduces 14 of 15 published ratings exactly. On a gym it is being asked to fit 5–76
+> people instead of thousands, and it shows — measured against the gym problems Codeforces
+> *does* rate, the estimates were a mean 211 off, with 14 of 62 out by 400 or more. Not
+> biased in either direction (mean signed error −10), just noisy. Seven ways of improving it
+> were tried and measured; all were neutral or worse. See
+> `tests/estimator-accuracy.test.js`, which lists them so they aren't retried.
+
+### When a gym's standings are hidden
+
+A setter can hide a gym's standings. When they do, the standings page has no table *and* the
+`contest.standings` API refuses — so both usual sources vanish at once, and adding the
+contest used to fail outright.
+
+`contest.status` still answers. One request returns every submission, which between them
+carry the problems, their difficulties, who competed, and what they solved. The problem
+*list* comes from the ordinary `codeforces.com/gym/<id>` page instead, because a problem
+nobody attempted appears in no submission and would silently go missing from your queue.
 
 ---
 
@@ -182,7 +205,7 @@ in an exported backup:
 | A solved problem won't leave the queue | Is the handle for that site right? Settings shows the account it resolved to. On CodeChef, are you signed in as that account? |
 | Nothing syncs at all for one site | The refresh reports per-site failures at the end. A site being down or a handle being wrong fails that site alone; the others still sync. |
 | A rating shows `???` | The site hasn't published a difficulty yet. It fills in on a later refresh. AtCoder rates rounds a few days late. |
-| A Codeforces difficulty looks too low | It's probably an estimate — new rounds and all gyms are estimated until Codeforces publishes a rating. Estimates run low on hard problems. |
+| A Codeforces difficulty looks off | If it's underlined with a dotted line it's an estimate, not a published number. On gyms those are noisy in both directions — a mean 211 out, occasionally 400+ — because the model has only the handful of people who entered to work from. |
 | The chance column shows `—` | Either the problem has no difficulty, or your rating for that site is unknown. Those are different problems and the queue shows them differently on purpose. |
 | Adding a contest is slow | Expected. Requests are spaced deliberately; a CodeChef division costs about one request per problem. |
 | CodeChef says "refused the request" | Open codechef.com in a tab and make sure you're signed in. |

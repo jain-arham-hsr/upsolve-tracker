@@ -101,9 +101,16 @@ Settings and it stays current by itself.
   on a later refresh. AtCoder in particular rates a round a few days after it runs.
 - **No topic tags on AtCoder.** It doesn't publish any. Codeforces gym problems usually have
   none either.
-- **Ratings for unrated Codeforces contests are estimated**, not official — worked out from
-  how many people solved each problem. They're replaced by the real number once Codeforces
-  publishes one.
+- **A dotted underline under a difficulty means it's an estimate**, not a number the site
+  published — worked out from how many people solved that problem. Hover it for the reason.
+  It's replaced by the real number as soon as Codeforces publishes one.
+- **Take gym estimates with a pinch of salt.** The estimate is only as good as the crowd it
+  has to learn from, and a gym might have a dozen people in it where a real round has
+  thousands. Expect a couple of hundred points either way. Roughly a third of gym problems
+  aren't estimated at all — those are ones the setter took from the Codeforces archive, so
+  Codeforces already knows their difficulty and the real number is used.
+- **Gyms with hidden standings work too.** Some setters turn standings off; the extension
+  reads what it needs from the submissions instead.
 
 ## Where your data comes from
 
