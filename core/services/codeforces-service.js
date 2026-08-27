@@ -48,7 +48,7 @@ export class CodeforcesService {
    *
    * This is the only window into a gym whose standings Codeforces has hidden:
    * contest.standings answers FAILED for those, but contest.status still
-   * answers. See platforms/codeforces/contest-status.js.
+   * answers. See platforms/codeforces/contest-submissions.js.
    *
    * @param {string|number} contestId
    * @param {{from?: number, count?: number}} [page]

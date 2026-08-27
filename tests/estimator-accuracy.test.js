@@ -12,7 +12,7 @@
  *
  * This matters less than it used to: official problems take Codeforces'
  * published rating when one exists (problemset-sync.js), and so now do the
- * ~32% of gym problems Codeforces recognises (get-prob-stats.js). The
+ * ~32% of gym problems Codeforces recognises (solve-stats.js). The
  * estimator serves the rest.
  *
  * "Modelling attempts" was the suggested fix here, and it is WRONG. It was

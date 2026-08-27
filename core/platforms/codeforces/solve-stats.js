@@ -1,11 +1,11 @@
 import {
   scrapeContestProblems,
   scrapeProblemsPage,
-} from "./services/scraping-service.js";
+} from "../../services/scraping-service.js";
 import {
-  deriveContestStatusData,
+  summariseSubmissions,
   fetchContestSubmissions,
-} from "./platforms/codeforces/contest-status.js";
+} from "./contest-submissions.js";
 
 /**
  * Fetches problem metadata and solve counts for a contest.
@@ -20,7 +20,7 @@ import {
  *   partyHandles is null on every path but the hidden-standings fallback,
  *   where it is the field the estimator would otherwise read from standings.
  */
-export async function getProblemStats(type, contestId, cfService = null) {
+export async function readSolveStats(type, contestId, cfService = null) {
   let scraped;
   try {
     scraped = await scrapeContestProblems(type, contestId);
@@ -65,7 +65,7 @@ export async function getProblemStats(type, contestId, cfService = null) {
   // `standings.rows` is empty — so this can claim counts it never read, and
   // the guard at adapter.js's `!solveCountsRead` is unreachable for a gym.
   //
-  // Empty rows also means an empty field, since get-rating-distribution.js
+  // Empty rows also means an empty field, since rating-distribution.js
   // gates on the same array: the estimator sets nothing, and contest-manager
   // refuses for missing ratings. The add fails either way, and it fails with
   // the *better* sentence — "returned no participant ratings … private or
@@ -110,7 +110,7 @@ async function statsFromContestStatus(contestId, cfService, standingsError) {
     );
   }
 
-  const derived = deriveContestStatusData(
+  const derived = summariseSubmissions(
     await fetchContestSubmissions(cfService, contestId),
   );
 
@@ -142,7 +142,7 @@ async function statsFromContestStatus(contestId, cfService, standingsError) {
     // for 0.5 expected solves, which lands at the top of its search range
     // (~2400 against a 40-person field, not the 800 floor). Every problem
     // would read as maximally hard and sort to the *front* of the queue.
-    solveCountsRead: derived.sawOfficialSubmissions,
+    solveCountsRead: derived.partyHandles.length > 0,
     partyHandles: derived.partyHandles,
   };
 }

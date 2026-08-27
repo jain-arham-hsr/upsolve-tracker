@@ -9,7 +9,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { contestsOnPlatform } from "../core/platforms/registry.js";
 import { syncStartTimes } from "../core/start-time-service.js";
-import { syncOfficialProblemData } from "../core/problemset-sync.js";
+import { syncOfficialProblemData } from "../core/platforms/codeforces/problemset-sync.js";
 
 const cf = (over = {}) => ({
   id: "1000", platform: "codeforces", type: "OFFICIAL", problems: [], ...over,

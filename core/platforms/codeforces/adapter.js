@@ -18,9 +18,9 @@ import {
   getGymRatingDist,
   getGymRatingDistFromParties,
   distributionSize,
-} from "../../get-rating-distribution.js";
-import { getProblemStats } from "../../get-prob-stats.js";
-import { syncOfficialProblemData } from "../../problemset-sync.js";
+} from "./rating-distribution.js";
+import { readSolveStats } from "./solve-stats.js";
+import { syncOfficialProblemData } from "./problemset-sync.js";
 import { syncStartTimes } from "../../start-time-service.js";
 import { CodeforcesService } from "../../services/codeforces-service.js";
 import { loadCredentials } from "../../services/secure-store.js";
@@ -95,7 +95,7 @@ export async function fetchContestRecord({
     startTimeSeconds,
     solveCountsRead,
     partyHandles,
-  } = await getProblemStats(type, contestId, service);
+  } = await readSolveStats(type, contestId, service);
 
   const contest = {
     id: contestId,

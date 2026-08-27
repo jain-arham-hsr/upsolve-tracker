@@ -15,7 +15,7 @@ import { DOMParser } from "linkedom";
 globalThis.DOMParser = DOMParser;
 
 const { HttpClient } = await import("../core/services/http-client.js");
-const { getProblemStats } = await import("../core/get-prob-stats.js");
+const { readSolveStats } = await import("../core/platforms/codeforces/solve-stats.js");
 
 const PROBLEMS = [
   ["A", "Everything Everywhere All But One"],
@@ -114,7 +114,7 @@ test("an official contest with no standings table still fails, and never reaches
   // Far more likely a Codeforces layout change than a deliberate setting, and
   // CLAUDE.md's rule is that those fail loudly rather than being routed around.
   await assert.rejects(
-    () => getProblemStats("contest", "2193", forbiddenService()),
+    () => readSolveStats("contest", "2193", forbiddenService()),
     /didn't contain a standings table/,
   );
 });
@@ -122,7 +122,7 @@ test("an official contest with no standings table still fails, and never reaches
 test("a gym whose standings are readable never calls contest.status", async () => {
   serve({ standings: standingsPage(702859), problems: problemsPage(702859) });
 
-  const stats = await getProblemStats(
+  const stats = await readSolveStats(
     "gym",
     "702859",
     forbiddenService({
@@ -176,7 +176,7 @@ test("a gym failing for any other reason rethrows rather than falling back", asy
   serve({ standings: blocked, problems: problemsPage(712373) });
 
   await assert.rejects(
-    () => getProblemStats("gym", "712373", forbiddenService()),
+    () => readSolveStats("gym", "712373", forbiddenService()),
     /blocking requests/,
   );
 });
@@ -184,7 +184,7 @@ test("a gym failing for any other reason rethrows rather than falling back", asy
 test("a gym with hidden standings is rebuilt from contest.status", async () => {
   const seen = serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
-  const stats = await getProblemStats("gym", "712373", {
+  const stats = await readSolveStats("gym", "712373", {
     getContestStandings: async () => {
       throw new Error("contestId: Standings are not available");
     },
@@ -215,7 +215,7 @@ test("a problem nobody submitted to still reaches the queue", async () => {
   // submissions: C had no attempts, and would otherwise silently vanish.
   serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
-  const stats = await getProblemStats("gym", "712373", {
+  const stats = await readSolveStats("gym", "712373", {
     getContestStatus: async () => [submission("A", 1)],
   });
 
@@ -230,7 +230,7 @@ test("refuses loudly when the problems page can't be read either", async () => {
   serve({ standings: NO_TABLE, problems: "<html><body>nothing here</body></html>" });
 
   await assert.rejects(
-    () => getProblemStats("gym", "712373", forbiddenService()),
+    () => readSolveStats("gym", "712373", forbiddenService()),
     /standings hidden.*problems page couldn't be read/s,
   );
 });
@@ -238,7 +238,7 @@ test("refuses loudly when the problems page can't be read either", async () => {
 test("no official submissions means the solve counts are unusable, not zero", async () => {
   serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
-  const stats = await getProblemStats("gym", "712373", {
+  const stats = await readSolveStats("gym", "712373", {
     getContestStatus: async () => [
       { ...submission("A", 1), author: { ...submission("A", 1).author, participantType: "PRACTICE" } },
     ],
@@ -278,7 +278,7 @@ test("gym 712373 end to end, against its real submissions", () => {
       : `<html><body>${sidebar(712373)}
          <table class="problems"><tr><th>#</th></tr>${rows}</table></body></html>`;
 
-  return getProblemStats("gym", "712373", {
+  return readSolveStats("gym", "712373", {
     getContestStatus: async () => structuredClone(fixture.submissions),
   }).then((stats) => {
     assert.deepEqual(

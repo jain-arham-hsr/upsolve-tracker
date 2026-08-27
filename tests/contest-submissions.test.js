@@ -17,9 +17,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const {
-  deriveContestStatusData,
+  summariseSubmissions,
   fetchContestSubmissions,
-} = await import("../core/platforms/codeforces/contest-status.js");
+} = await import("../core/platforms/codeforces/contest-submissions.js");
 
 const FIXTURE = JSON.parse(
   readFileSync(new URL("./fixtures/gym-standings-hidden.json", import.meta.url)),
@@ -33,12 +33,12 @@ function submissions() {
 const PAGE_SOLVE_COUNTS = { A: 12, B: 12, C: 12, D: 4, E: 6, F: 1 };
 
 test("reproduces the contest page's solve counts exactly", () => {
-  const { solveCounts } = deriveContestStatusData(submissions());
+  const { solveCounts } = summariseSubmissions(submissions());
   assert.deepEqual(solveCounts, PAGE_SOLVE_COUNTS);
 });
 
 test("finds every problem, with the difficulty Codeforces publishes", () => {
-  const { problemMeta } = deriveContestStatusData(submissions());
+  const { problemMeta } = summariseSubmissions(submissions());
 
   assert.deepEqual([...problemMeta.keys()].sort(), ["A", "B", "C", "D", "E", "F"]);
   assert.equal(problemMeta.get("A").name, "Everything Everywhere All But One");
@@ -49,18 +49,15 @@ test("finds every problem, with the difficulty Codeforces publishes", () => {
 });
 
 test("recovers the field, one entry per party rather than per handle", () => {
-  const { partyHandles, sawOfficialSubmissions } = deriveContestStatusData(
-    submissions(),
-  );
+  const { partyHandles } = summariseSubmissions(submissions());
 
   // 12 teams, 34 distinct people across them.
   assert.equal(partyHandles.length, 12);
   assert.equal(new Set(partyHandles.flat()).size, 34);
-  assert.equal(sawOfficialSubmissions, true);
 });
 
 test("takes the contest start time", () => {
-  const { startTimeSeconds } = deriveContestStatusData(submissions());
+  const { startTimeSeconds } = summariseSubmissions(submissions());
   assert.equal(startTimeSeconds, 1787573100);
 });
 
@@ -75,7 +72,7 @@ test("excludes practice submissions", () => {
   );
   assert.ok(solvedInPractice.length > 0, "fixture should contain practice solves");
 
-  const { solveCounts } = deriveContestStatusData(rows);
+  const { solveCounts } = summariseSubmissions(rows);
   assert.deepEqual(solveCounts, PAGE_SOLVE_COUNTS);
 });
 
@@ -89,7 +86,7 @@ test("excludes ghost parties, as the standings path does", () => {
     if (s.author.participantId === ghostedParty) s.author.ghost = true;
   });
 
-  const { solveCounts, partyHandles } = deriveContestStatusData(rows);
+  const { solveCounts, partyHandles } = summariseSubmissions(rows);
   assert.equal(partyHandles.length, 11);
   assert.ok(
     solveCounts[target.problem.index] <
@@ -110,7 +107,7 @@ test("counts a party once however many times it solves the same problem", () => 
     { ...structuredClone(accepted), id: accepted.id + 2 },
   );
 
-  const { solveCounts } = deriveContestStatusData(rows);
+  const { solveCounts } = summariseSubmissions(rows);
   assert.deepEqual(solveCounts, PAGE_SOLVE_COUNTS);
 });
 
@@ -118,11 +115,12 @@ test("a rejected attempt is not a solve", () => {
   const rows = submissions().map((s) =>
     s.verdict === "OK" ? { ...s, verdict: "WRONG_ANSWER" } : s,
   );
-  const { solveCounts, sawOfficialSubmissions } = deriveContestStatusData(rows);
+  const { solveCounts, partyHandles } = summariseSubmissions(rows);
 
   assert.deepEqual(solveCounts, {});
-  // The parties still competed, so this is "nobody solved it", not "no data".
-  assert.equal(sawOfficialSubmissions, true);
+  // The parties still competed, so this is "nobody solved it", not "no data" —
+  // which is the distinction the caller draws from partyHandles being non-empty.
+  assert.equal(partyHandles.length, 12);
 });
 
 test("reports no field rather than an empty one when nothing official ran", () => {
@@ -130,8 +128,7 @@ test("reports no field rather than an empty one when nothing official ran", () =
     ...s,
     author: { ...s.author, participantType: "PRACTICE" },
   }));
-  const { sawOfficialSubmissions, partyHandles, solveCounts } =
-    deriveContestStatusData(rows);
+  const { partyHandles, solveCounts } = summariseSubmissions(rows);
 
   // All-zero counts are indistinguishable from "nobody solved anything", and
   // feeding those to the estimator drives every problem to the *ceiling*, not
@@ -139,7 +136,8 @@ test("reports no field rather than an empty one when nothing official ran", () =
   // lands near the top of its search range. The queue would then lead with a
   // wall of maximally hard problems, which is why the caller reports no field
   // at all rather than a field with nothing solved in it.
-  assert.equal(sawOfficialSubmissions, false);
+  // No parties means no field, which is what the caller checks — there is
+  // deliberately no second flag saying the same thing.
   assert.deepEqual(partyHandles, []);
   assert.deepEqual(solveCounts, {});
 });
@@ -150,7 +148,7 @@ test("survives malformed rows without inventing a party", () => {
     { problem: null, author: null },
     { problem: { index: "A" }, author: { participantType: "CONTESTANT" } },
   ];
-  const { solveCounts, partyHandles } = deriveContestStatusData(rows);
+  const { solveCounts, partyHandles } = summariseSubmissions(rows);
   assert.deepEqual(solveCounts, PAGE_SOLVE_COUNTS);
   assert.equal(partyHandles.length, 12);
 });

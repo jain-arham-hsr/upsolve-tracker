@@ -102,7 +102,7 @@ test("a fully rated gym takes Codeforces' numbers and never measures the field",
     ["official", "official", "official"],
   );
   // Skipping the estimate also skips a second contest.standings fetch for a
-  // response get-prob-stats already paid for.
+  // response solve-stats already paid for.
   assert.equal(contest.startTimeSeconds, 1000);
 });
 

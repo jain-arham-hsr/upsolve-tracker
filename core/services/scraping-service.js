@@ -48,7 +48,7 @@ export async function scrapeContestProblems(type, contestId) {
     );
     // A flag rather than a message match, the same idiom as isNotPublishedYet
     // and isIdentityMismatch: a copy edit to the sentence above must not
-    // silently change which contests take the fallback. get-prob-stats.js
+    // silently change which contests take the fallback. solve-stats.js
     // reads this to rebuild a gym from contest.status instead of giving up.
     error.isStandingsHidden = true;
     throw error;

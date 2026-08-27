@@ -9,7 +9,7 @@
  *
  * Private gyms and mashups are absent from the gym list entirely. Those get
  * their start time at add time instead, from the standings response
- * get-prob-stats already fetches (see populateStartTime there).
+ * solve-stats.js already fetches (see populateStartTime there).
  *
  * syncStartTimes is Codeforces-only and matches on bare contest ids, so it
  * must be handed Codeforces contests exclusively (contestsOnPlatform in

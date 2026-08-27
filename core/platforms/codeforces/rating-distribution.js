@@ -1,4 +1,4 @@
-import { sampleParticipantHandles } from "./services/scraping-service.js";
+import { sampleParticipantHandles } from "../../services/scraping-service.js";
 
 /**
  * A rating distribution the estimator can work from, as one or more strata.
@@ -112,7 +112,7 @@ export async function getGymRatingDist(cfService, contestId) {
  * The same distribution, for a gym whose standings Codeforces has hidden.
  *
  * Those answer FAILED to contest.standings, so the field has to be recovered
- * from who submitted — see platforms/codeforces/contest-status.js. Everything
+ * from who submitted — see contest-submissions.js. Everything
  * downstream of the handles is identical to the standings path, deliberately:
  * same user.info chunking, same team collapsing, same strata shape.
  *

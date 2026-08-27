@@ -78,10 +78,9 @@ export async function fetchContestSubmissions(cfService, contestId) {
  *   problemMeta: Map<string, {name: string, rating: number|null, tags: string[]}>,
  *   partyHandles: string[][],
  *   startTimeSeconds: number|null,
- *   sawOfficialSubmissions: boolean,
  * }}
  */
-export function deriveContestStatusData(submissions) {
+export function summariseSubmissions(submissions) {
   const solvers = new Map(); // problem index -> Set of party id
   const problemMeta = new Map();
   const parties = new Map(); // party id -> string[] of handles
@@ -136,7 +135,6 @@ export function deriveContestStatusData(submissions) {
     problemMeta,
     partyHandles: [...parties.values()],
     startTimeSeconds: mostCommon(startTimes),
-    sawOfficialSubmissions: parties.size > 0,
   };
 }
 
