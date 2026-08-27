@@ -321,6 +321,10 @@ Each caller makes its own pacer, so budgets are independent — `HttpClient`'s c
 
 Requests queue through a promise chain rather than each checking the clock. `HttpClient` had a variant of the flaw that guards against: it slept a random interval per call with no queue, so two concurrent callers slept in parallel and then fired together. It was latent rather than live, since every scrape call site is a sequential `await` — but absorbing it closed the hole rather than preserving it.
 
+**Confirmed in the real extension**, by removing a tracked contest and adding it back on all three platforms. That exercises the newly paced signed API end to end alongside the throttled scrape, solved marking and the backup write — the pacing was the one behaviour change here with real risk, since nothing about a response says whether a delay was served.
+
+What that does *not* reach is the waiting branches: those contests were already published, so the problemset gate passed immediately and the gym phase check saw a finished contest. A round fresh enough that Codeforces has not indexed it yet is still the only way to see `notPublishedYet` fire on the add path.
+
 Codeforces' own half stays in `codeforces/http.js`: `credentials: "include"` so the user's session cookie is sent, plus 403 / "Just a moment" detection that surfaces a "visit codeforces.com" error. The cooldown logs at `console.info` rather than `console.warn`, because `chrome://extensions` collects warnings alongside errors and a normal add was otherwise filing a row there every 15 requests — the same trap the waiting-contest logging was fixed for.
 
 ### Rating estimation pipeline
