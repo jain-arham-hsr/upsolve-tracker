@@ -59,8 +59,20 @@ export async function getProblemStats(type, contestId, cfService = null) {
   const tagsSynced = applyStandingsProblemData(standings, problems);
   const startTimeSeconds = standings?.contest?.startTimeSeconds ?? null;
 
-  // Gym solve counts come from the API rather than the totals row, so the
-  // scraped counts don't matter here.
+  // `solveCountsRead: true` unconditionally, which looks like a hole and is
+  // deliberate. Gym counts come from the API rather than the scraped totals
+  // row, and `populateSolveCountsFromApi` does bail without deriving any when
+  // `standings.rows` is empty — so this can claim counts it never read, and
+  // the guard at adapter.js's `!solveCountsRead` is unreachable for a gym.
+  //
+  // Empty rows also means an empty field, since get-rating-distribution.js
+  // gates on the same array: the estimator sets nothing, and contest-manager
+  // refuses for missing ratings. The add fails either way, and it fails with
+  // the *better* sentence — "returned no participant ratings … private or
+  // unrated standings can't be measured" is exactly what happened, where the
+  // solve-count message would blame a standings layout change that did not
+  // occur. Making the flag honest here has been proposed three times; it only
+  // swaps an accurate message for a misleading one.
   return {
     contestName,
     problems,
@@ -124,8 +136,12 @@ async function statsFromContestStatus(contestId, cfService, standingsError) {
     tagsSynced: derived.problemMeta.size > 0,
     startTimeSeconds: derived.startTimeSeconds,
     // With no official submissions at all, every count is zero — which is
-    // indistinguishable from "nobody solved anything" and would have the
-    // estimator hand back a floored 800 for every problem.
+    // indistinguishable from "nobody solved anything". Unlike the visible-gym
+    // path above there is still a field here, recovered from the submissions,
+    // so the estimator would run rather than stall: zero solves makes it aim
+    // for 0.5 expected solves, which lands at the top of its search range
+    // (~2400 against a 40-person field, not the 800 floor). Every problem
+    // would read as maximally hard and sort to the *front* of the queue.
     solveCountsRead: derived.sawOfficialSubmissions,
     partyHandles: derived.partyHandles,
   };

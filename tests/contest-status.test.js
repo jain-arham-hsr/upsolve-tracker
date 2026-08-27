@@ -134,7 +134,11 @@ test("reports no field rather than an empty one when nothing official ran", () =
     deriveContestStatusData(rows);
 
   // All-zero counts are indistinguishable from "nobody solved anything", and
-  // feeding those to the estimator yields a floored 800 for every problem.
+  // feeding those to the estimator drives every problem to the *ceiling*, not
+  // the 800 floor: zero solves makes it aim for 0.5 expected solves, which
+  // lands near the top of its search range. The queue would then lead with a
+  // wall of maximally hard problems, which is why the caller reports no field
+  // at all rather than a field with nothing solved in it.
   assert.equal(sawOfficialSubmissions, false);
   assert.deepEqual(partyHandles, []);
   assert.deepEqual(solveCounts, {});
