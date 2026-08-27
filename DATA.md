@@ -59,10 +59,18 @@ changes its layout, that's the only place to look.
 
 ### Estimated difficulty
 
-Codeforces rates new rounds a few days late, and rates only *some* gym problems. For the
-rest, difficulty is **calculated, not fetched**: given everyone who competed and how many
-solved a problem, there's exactly one rating at which the Elo model predicts that many
-solves, and the code searches for it.
+Codeforces rates only *some* gym problems. For those it doesn't, difficulty is
+**calculated, not fetched**: given everyone who competed and how many solved a problem,
+there's exactly one rating at which the Elo model predicts that many solves, and the code
+searches for it.
+
+**Official rounds are no longer estimated.** An official contest is only added once it
+appears in `problemset.problems`, which is where Codeforces publishes problems — and it
+publishes them already rated, so being listed and being rated arrive together. Until then
+the contest waits and is retried on every refresh. Estimating instead would put a number
+about 100 points off into your queue and silently swap it later; waiting costs a little
+time and nothing else. Estimation on an official round now only happens for the handful of
+problems Codeforces lists but never rates.
 
 Each problem records which it was — `ratingSource: "official"` or `"estimated"` — and an
 estimate is replaced by the real number as soon as Codeforces publishes one. **In the panel,
@@ -204,10 +212,11 @@ in an exported backup:
 |:--|:--|
 | A solved problem won't leave the queue | Is the handle for that site right? Settings shows the account it resolved to. On CodeChef, are you signed in as that account? |
 | Nothing syncs at all for one site | The refresh reports per-site failures at the end. A site being down or a handle being wrong fails that site alone; the others still sync. |
-| A rating shows `???` | The site hasn't published a difficulty yet. It fills in on a later refresh. AtCoder rates rounds a few days late. |
-| A Codeforces difficulty looks off | If it's underlined with a dotted line it's an estimate, not a published number. On gyms those are noisy in both directions — a mean 211 out, occasionally 400+ — because the model has only the handful of people who entered to work from. |
+| A rating shows `???` | The site published the contest but says that problem has no rating, and that site has no estimator. It's rare: in practice difficulties arrive with the problem list. A problem the extension merely *failed to fetch* never shows `???` — that contest waits instead. |
+| A Codeforces difficulty looks off | If it's underlined with a dotted line it's an estimate, not a published number — which on an official round means Codeforces lists the problem but never rated it. On gyms estimates are noisy in both directions, a mean 211 out and occasionally 400+, because the model has only the handful of people who entered to work from. |
 | The chance column shows `—` | Either the problem has no difficulty, or your rating for that site is unknown. Those are different problems and the queue shows them differently on purpose. |
 | Adding a contest is slow | Expected. Requests are spaced deliberately; a CodeChef division costs about one request per problem. |
+| A contest sits in "Waiting" | It isn't ready: still running, or the site hasn't published its problems and difficulties. Every refresh retries it. Codeforces rounds wait for real ratings rather than being added with estimates. |
 | CodeChef says "refused the request" | Open codechef.com in a tab and make sure you're signed in. |
 | The backup file has stopped updating | The export folder handle lives in IndexedDB and can be lost. Re-pick the folder in Settings. |
 
