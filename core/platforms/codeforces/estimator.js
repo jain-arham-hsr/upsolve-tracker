@@ -86,10 +86,13 @@ export async function fill({ contest, context, session, onProgress = () => {} })
 
   const needsEstimate = contest.problems.filter((problem) => problem.rating === null);
 
-  // Only now is it knowable whether the unreadable totals row actually
-  // matters. Estimating from counts we failed to parse would silently invent
-  // ratings, so refuse instead. Nobody competed, or nobody we can see — and for
-  // a finished contest that will not change, so waiting cannot help.
+  // **Unreachable on both paths now, and kept deliberately.** It guarded against
+  // an unparseable "Accepted" totals row on the scraped official standings —
+  // but official contests read `contest.standings` and have no totals row to
+  // misparse, and the gym path has always set `solveCountsRead: true`
+  // unconditionally. It stays because the alternative is estimating from counts
+  // that were never read, which invents ratings silently; if a future source
+  // can fail to produce counts, this is where it must say so.
   if (needsEstimate.length > 0 && !solveCountsRead) {
     return unavailable(
       `Couldn't read the solve counts for ${type} ${contest.id}, and ${needsEstimate.length} ` +

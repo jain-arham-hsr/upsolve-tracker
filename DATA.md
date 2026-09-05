@@ -104,7 +104,7 @@ The per-platform sections below explain *why*; this is the *where*.
 
 | | Problems | Difficulty | Submissions |
 |:--|:--|:--|:--|
-| **Codeforces**<br>*official* | Scraped from `/contest/<id>/standings` — the header row<br><br>Not from `problemset.problems`: that files a problem under the contest it *originated* in, so a Div. 2 round sharing problems with a Div. 1 one lists only its own — 2 of 7 for Round 1079. Filtering it by contest id would store a short contest | `problemset.problems`, **and** `contest.standings` for the same contest<br><br>The second is not redundant: it is the only thing that reports a *shared* problem's published rating under this contest's own index. Without it Round 1079's D stored as 1500 against a published 1600<br><br>*Genuinely unrated:* estimated here — solve counts from the standings **totals row**, the field from `contest.ratingChanges`, or ~32 sampled standings pages when that is empty | `user.status` — one call, whole history |
+| **Codeforces**<br>*official* | `contest.standings` — no HTML at all<br><br>Not `problemset.problems`: that files a problem under the contest it *originated* in, so a Div. 2 round sharing problems with a Div. 1 one lists only its own — 2 of 7 for Round 1079. Filtering it by contest id would store a short contest | `contest.standings`, then `problemset.problems`<br><br>Standings first because it is the only thing that reports a *shared* problem's rating under this contest's own index; without it Round 1079's D stored as 1500 against a published 1600. The problemset then covers anything standings left unrated, and is what re-checks weekly<br><br>*Genuinely unrated:* estimated here — solve counts from the same standings rows, the field from `contest.ratingChanges`, or ~32 sampled standings pages when that is empty | `user.status` — one call, whole history |
 | **Codeforces**<br>*gym* | Scraped from `/gym/<id>/standings`<br><br>*Standings hidden:* scraped from the `/gym/<id>` page instead — a problem nobody attempted appears in no submission, so it cannot be recovered from those | `contest.standings` — about a third of gym problems carry Codeforces' own rating<br><br>*The rest:* estimated here. Solve counts **and** field both from `contest.standings`; for a hidden gym, from `contest.status` + `user.info` instead. Never sampled — a gym's whole field arrives in one response<br><br>*Field not visible at all:* refuses to add, since it never becomes visible later | `user.status` — the same call as official |
 | **AtCoder** | Scraped from `/contests/<id>/tasks`<br><br>*Unreadable:* waits and retries every refresh — a contest that hasn't finished doesn't list them | **Always estimated here.** AtCoder publishes no difficulty at all. Fitted from `/contests/<id>/standings/json` 🔒<br><br>*Unreadable:* stores `???` and retries one contest per refresh | Scraped from `/contests/<id>/submissions?f.User=…&f.Status=AC` 🔒<br><br>Once per tracked contest — AtCoder publishes no per-user list |
 | **CodeChef** | `/api/contests/<code>`, then `/api/contests/<code>/problems/<code>` — one request per problem<br><br>*Parent contest:* resolves to the division matching your rating; with no known rating it names the divisions rather than guessing | `difficulty_rating`, from that same per-problem call<br><br>*`-1` or `9999`:* stored as `???`. No estimator — CodeChef rates promptly | `/api/list/problems?group=attempted`, paged |
@@ -113,8 +113,14 @@ The per-platform sections below explain *why*; this is the *where*.
 signed with your key, and may be trimmed. For an **official** contest Codeforces serves it
 only to an anonymous request carrying no extra parameters at all — so it is fetched unsigned,
 whole, and cannot be narrowed: `count`, `from`, `handles`, `showUnofficial` and
-`participantTypes` are all refused. That means ~8.5 MB to read seven problem objects out of
-eleven thousand participant rows. It is read and discarded, never stored.
+`participantTypes` are all refused. That means ~8.5 MB, of which we want seven problem
+objects out of eleven thousand participant rows. It is read and discarded, never stored.
+
+Since that response also carries the contest name, the problem list, the start time and
+enough rows to count in-contest solves, **an official contest is read entirely from the JSON
+API** — no page is scraped, so nothing on that path can be challenged by Cloudflare, and no
+codeforces.com tab needs to be open. Gyms still scrape, because a gym's roster has no API
+source.
 
 🔒 **needs you signed in to that site.** See the request diagram above: without a tab open
 on that site the request goes out anonymously, and these two refuse rather than returning
@@ -151,23 +157,30 @@ tags and difficulties, which is why gyms need it even when nothing is being esti
 
 ### The standings page (scraped)
 
-The standings page is fetched as HTML and parsed. It is the only source for the problem
-*roster* on both official rounds and gyms — and, on an **official** round, for how many
-people solved each problem *during* the contest, read from the "Accepted" totals row. A gym
-takes those counts from `contest.standings` instead.
+**Only gyms are scraped.** An official contest is read entirely from `contest.standings`,
+which carries its name, its problems, their published ratings and tags, the start time, and
+rows enough to count in-contest solves. That call is made regardless — it is the only thing
+that reports a shared Div. 1 / Div. 2 problem's rating under this contest's index — so
+scraping the page for the same facts was paying twice.
 
-Why the roster can't come from the API: `problemset.problems` files a problem under the
-contest it originated in, so a Div. 2 round that shares problems with a Div. 1 one lists only
-the ones unique to it. Why the counts can't: the API's `solvedCount` includes practice
-solves, and the model is fitted to in-contest performance.
+A gym has no such option: its standings need signing, and a gym whose standings are hidden
+answers `FAILED` to that call entirely. So the page is still the only source of a gym's
+roster, and `contest.standings` supplies its solve counts.
+
+Why neither roster can come from `problemset.problems`: it files a problem under the contest
+it originated in, so a Div. 2 round sharing problems with a Div. 1 one lists only the ones
+unique to it. And why in-contest counts can't come from `problemStatistics`: its
+`solvedCount` includes practice solves, while the model is fitted to in-contest performance.
 
 All the HTML parsing lives in **one file**, `core/platforms/codeforces/standings-dom.js`. If Codeforces
 changes its layout, that's the only place to look.
 
-> **Why it can be slow — and only on official rounds.** Reading standings costs one request
-> per 50 competitors, so a big round would be hundreds. Instead ~32 pages are sampled: the
-> top 10 in full (they're what decide the hard problems) plus 20 spread evenly through the
-> rest. Gyms never sample — their whole field arrives in one `contest.standings` response.
+> **When the page is still read for an official round.** Only to measure the *field*, and
+> only when `contest.ratingChanges` comes back empty — a round Codeforces has not rated yet.
+> Reading standings costs one request per 50 competitors, so a big round would be hundreds;
+> instead ~32 pages are sampled, the top 10 in full (they're what decide the hard problems)
+> plus 20 spread evenly through the rest. Gyms never sample — their whole field arrives in
+> one `contest.standings` response.
 
 ### Estimated difficulty
 

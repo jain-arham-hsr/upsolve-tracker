@@ -369,6 +369,15 @@ test("an official contest takes Codeforces' published ratings, not estimates", a
             tags: ["math"],
           })),
         }),
+        // The official path builds the whole record from this now — roster,
+        // name, ratings and solve counts — and never touches the scrape.
+        getPublicContestStandings: async () => ({
+          contest: { name: "Round", startTimeSeconds: 1000 },
+          problems: INDEXES.map((index, i) => ({
+            index, name: `Problem ${index}`, rating: 800 + i * 400, tags: ["math"],
+          })),
+          rows: [],
+        }),
         getContestList: async () => [],
         getUsersInfo: async () => {
           throw new Error("the field must not be measured when CF published every rating");
@@ -464,32 +473,54 @@ test("a shared Div 1 / Div 2 problem takes its published rating, not an estimate
   );
 });
 
-test("published ratings failing is soft — the add still succeeds", async () => {
-  // Losing that call costs the shared problems an estimate, not the contest.
-  // Everything filed under this contest's own id still comes from the
-  // problemset, which is most of a round.
-  CodeforcesHttp.get = async () => standingsPage("2197");
-
+test("losing the standings answers sourceUnreachable, so the add retries", async () => {
+  // This used to be soft: the standings call only supplied ratings, so losing it
+  // cost the shared problems an estimate. It is now the *only* source of the
+  // roster, so losing it means there is no contest to store — and an unreachable
+  // API is a reason to wait and retry, not to refuse.
   const result = await fetchContestRecord({
     contestId: "2197",
     subtype: "OFFICIAL",
     session: {
       service: {
         getProblemsetProblems: async () => ({
-          problems: INDEXES.map((index, i) => ({
-            contestId: 2197, index, rating: 800 + i * 100, tags: ["math"],
-          })),
+          problems: [{ contestId: 2197, index: "A", rating: 800, tags: [] }],
         }),
         getPublicContestStandings: async () => {
-          throw new Error("network");
+          throw Object.assign(new Error("network"), { isSourceUnreachable: true });
         },
         getContestList: async () => [],
-        getUsersInfo: async () => { throw new Error("nothing needs estimating"); },
       },
     },
   });
 
-  assert.equal(result.status, "ready");
-  assert.deepEqual(result.contest.problems.map((p) => p.ratingSource),
-    ["official", "official", "official"]);
+  assert.equal(result.status, "sourceUnreachable");
+  assert.equal(shouldWait(result.status), true);
+});
+
+test("the official path makes no HTML request at all", async () => {
+  // The whole point of the change, and nothing else would catch a
+  // reintroduction: a scrape here is what Cloudflare challenges, and it is why
+  // adding official contests broke entirely.
+  let scraped = false;
+  CodeforcesHttp.get = async () => { scraped = true; return standingsPage("2197"); };
+
+  await fetchContestRecord({
+    contestId: "2197",
+    subtype: "OFFICIAL",
+    session: {
+      service: {
+        getProblemsetProblems: async () => ({ problems: [] }),
+        getPublicContestStandings: async () => ({
+          contest: { name: "Round", startTimeSeconds: 1000 },
+          problems: [{ index: "A", name: "Alpha", rating: 800, tags: [] }],
+          rows: [],
+        }),
+        getContestList: async () => [],
+        getUsersInfo: async () => [],
+      },
+    },
+  });
+
+  assert.equal(scraped, false, "official contests must not touch the standings page");
 });

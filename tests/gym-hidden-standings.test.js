@@ -108,15 +108,31 @@ const submission = (index, party, verdict = "OK") => ({
   verdict,
 });
 
-test("an official contest with no standings table still fails, and never reaches the fallback", async () => {
-  serve({ standings: NO_TABLE, problems: problemsPage(1) });
+test("an official contest never reaches the scrape, so the fallback cannot open for it", async () => {
+  // This used to assert that an official contest with no standings *table* failed
+  // loudly rather than taking the gym fallback — the reasoning being that a
+  // missing table is far likelier a layout change than a deliberate setting.
+  //
+  // That reasoning is now moot in a better way: official contests read
+  // `contest.standings` and never fetch the page at all, so there is no table to
+  // be missing. What the test protects is unchanged — the hidden-standings
+  // fallback stays gym-only — but the official half is now structural rather
+  // than a guard that could be got wrong.
+  const seen = serve({ standings: NO_TABLE, problems: problemsPage(1) });
 
-  // Far more likely a Codeforces layout change than a deliberate setting, and
-  // CLAUDE.md's rule is that those fail loudly rather than being routed around.
-  await assert.rejects(
-    () => readSolveStats("contest", "2193", forbiddenService()),
-    /didn't contain a standings table/,
-  );
+  const stats = await readSolveStats("contest", "2193", forbiddenService({
+    getPublicContestStandings: async () => ({
+      contest: { name: "Round 2193", startTimeSeconds: 4242 },
+      problems: [{ index: "A", name: "Alpha", rating: 900, tags: ["math"] }],
+      rows: [],
+    }),
+  }));
+
+  assert.deepEqual(seen, [], "official contests must make no HTML request");
+  assert.equal(stats.contestName, "Round 2193");
+  assert.equal(stats.startTimeSeconds, 4242, "the start time arrives here now");
+  assert.deepEqual(stats.problems.map((p) => p.index), ["A"]);
+  assert.equal(stats.problems[0].ratingSource, "official");
 });
 
 test("a gym whose standings are readable never calls contest.status", async () => {

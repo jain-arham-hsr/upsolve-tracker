@@ -9,8 +9,22 @@ import {
 
 /**
  * Fetches problem metadata and solve counts for a contest.
- * For official contests, scrapes the standings page totals row.
- * For gym contests, uses the API to count solves, excluding ghost entries.
+ *
+ * **Official contests never touch HTML.** One unsigned `contest.standings` call
+ * carries the contest name, the problems in order with their published ratings
+ * and tags, the start time, and rows enough to count in-contest solves. That
+ * call is made anyway — it is the only thing that reports a shared Div. 1 /
+ * Div. 2 problem's rating under this contest's index — so scraping the page for
+ * the same facts was work we paid for twice.
+ *
+ * It saves no bytes: the scrape was ~760 KB against a response of ~8.5 MB either
+ * way. What it removes is the failure mode. That scrape was the sole
+ * Cloudflare-exposed request on the official path, and a challenge there broke
+ * adding official contests outright.
+ *
+ * **Gyms still scrape**, because a gym's roster has no API source: its standings
+ * need signing, and a hidden-standings gym answers FAILED to that call entirely.
+ *
  * @param {string} type - "contest" or "gym"
  * @param {string} contestId
  * @param {CodeforcesService} [cfService] - Required for gym contests
@@ -21,6 +35,8 @@ import {
  *   where it is the field the estimator would otherwise read from standings.
  */
 export async function readSolveStats(type, contestId, cfService = null) {
+  if (type !== "gym") return officialStats(contestId, cfService);
+
   let scraped;
   try {
     scraped = await scrapeContestProblems(type, contestId);
@@ -34,43 +50,6 @@ export async function readSolveStats(type, contestId, cfService = null) {
   }
 
   const { contestName, problems, solveCountsRead } = scraped;
-
-  if (type !== "gym") {
-    // Take the published ratings and tags Codeforces attaches to *this*
-    // contest's problems. `problemset.problems` lists each problem once, under
-    // the contest it originated in — so a Div. 2 round sharing problems with a
-    // Div. 1 one finds nothing for them under its own id, and the estimator
-    // then rates problems Codeforces has already rated. See
-    // `api.js#getPublicContestStandings` for why nothing cheaper works.
-    //
-    // Failure is soft: `problemset-sync.js` still runs afterwards and covers
-    // every problem filed under this contest's own id, which is most of them.
-    // Losing this call costs the shared ones an estimate, not the add.
-    try {
-      const standings = await cfService.getPublicContestStandings(contestId);
-      applyStandingsProblemData(standings, problems);
-    } catch (error) {
-      console.info(
-        `[Codeforces] Couldn't read published ratings from ${contestId}'s standings; ` +
-          `anything the problemset doesn't cover will be estimated. (${error.message})`,
-      );
-    }
-
-    return {
-      contestName,
-      problems,
-      // Still false: `problemset-sync.js` must run regardless, both to cover
-      // anything above that failed and because it is what re-checks weekly as
-      // Codeforces publishes ratings later.
-      tagsSynced: false,
-      startTimeSeconds: null,
-      solveCountsRead,
-      partyHandles: null,
-      // Official rounds are gated on the problemset instead, which a running
-      // contest cannot be in — so this path needs no phase of its own.
-      finished: null,
-    };
-  }
 
   const standings = await cfService.getContestStandings(contestId);
   populateSolveCountsFromApi(standings, problems);
@@ -112,6 +91,62 @@ export async function readSolveStats(type, contestId, cfService = null) {
     // it travels rather than being fetched again. Gym only — the official path
     // never fetches this, and reads `ratingChanges` instead.
     standings,
+  };
+}
+
+/**
+ * Everything an official contest needs, from one response.
+ *
+ * Failure is hard here, unlike the gym path's soft fallbacks: this is the only
+ * source of the roster, so losing it means there is no contest to store. It
+ * answers `sourceUnreachable` rather than refusing, because the API being
+ * unreachable is a reason to retry — see contest-status.js. Deliberately no
+ * fallback to the scrape: keeping one would preserve the exact HTML path this
+ * removes, for a case where Cloudflare has usually blocked it anyway.
+ */
+async function officialStats(contestId, cfService) {
+  const standings = await cfService.getPublicContestStandings(contestId);
+
+  const problems = (standings?.problems ?? []).map((problem) => ({
+    index: problem.index,
+    name: problem.name,
+  }));
+
+  if (problems.length === 0) {
+    throw Object.assign(
+      new Error(
+        `Codeforces returned no problems for contest ${contestId}, so there is ` +
+          `nothing to store.`,
+      ),
+      { isSourceUnreachable: true },
+    );
+  }
+
+  // Published ratings and tags ride on the same entries.
+  applyStandingsProblemData(standings, problems);
+
+  // The same counter the gym path uses. Verified to agree exactly with counting
+  // `points > 0` across all seven problems of a real round, so official needs no
+  // second implementation — and the ghost filter inside it is simply a no-op
+  // here, since a parameterless official response is CONTESTANT-only.
+  populateSolveCountsFromApi(standings, problems);
+
+  return {
+    contestName: standings?.contest?.name ?? `Contest ${contestId}`,
+    problems,
+    // Still false: `problemset-sync.js` must run regardless, both to cover
+    // anything this response left unrated and because it is what re-checks
+    // weekly as Codeforces publishes ratings later.
+    tagsSynced: false,
+    // Arrives here now, where it used to be null until `contest.list` was
+    // fetched — which `start-times.js` will now skip entirely.
+    startTimeSeconds: standings?.contest?.startTimeSeconds ?? null,
+    // No totals row to misparse any more; counts come from rows or not at all.
+    solveCountsRead: true,
+    partyHandles: null,
+    // Official rounds are gated on the problemset instead, which a running
+    // contest cannot be in — so this path needs no phase of its own.
+    finished: null,
   };
 }
 
