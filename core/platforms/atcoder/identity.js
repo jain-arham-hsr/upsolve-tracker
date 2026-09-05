@@ -11,8 +11,7 @@
  * changed-identity path in `services/platform-identity.js`, which clears this
  * platform's flags rather than merging them, so the mistake is recoverable.
  */
-import { readSettingsValues } from "../../services/secure-store.js";
-import { atcoder } from "./descriptor.js";
+import { getSettings } from "../../settings/store.js";
 import { extractRating } from "./profile.js";
 import { extractSignedInUser } from "./page-data.js";
 import { getPage } from "./http.js";
@@ -20,7 +19,7 @@ import { getPage } from "./http.js";
 const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
 
 export async function createSession() {
-  return createSessionFrom(await readSettingsValues(atcoder));
+  return createSessionFrom(await getSettings([HANDLE_KEY]));
 }
 
 /** The same session from unsaved values, so Settings can verify what you typed. */

@@ -1,34 +1,32 @@
 /**
  * The settings page.
  *
- * It knows about *fields*, not about platforms. Every platform section comes
- * from `listPlatforms()` and each descriptor's `settingsFields`, and every
- * check runs through `getAdapter()` — so adding a platform touches no file
- * here. It used to import all three adapters plus Codeforces' API client
- * directly, and hand-write three near-identical sections in the HTML.
+ * It knows about *sections and fields*, never about platforms. Sections come
+ * from `core/settings/schema.js`, and the only platform id involved is
+ * `section.verify.adapter` — a string handed straight to `getAdapter()` and
+ * never read here. So this file stays agnostic even though the schema it
+ * renders is hand-written.
+ *
+ * A section is a **credential set** rather than a platform, which is what lets
+ * two Codeforces platforms share one key pair and one "Test connection" button
+ * instead of rendering the same three fields twice.
  *
  * The verdicts are the adapters' own words. This page used to compose its own
  * for CodeChef — re-checking `session.signedIn` and writing a "signed out"
  * message that `verifyIdentity` already produces — so the same condition read
  * differently here and in the queue's status strip. One message, one author.
  */
-import { listPlatforms } from "../../platforms/registry.js";
 import { getAdapter } from "../../platforms/adapters.js";
-import {
-  saveDirHandle,
-  loadDirHandle,
-  clearDirHandle,
-  readSettingsValues,
-  writeSettingsValues,
-} from "../../services/secure-store.js";
-import { renderPlatformSettings, describeIdentity } from "./platform-settings.js";
+import { saveDirHandle, loadDirHandle, clearDirHandle } from "../../services/secure-store.js";
+import { SECTIONS } from "../../settings/schema.js";
+import { readSection, writeSettings } from "../../settings/store.js";
+import { renderSettingsSections, describeIdentity } from "./sections.js";
 
 const AUTO_EXPORT_KEY = "upsolve_tracker.auto_export";
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const platforms = listPlatforms();
-  const mount = document.getElementById("platform-settings");
-  mount.innerHTML = renderPlatformSettings(platforms);
+  const mount = document.getElementById("settings-sections");
+  mount.innerHTML = renderSettingsSections(SECTIONS);
 
   const autoExportCheckbox = document.getElementById("auto-export-checkbox");
   const folderInfo = document.getElementById("folder-info");
@@ -37,13 +35,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   const saveBtn = document.getElementById("save-btn");
   const saveMsg = document.getElementById("save-msg");
 
-  const inputFor = (key) => mount.querySelector(`[data-field="${key}"]`);
-  const statusFor = (id) => mount.querySelector(`[data-status="${id}"]`);
+  const inputFor = (slug) => mount.querySelector(`[data-field="${slug}"]`);
+  const statusFor = (slug) => mount.querySelector(`[data-status="${slug}"]`);
 
   /** What is currently *typed*, which is what a check must be run against. */
-  const typedValues = (platform) =>
+  const typedValues = (section) =>
     Object.fromEntries(
-      platform.settingsFields.map((field) => [field.key, inputFor(field.key).value.trim()]),
+      section.fields.map((field) => [field.slug, inputFor(field.slug).value.trim()]),
     );
 
   let pendingDirHandle = null;
@@ -52,14 +50,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   // JOB 1: LOAD EXISTING SETTINGS
   // ==========================================
   const [saved, general, dirHandle] = await Promise.all([
-    Promise.all(platforms.map((platform) => readSettingsValues(platform))),
+    Promise.all(SECTIONS.map((section) => readSection(section))),
     chrome.storage.local.get([AUTO_EXPORT_KEY]),
     loadDirHandle(),
   ]);
 
   saved.forEach((values) => {
-    for (const [key, value] of Object.entries(values)) {
-      if (value) inputFor(key).value = value;
+    for (const [slug, value] of Object.entries(values)) {
+      if (value) inputFor(slug).value = value;
     }
   });
 
@@ -117,22 +115,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     element.classList.toggle("failure", ok === false);
   };
 
-  async function verify(platform) {
-    const status = statusFor(platform.id);
-    const values = typedValues(platform);
+  async function verify(section) {
+    const status = statusFor(section.slug);
+    const values = typedValues(section);
 
     if (Object.values(values).some((value) => !value)) {
       // A section you have not filled in yet is not a failure, so it says
       // nothing — unless it asked you to press something, in which case it owes
       // you an explanation for doing nothing. `ok` stays undefined when there is
       // no message, or an empty line would still be marked red.
-      const message = platform.verify.incomplete ?? "";
+      const message = section.verify.incomplete ?? "";
       setStatus(status, message, message ? false : undefined);
       return;
     }
 
     setStatus(status, "Checking…");
-    const adapter = getAdapter(platform.id);
+    const adapter = getAdapter(section.verify.adapter);
 
     try {
       const identity = await adapter.verifyIdentity(await adapter.createSessionFrom(values));
@@ -145,13 +143,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  for (const platform of platforms) {
-    if (platform.verify.trigger === "button") {
-      const button = mount.querySelector(`[data-verify="${platform.id}"]`);
+  for (const section of SECTIONS) {
+    if (section.verify.trigger === "button") {
+      const button = mount.querySelector(`[data-verify="${section.slug}"]`);
       button.addEventListener("click", async () => {
         button.disabled = true;
         try {
-          await verify(platform);
+          await verify(section);
         } finally {
           button.disabled = false;
         }
@@ -162,9 +160,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Checked on load as well as on change: the dangerous state on a
     // session-based platform is being signed in as someone else, which
     // otherwise looks exactly like a normal sync.
-    const last = platform.settingsFields.at(-1);
-    inputFor(last.key).addEventListener("change", () => verify(platform));
-    await verify(platform);
+    const last = section.fields.at(-1);
+    inputFor(last.slug).addEventListener("change", () => verify(section));
+    await verify(section);
   }
 
   // ==========================================
@@ -172,7 +170,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ==========================================
   saveBtn.addEventListener("click", async () => {
     await Promise.all([
-      ...platforms.map((platform) => writeSettingsValues(platform, typedValues(platform))),
+      ...SECTIONS.map((section) => writeSettings(typedValues(section))),
       chrome.storage.local.set({ [AUTO_EXPORT_KEY]: autoExportCheckbox.checked }),
     ]);
 

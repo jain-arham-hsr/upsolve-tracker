@@ -19,10 +19,11 @@
       never clear, and it would look like the sync was merely slow.
     </p>
 
-    <!-- One section per platform, built from each descriptor's settingsFields.
-         Hand-writing these is what let AtCoder ship with no verdict line and no
-         CSS rule for it; see options/platform-settings.js. -->
-    <div id="platform-settings"></div>
+    <!-- One section per credential set, rendered from core/settings/schema.js.
+         The schema is hand-written; the markup is not. Hand-writing the markup
+         is what let AtCoder ship with no verdict line and no CSS rule for it,
+         so it is still generated — see options/sections.js. -->
+    <div id="settings-sections"></div>
 
     <section class="settings-section">
       <h3 class="section-head">Backup</h3>

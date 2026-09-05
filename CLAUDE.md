@@ -78,7 +78,7 @@ The test step is the gate: before it existed the workflow would happily build an
 - The manifest is the entry-point graph. HTML entries (`side_panel.default_path`, `options_ui.page`) and the service worker point at **source** paths (`core/ui/index.html`, `targets/chrome/background.js`); CRXJS crawls and rewrites them. A new page must be registered in the manifest to be built.
 - `@core` aliases to `core/`, though most existing imports use relative paths.
 - `core/` is target-agnostic business logic; `targets/<browser>/` holds only the manifest and background worker. Keep browser-specific glue in `targets/`.
-- **Everything outside `core/platforms/` is platform-agnostic, and that is now enforced across the whole subtree.** `registry.js` and `adapters.js` are the only two modules allowed to know which platforms exist; everything else asks them. Five wholly-Codeforces modules used to sit in shared space — the signed API client, the scrape, its HTML parser, its HTTP client and the start-time sync — plus `secure-store.js` hardcoding three ids and their storage keys, `platform-icons.js` as a three-key map, and a settings page importing all three adapters by name.
+- **Everything outside `core/platforms/` is platform-agnostic, and that is now enforced across the whole subtree.** `registry.js` and `adapters.js` are the only two modules allowed to know which platforms exist; everything else asks them. Five wholly-Codeforces modules used to sit in shared space — the signed API client, the scrape, its HTML parser, its HTTP client and the start-time sync — plus `secure-store.js` hardcoding three ids and their storage keys (it now stores a secret by slug and knows nothing else), `platform-icons.js` as a three-key map, and a settings page importing all three adapters by name.
 
   `start-time-service.js` was the instructive one, and an earlier version of this file argued it should stay. It exported `syncStartTimes` (Codeforces-only) *and* `byStartTimeDesc` (a pure comparator `contest-list.js` uses). One genuinely shared export is what kept a Codeforces module looking like shared infrastructure. It is split: the comparator is in `queue-order.js`, the rest is `platforms/codeforces/start-times.js`.
 
@@ -132,8 +132,6 @@ It also answers everything shared code used to hardcode about a platform, which 
 | `icon` | keeping a three-key map of marks in `ui/platform-icons.js` |
 | `chartColor`, `ratingBandClass` | assigning colours or rank tints by id |
 | `hostPermissions` | hand-listing origins in `targets/chrome/manifest.json` |
-| `settingsFields` | naming three ids and their storage keys in `secure-store.js` |
-| `verify` | branching on which section has a button |
 
 `registry.js` and `adapters.js` are the **only** two modules allowed to enumerate platforms. Nothing else — not a view, not a service, not the build — should branch on one, and `tests/module-boundaries.test.js` fails if it does.
 
@@ -236,7 +234,7 @@ directory walk is involved. `estimator` really is optional — CodeChef publishe
 The composed adapter exposes six things, two of them optional:
 
 - `createSession()` — loads whatever that site needs to authenticate, from saved settings. **The orchestrator never sees a credential.**
-- `createSessionFrom(values)` — the same session from a `settingsFields` key→value map that has *not* been saved. Settings verifies what you typed rather than what is stored, so a wrong key tells you before you come to rely on it; this is what lets it do that without reaching past the adapter into a platform's API client, which is what it used to do. `createSession()` is now this function over saved values, so the two cannot diverge.
+- `createSessionFrom(values)` — the same session from a slug→value map that has *not* been saved. Settings verifies what you typed rather than what is stored, so a wrong key tells you before you come to rely on it; this is what lets it do that without reaching past the adapter into a platform's API client, which is what it used to do. `createSession()` is now this function over saved values, so the two cannot diverge.
 - `fetchContestRecord({contestId, subtype, session, onProgress})` — the entire acquisition pipeline behind one call, returning a stored-shape contest whose problems all carry `rating`, `ratingSource`, `tags` and `officialSolves`.
 - `fetchSolvedKeys(session, onProgress)` — a Set of `platform.solvedKey(...)` values.
 - `verifyIdentity(session)` — `{username, rating}` or a throw, run before any user-specific read. Its **message is the user-facing verdict**, in Settings and in the queue's status strip alike; see the identity section below.
@@ -799,7 +797,7 @@ CF tags are editable after publication, so a problem can gain tags days later �
 ### Storage split — this is deliberate
 
 - **`chrome.storage.local`** (`services/storage.js`, `LocalDB`) — `trackedContests` array, keyed by `platform:id` (see the platform registry above), plus settings under dotted keys `upsolve_tracker.handle` and `upsolve_tracker.auto_export`. This is what the Export/Import JSON backup dumps wholesale.
-- **IndexedDB** (`services/secure-store.js`) — API key/secret and the `FileSystemDirectoryHandle`. Credentials live here specifically so they never land in an exported backup; the directory handle lives here because handles aren't serializable into `chrome.storage`.
+- **IndexedDB** (`services/secure-store.js`) — API key/secret, by the slug `core/settings/schema.js` declares, and the `FileSystemDirectoryHandle`. Credentials live here specifically so they never land in an exported backup; the directory handle lives here because handles aren't serializable into `chrome.storage`.
 
 `LocalDB` deliberately holds only the tracked-contest methods. Settings are read directly from their dotted keys (`upsolve_tracker.handle`, `upsolve_tracker.auto_export`, `upsolve_tracker.platform_filter`, `upsolve_tracker.tag_rating_range`), and solved state is derived fresh from `user.status` on every sync rather than cached. Earlier accessors for a `cfHandle` key and a `solvedCache` were removed — nothing wrote them.
 
@@ -976,23 +974,80 @@ Two apparent duplicates are deliberate and should stay: `.contest-type` appears 
 
 The rank-band colours live in `--band-*` variables so the histogram fills (`.band-*`) and the queue's rating text (`.tone-*`) cannot drift apart.
 
-### The settings page is generated, one section per platform
+### The settings page: a hand-written schema, generated markup
 
-`options/index.html` holds only the intro and the Backup section. Everything platform-shaped is rendered by `options/platform-settings.js` from each descriptor's **`settingsFields`**, and every check runs through `getAdapter()` — so adding a platform touches no file on this page. It used to import all three adapters plus Codeforces' API client directly and hand-write three near-identical sections.
+`core/settings/schema.js` declares the page — sections, fields, and a **slug**
+per field — and `core/settings/store.js` reads and writes by slug, routing each
+to `chrome.storage.local` or IndexedDB from the field's declared `store`.
+Anything that needs a value asks for the slug, the way a WordPress theme calls
+`get_option`. `core/platforms/*/identity.js` names the slugs it wants and nothing
+else; `options/index.html` holds only the intro and the Backup section, and
+`options/sections.js` renders the rest.
 
-A field declares `key`, `label`, `type`, `placeholder`, `help` and **`store`**: `"local"` for `chrome.storage.local`, `"secret"` for IndexedDB, which is what keeps a key pair out of the exported backup. The keys are the ones already in use (`upsolve_tracker.handle`, `api_key`, `api_secret`), so nothing stored had to move — and a **typo in a secret's key is the one failure here that is silent**, since the value comes back empty and reads as a setting you never saved. `npm run smoke` checks exactly that.
+**A section is a credential set, not a platform**, and that is the whole point.
+The page *was* generated from each descriptor's `settingsFields`, which was the
+right shape while the two were the same thing. They stopped being the same thing
+when Codeforces became two platforms over one account: generating per platform
+asks for one key pair twice, on a page where the two copies then have to agree.
+The abstraction was also thinner than it looked — Codeforces wants a handle *and*
+a key pair behind a button, the other two want a handle checked on change — so it
+spanned a difference rather than a similarity.
 
-`help` and `label` are authored in the descriptors, in this repo, and are injected as **trusted HTML** so the Codeforces key-pair note can carry a link to its API settings page. That is the deliberate exception to the escaping rule; anything originating outside the extension still goes through `escape-html.js`.
+**What is hand-written is the schema; the markup is still generated.** That
+distinction is load-bearing, because hand-written *markup* is what let AtCoder
+ship with no verdict line and no CSS rule for it, while Codeforces and CodeChef
+each had their own. `tests/options-settings.test.js` asserts the rendering, and
+`tests/module-boundaries.test.js` asserts the schema is complete, that every
+`verify.adapter` names a registered platform, and that no two fields share a
+slug — a duplicate slug means two inputs writing one storage key.
 
-**Verification is four lines, because the adapters already word every failure well** — no handle, unknown handle, signed out, wrong account. Adapters gained `createSessionFrom(values)`, building a session from what is *typed* rather than what is stored, so a wrong key tells you before you rely on it; `createSession()` is now that same function over saved values. This deleted real duplication: the page used to re-check `session.signedIn` itself and compose its own CodeChef "signed out" message, so one condition read differently here and in the queue's status strip. Settings now shows the adapter's wording, which is what the queue already showed.
+**`schema.js` is the third module allowed to name a platform**, alongside
+`registry.js` and `adapters.js`, because `verify.adapter` has to. The exception
+is scoped to that one file and recorded in `module-boundaries.test.js`'s
+`ALLOWED`; `store.js` and `options.js` route by slug and by section and still
+fail the test if they name one. Confirmed by adding a platform name to
+`store.js` and watching it go red.
 
-Three CodeChef *failure* verdicts changed wording as a result — signed out, wrong account, and site unreachable. The success line did not: it read "✓ Signed in as <handle>" and still does, because `verifyIdentity` throws unless the two match, so the resolved account and the configured handle are the same string by the time it renders. Codeforces' transient "Checking…" also lost a green tint it should never have had; it is not a success.
+A field declares `slug`, `label`, `type`, `placeholder`, `help` and **`store`**:
+`"local"`, or `"secret"` for IndexedDB, which is what keeps a key pair out of the
+exported backup. The slugs are the ones already in use
+(`upsolve_tracker.handle`, `api_key`, `api_secret`), so nothing stored had to
+move — and a **typo in a secret's slug is the one failure here that is silent**,
+since the value comes back empty and reads as a setting you never saved.
+`npm run smoke` checks exactly that, and separately fails if any slug is asked
+for twice. Both were confirmed by breaking them.
 
-The *"Connected as"* / *"Signed in as"* distinction survives as `describeIdentity` on the adapter — the handle is looked up on two platforms and **is** the session on CodeChef — because putting it anywhere else makes it a branch on the platform in shared code.
+`help` and `label` are authored in this repo and injected as **trusted HTML** so
+the Codeforces key-pair note can carry a link to its API settings page. That is
+the deliberate exception to the escaping rule; anything originating outside the
+extension still goes through `escape-html.js`.
 
-**How a section verifies is the descriptor's call too.** `verify: { trigger: "button", label, help, incomplete }` for Codeforces, where three fields must be filled before a signed request means anything; `{ trigger: "change" }` for the other two, which check on load and on change. That keeps the *"Test connection"* button rather than unifying it away.
+**Verification is four lines, because the adapters already word every failure
+well** — no handle, unknown handle, signed out, wrong account. Adapters supply
+`createSessionFrom(values)`, building a session from what is *typed* rather than
+what is stored, so a wrong key tells you before you rely on it; `createSession()`
+is that same function over saved values. This deleted real duplication: the page
+used to re-check `session.signedIn` itself and compose its own CodeChef "signed
+out" message, so one condition read differently here and in the queue's status
+strip. Settings shows the adapter's wording, which is what the queue already
+showed.
 
-The CSS is now one rule, `.status-text[data-status]`, with spacing scoped to `.form-group > …` so the button's inline verdict — which `.test-row` already spaces with `gap` — is excluded. The three parallel id rules this replaces are precisely how they drifted: Codeforces and CodeChef each had their own `0.85rem` block while AtCoder's had **no rule at all** and fell back to the body's 16px. The old instruction to "add a fourth platform to those two selectors" is gone; a new platform picks the treatment up by existing.
+The *"Connected as"* / *"Signed in as"* distinction survives as `describeIdentity`
+on the adapter — the handle is looked up on two platforms and **is** the session
+on CodeChef — because putting it anywhere else makes it a branch on the platform
+in shared code.
+
+**How a section verifies is the schema's call.** `verify: { trigger: "button",
+adapter, label, help, incomplete }` for Codeforces, where three fields must be
+filled before a signed request means anything; `{ trigger: "change", adapter }`
+for the other two, which check on load and on change. That keeps the *"Test
+connection"* button rather than unifying it away.
+
+The CSS is one rule, `.status-text[data-status]`, with spacing scoped to
+`.form-group > …` so the button's inline verdict — which `.test-row` already
+spaces with `gap` — is excluded. The three parallel id rules this replaced are
+precisely how they drifted: Codeforces and CodeChef each had their own `0.85rem`
+block while AtCoder's had **no rule at all** and fell back to the body's 16px.
 
 ### UI shell
 

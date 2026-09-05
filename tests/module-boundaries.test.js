@@ -43,6 +43,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { listPlatforms } from "../core/platforms/registry.js";
+import { SECTIONS } from "../core/settings/schema.js";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const CORE = path.join(ROOT, "core");
@@ -58,12 +59,22 @@ const PLATFORMS = path.join(CORE, "platforms");
 const ALLOWED = {
   "core/ui/views/stats-view.js":
     "renderHint gates a tag-backfill hint on Codeforces official contests. It " +
-    "looks dead — 0 of 68 tracked contests match — but codeforces/adapter.js " +
-    "still stores publishedDataCheckedAt: null when a problemset sync does not " +
-    "complete, so it can fire. Making it agnostic is not free: the honest " +
-    "condition is 'this platform publishes bulk problem data', and simply " +
-    "dropping the id test would catch Codeforces gyms, whose tags come from the " +
-    "standings instead — so the hint's advice would be wrong for them.",
+    "looks dead — 0 of 68 tracked contests match — but pipeline.js still stores " +
+    "publishedDataCheckedAt: null when a problemset sync does not complete, so " +
+    "it can fire. Making it agnostic is not free: the honest condition is 'this " +
+    "platform publishes bulk problem data', and simply dropping the id test " +
+    "would catch Codeforces gyms, whose tags come from the standings instead — " +
+    "so the hint's advice would be wrong for them.",
+
+  "core/settings/schema.js":
+    "The settings page is declared by hand, and verify.adapter has to name the " +
+    "platform that runs each section's check. This is the third allowed " +
+    "enumerator alongside registry.js and adapters.js, and for the same reason: " +
+    "it is declarative data, not a branch. It is deliberately the *only* file " +
+    "under core/settings/ with the exception — store.js and the options page " +
+    "route by slug and by section, and still fail this test if they name a " +
+    "platform. A section is a credential set rather than a platform, which is " +
+    "what lets two Codeforces platforms share one key pair and one button.",
 };
 
 function sourceFiles(dir, extensions) {
@@ -196,26 +207,53 @@ test("a platform cannot half-register", () => {
       `${platform.id} declares no hostPermissions, so the build would drop its origin`,
     );
 
-    assert.ok(
-      Array.isArray(platform.settingsFields) && platform.settingsFields.length > 0,
-      `${platform.id} declares no settingsFields`,
-    );
-    for (const field of platform.settingsFields) {
-      assert.ok(field.key && field.label && field.type, `${platform.id} has an incomplete field`);
+  }
+});
+
+test("every settings section is complete, and can be verified", () => {
+  // What `a platform cannot half-register` used to assert about a descriptor's
+  // settingsFields. It moved with the fields themselves: a section is a
+  // credential set, so a platform no longer declares one and two platforms can
+  // share one. The failure modes are unchanged — a field with no `store` picks
+  // a store by accident, and a secret written to the wrong one lands in the
+  // exported backup.
+  const ids = listPlatforms().map((platform) => platform.id);
+
+  for (const section of SECTIONS) {
+    assert.ok(section.slug && section.title, `a section is missing its slug or title`);
+    assert.ok(section.fields?.length > 0, `${section.slug} declares no fields`);
+
+    for (const field of section.fields) {
+      assert.ok(field.slug && field.label && field.type, `${section.slug} has an incomplete field`);
       assert.ok(
         ["local", "secret"].includes(field.store),
-        `${platform.id}'s ${field.key} must say which store it belongs in`,
+        `${section.slug}'s ${field.slug} must say which store it belongs in`,
       );
     }
 
     assert.ok(
-      ["change", "button"].includes(platform.verify?.trigger),
-      `${platform.id} declares no verify trigger`,
+      ["change", "button"].includes(section.verify?.trigger),
+      `${section.slug} declares no verify trigger`,
     );
-    if (platform.verify.trigger === "button") {
-      assert.ok(platform.verify.label, `${platform.id} wants a button without a label`);
+    if (section.verify.trigger === "button") {
+      assert.ok(section.verify.label, `${section.slug} wants a button without a label`);
     }
+
+    // The one platform id on this page. A typo here is silent in a way the
+    // others are not: getAdapter returns null and the button throws on click.
+    assert.ok(
+      ids.includes(section.verify.adapter),
+      `${section.slug} verifies through "${section.verify.adapter}", which is not a registered platform`,
+    );
   }
+});
+
+test("no two settings fields share a slug", () => {
+  // A slug is the storage key, so a duplicate means one section silently reads
+  // and overwrites another's value — and `fieldFor` would resolve it to
+  // whichever was declared first, including its `store`.
+  const slugs = SECTIONS.flatMap((section) => section.fields.map((field) => field.slug));
+  assert.deepEqual(slugs, [...new Set(slugs)], "two settings fields share a slug");
 });
 
 test("the shared modules that need no imports still need none", () => {

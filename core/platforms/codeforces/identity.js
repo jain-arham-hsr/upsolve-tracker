@@ -11,12 +11,19 @@
  * that, by clearing this platform's flags rather than merging them.
  */
 import { CodeforcesService } from "./api.js";
-import { readSettingsValues } from "../../services/secure-store.js";
-import { codeforces } from "./descriptor.js";
+import { getSettings } from "../../settings/store.js";
+
+/**
+ * The slugs this platform reads, named here rather than declared on the
+ * descriptor. A platform asks the settings store for what it needs, the way a
+ * WordPress theme asks `get_option` — which is what lets both Codeforces
+ * platforms read one key pair from one settings section.
+ */
+const SLUGS = ["upsolve_tracker.handle", "api_key", "api_secret"];
 
 /** @throws when the extension hasn't been configured yet. */
 export async function createSession() {
-  return createSessionFrom(await readSettingsValues(codeforces));
+  return createSessionFrom(await getSettings(SLUGS));
 }
 
 /**
@@ -27,7 +34,7 @@ export async function createSession() {
  * to construct a CodeforcesService itself — reaching straight past the adapter
  * into a platform's API client, which is the coupling this removes.
  *
- * @param {Record<string, string|null>} values - keyed by `settingsFields` key.
+ * @param {Record<string, string|null>} values - keyed by settings slug.
  */
 export function createSessionFrom(values) {
   const apiKey = values.api_key;

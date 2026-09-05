@@ -202,45 +202,7 @@ export const codeforces = {
    * it can carry a link — it is deliberately *not* run through escapeHtml,
    * which everything originating outside the extension must be.
    */
-  settingsFields: [
-    {
-      key: "upsolve_tracker.handle",
-      label: "Handle",
-      store: "local",
-      type: "text",
-      placeholder: "e.g., tourist",
-      help: "Used to look up your accepted submissions.",
-    },
-    {
-      key: "api_key",
-      label: "API key",
-      store: "secret",
-      type: "text",
-      placeholder: "e.g., 70f9b...",
-      help:
-        'Generate a key pair at <a href="https://codeforces.com/settings/api" target="_blank" rel="noreferrer">codeforces.com/settings/api</a>, then paste both halves below. The pair is stored in this browser only, is used to sign requests to codeforces.com, and is kept out of the JSON backup on purpose.',
-    },
-    {
-      key: "api_secret",
-      label: "API secret",
-      store: "secret",
-      type: "password",
-      placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
-      help: "The secret half of the same key pair.",
-    },
-  ],
 
-  /**
-   * A button rather than verifying on change, because three fields have to be
-   * filled before the check can mean anything — and a signed request fired
-   * after each one would mostly be asking with an incomplete key pair.
-   */
-  verify: {
-    trigger: "button",
-    label: "Test connection",
-    help: "Checks the handle and key against Codeforces before you rely on them.",
-    incomplete: "Fill in all three fields first.",
-  },
 
   capabilities: {
     // problemset.problems carries tags. Gyms sit outside CF's taxonomy and

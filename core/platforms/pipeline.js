@@ -4,7 +4,7 @@
  * Before this, each platform wrote its own `fetchContestRecord` end to end, and
  * the parts that were identical had drifted into three copies: the stored
  * contest literal, the per-problem defaults, and the solved-key mapping.
- * `codeforces/adapter.js` even wrote `platform: "codeforces"` as a string
+ * each platform even wrote its own `platform:` id as a string
  * literal beside a descriptor that already knew its own id.
  *
  * ## What lives here, and the rule that decides
@@ -107,7 +107,7 @@ export function buildAdapter(descriptor, { problems, submissions, identity, esti
     createSession: identity.createSession,
     createSessionFrom: identity.createSessionFrom,
     verifyIdentity: identity.verifyIdentity,
-    // Optional by design: `platform-settings.js` falls back to "Connected as X"
+    // Optional by design: `options/sections.js` falls back to "Connected as X"
     // when a platform does not override it.
     describeIdentity: identity.describeIdentity,
 

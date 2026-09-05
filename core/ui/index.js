@@ -6,7 +6,7 @@ import {
   verifyExportPermission,
   writeBackup,
 } from "../services/auto-export.js";
-import { hasCompleteSetup } from "../services/secure-store.js";
+import { hasCompleteSetup } from "../settings/store.js";
 import { processNewContest } from "../contest-manager.js";
 import { LocalDB } from "../services/storage.js";
 import { matchContestUrl, findTrackedContest } from "../platforms/registry.js";

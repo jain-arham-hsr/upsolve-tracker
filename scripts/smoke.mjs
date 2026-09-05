@@ -547,8 +547,8 @@ if (errors.length) {
 // CLAUDE.md carried this as a known gap for a long time: three verifyIdentity
 // paths, credential load/save and the folder picker all live there, and a
 // `nullAt`-class typo would have shipped. It is worth covering now for a second
-// reason — the platform sections are generated from the descriptors, so a
-// descriptor that declares a field the page cannot render fails here.
+// reason — the sections are generated from `core/settings/schema.js`, so a
+// schema that declares a field the page cannot render fails here.
 //
 // Two things this needs that are easy to get wrong. The page sits three levels
 // down, so `/assets/` rewrites to `../../../assets/` and not the panel's two.
@@ -580,8 +580,8 @@ const optionsDriver = `<script type="module">
   for (const button of document.querySelectorAll("[data-verify]")) button.click();
   await wait(1200);
 
-  const sections = [...document.querySelectorAll(".settings-section[data-platform]")].map((s) => ({
-    id: s.getAttribute("data-platform"),
+  const sections = [...document.querySelectorAll(".settings-section[data-section]")].map((s) => ({
+    id: s.getAttribute("data-section"),
     head: s.querySelector(".section-head")?.textContent ?? null,
     inputs: [...s.querySelectorAll("input")].map((i) => ({
       key: i.getAttribute("data-field"), type: i.getAttribute("type"), value: i.value,
@@ -615,10 +615,26 @@ if (!optionsTitle) {
 
 const optionsReport = JSON.parse(decode(optionsTitle[1]));
 
+// One section per *credential set*, which is no longer one per platform:
+// Codeforces official and gyms are one account and one key pair.
 if (optionsReport.sections.length !== 3) {
   console.error(
-    `smoke: expected a section per platform, got ${optionsReport.sections.length}` +
+    `smoke: expected one section per credential set, got ${optionsReport.sections.length}` +
       ` — [${optionsReport.sections.map((s) => s.id).join(", ")}]`,
+  );
+  process.exit(1);
+}
+
+// The check that says the above is right for the right reason. Rendering per
+// platform would ask for the Codeforces key pair twice, and two inputs writing
+// one storage key is a page that cannot agree with itself. Asserted over slugs
+// rather than over a section count, so it keeps meaning this as platforms are
+// added.
+const slugs = optionsReport.sections.flatMap((s) => s.inputs.map((i) => i.key));
+const repeated = slugs.filter((slug, i) => slugs.indexOf(slug) !== i);
+if (repeated.length) {
+  console.error(
+    `smoke: a credential is asked for more than once — [${[...new Set(repeated)].join(", ")}]`,
   );
   process.exit(1);
 }
@@ -692,7 +708,7 @@ if (process.exitCode) {
 }
 console.log(
   `smoke: options page clean — ${optionsReport.sections.length} sections,` +
-    ` ${optionsReport.sections.flatMap((s) => s.inputs).length} fields, ${buttons} verify button(s)`,
+    ` ${slugs.length} fields (no slug asked twice), ${buttons} verify button(s)`,
 );
 
 console.log("smoke: views clean, fonts loaded —", seen.join("  "), " drilled:" + drilled);

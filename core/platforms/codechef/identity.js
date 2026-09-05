@@ -10,8 +10,7 @@
  */
 import { getDashboardHtml } from "./api.js";
 import { extractSession } from "./page-data.js";
-import { readSettingsValues } from "../../services/secure-store.js";
-import { codechef } from "./descriptor.js";
+import { getSettings } from "../../settings/store.js";
 
 const HANDLE_KEY = "upsolve_tracker.codechef_handle";
 
@@ -23,7 +22,7 @@ const HANDLE_KEY = "upsolve_tracker.codechef_handle";
  * solved status the API is about to hand back.
  */
 export async function createSession() {
-  return createSessionFrom(await readSettingsValues(codechef));
+  return createSessionFrom(await getSettings([HANDLE_KEY]));
 }
 
 /** The same session from unsaved values, so Settings can verify what you typed. */

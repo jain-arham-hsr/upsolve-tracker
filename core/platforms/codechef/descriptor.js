@@ -149,21 +149,6 @@ export const codechef = {
             dominant-baseline="central" letter-spacing="-0.7">CC</text>
     </svg>`,
 
-  settingsFields: [
-    {
-      key: "upsolve_tracker.codechef_handle",
-      label: "Handle",
-      store: "local",
-      type: "text",
-      placeholder: "e.g., tourist",
-      help:
-        "No key needed. CodeChef answers for whoever is signed in at codechef.com, " +
-        "so this handle is what that session gets checked against \u2014 if they don't " +
-        "match, syncing stops rather than reading somebody else's solves.",
-    },
-  ],
-
-  verify: { trigger: "change" },
 
   capabilities: {
     // Tags come back with each problem, mixed with the setter's handle and

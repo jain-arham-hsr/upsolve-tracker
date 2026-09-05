@@ -1,7 +1,8 @@
 import templateHtml from "./queue-view.html?raw";
 import { LocalDB } from "../../services/storage.js";
-import { hasCompleteSetup } from "../../services/secure-store.js";
-import { matchesFilter, listPlatforms } from "../../platforms/registry.js";
+import { hasCompleteSetup } from "../../settings/store.js";
+import { SECTIONS } from "../../settings/schema.js";
+import { matchesFilter } from "../../platforms/registry.js";
 import { collectPendingProblems } from "../../pending-problems.js";
 import {
   loadFilter,
@@ -24,12 +25,17 @@ export class QueueView extends HTMLElement {
     this.alertDiv = this.querySelector("#sync-alert");
     this.setupPrompt = this.querySelector("#setup-prompt");
 
-    // Written from the registry rather than spelled out in the template, which
-    // is how it came to offer two platforms out of three: CodeChef was added
-    // and this sentence was not.
+    // Written from the settings schema rather than spelled out in the template,
+    // which is how it came to offer two platforms out of three: CodeChef was
+    // added and this sentence was not.
+    //
+    // Sections rather than platforms, because a section is what you actually
+    // fill in — two Codeforces platforms share one, so naming platforms here
+    // would offer "Codeforces Official" and "Codeforces Gyms" as separate
+    // things to configure when there is only one.
     this.querySelector("#setup-message").textContent =
       "Add a handle in Settings so Upsolve Tracker can track what you've solved — " +
-      `${listNames(listPlatforms().map((platform) => platform.label))}.`;
+      `${listNames(SECTIONS.map((section) => section.title))}.`;
 
     this.querySelector("#btn-open-settings").addEventListener("click", () => {
       chrome.runtime.openOptionsPage();
