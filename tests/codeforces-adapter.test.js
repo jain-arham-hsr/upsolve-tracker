@@ -498,29 +498,60 @@ test("losing the standings answers sourceUnreachable, so the add retries", async
   assert.equal(shouldWait(result.status), true);
 });
 
-test("the official path makes no HTML request at all", async () => {
+test("the official path makes no HTML request at all, estimator included", async () => {
   // The whole point of the change, and nothing else would catch a
   // reintroduction: a scrape here is what Cloudflare challenges, and it is why
   // adding official contests broke entirely.
+  //
+  // **This has to reach the estimator to mean anything.** An earlier version
+  // stubbed the problemset empty, so the add short-circuited on
+  // `notPublishedYet` before acquiring anything and the assertion held for the
+  // wrong reason — it passed just as happily while the official path was still
+  // sampling ~32 standings pages over HTTP. So the contest is in the
+  // problemset, one problem is left unrated, and `contest.ratingChanges` is
+  // empty: exactly the combination that used to scrape.
   let scraped = false;
   CodeforcesHttp.get = async () => { scraped = true; return standingsPage("2197"); };
 
-  await fetchContestRecord({
+  const result = await fetchContestRecord({
     contestId: "2197",
     subtype: "OFFICIAL",
     session: {
       service: {
-        getProblemsetProblems: async () => ({ problems: [] }),
+        getProblemsetProblems: async () => ({
+          problems: [{ contestId: 2197, index: "A", rating: 800, tags: ["math"] }],
+        }),
         getPublicContestStandings: async () => ({
           contest: { name: "Round", startTimeSeconds: 1000 },
-          problems: [{ index: "A", name: "Alpha", rating: 800, tags: [] }],
-          rows: [],
+          // B is unrated everywhere, so the estimator must run for it.
+          problems: [
+            { index: "A", name: "Alpha", rating: 800, tags: [] },
+            { index: "B", name: "Beta", tags: [] },
+          ],
+          rows: Array.from({ length: 120 }, (_, i) => ({
+            party: { ghost: false, members: [{ handle: `u${i}` }] },
+            problemResults: [
+              { bestSubmissionTimeSeconds: 5 },
+              { bestSubmissionTimeSeconds: i < 4 ? 9 : null },
+            ],
+          })),
         }),
+        // Empty: the round is not rated yet, which is what sends the field to
+        // the standings rows rather than to ratingChanges.
+        getContestRatingChanges: async () => [],
+        getUsersInfo: async (handles) => handles.map((handle) => ({ handle, rating: 1500 })),
         getContestList: async () => [],
-        getUsersInfo: async () => [],
       },
     },
   });
 
   assert.equal(scraped, false, "official contests must not touch the standings page");
+  assert.equal(result.status, "ready", result.reason);
+
+  // Proof the run actually reached the branch that used to scrape: B has no
+  // published rating anywhere, so a number here can only have been fitted
+  // against a field measured from the standings rows.
+  const beta = result.contest.problems.find((problem) => problem.index === "B");
+  assert.equal(beta.ratingSource, "estimated", "the estimator never ran, so this proves nothing");
+  assert.ok(beta.rating > 0);
 });

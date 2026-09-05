@@ -3,8 +3,12 @@
  * HTTP client stubbed so no network is touched.
  *
  * The unit tests in standings-dom.test.js check parsing in isolation; these
- * check the arithmetic layered on top, which is where a mistake would quietly
- * mis-size the field and skew every rating in a contest.
+ * check the shaping layered on top.
+ *
+ * This covers the **gym** roster only. Official contests read their roster from
+ * `contest.standings` and no longer touch HTML at all, and the field sampling
+ * that used to live here — the one official path that did — now stratifies the
+ * rows of that same response; see tests/sampling.test.js.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +17,7 @@ import { DOMParser } from "linkedom";
 globalThis.DOMParser = DOMParser;
 
 const { CodeforcesHttp } = await import("../core/platforms/codeforces/http.js");
-const { scrapeContestProblems, sampleParticipantHandles } = await import(
+const { scrapeContestProblems } = await import(
   "../core/platforms/codeforces/scraping.js"
 );
 
@@ -65,11 +69,6 @@ function serveContest(total, opts = {}) {
   return requested;
 }
 
-const sampledCount = (result) =>
-  result.groups.reduce((n, group) => n + group.handles.length, 0);
-const represented = (result) =>
-  result.groups.reduce((n, group) => n + group.handles.length * group.scale, 0);
-
 test("scrapes problems and solve counts off a standings page", async () => {
   serveContest(500);
   const { contestName, problems, solveCountsRead } = await scrapeContestProblems(
@@ -103,54 +102,4 @@ test("reports unreadable solve counts instead of inventing zeroes", async () => 
 test("throws when the standings table can't be found at all", async () => {
   CodeforcesHttp.get = async () => "<html><body><p>Just a page</p></body></html>";
   await assert.rejects(() => scrapeContestProblems("contest", "1"), /standings/i);
-});
-
-test("small contests are read whole, as one unweighted group", async () => {
-  const requested = serveContest(600); // 12 pages, under the sampling threshold
-  const result = await sampleParticipantHandles("1");
-
-  assert.equal(result.groups.length, 1);
-  assert.equal(result.groups[0].scale, 1);
-  assert.equal(result.total, 600);
-  assert.equal(sampledCount(result), 600);
-  assert.equal(new Set(requested).size, 12);
-});
-
-test("large contests are sampled at a fixed cost, sized exactly", async () => {
-  const requested = serveContest(4000); // 80 pages
-  const result = await sampleParticipantHandles("1");
-
-  assert.equal(result.total, 4000);
-  assert.ok(new Set(requested).size <= 32, `read ${new Set(requested).size} pages`);
-  assert.equal(result.groups.length, 2);
-  assert.equal(result.groups[0].scale, 1, "head must be unweighted");
-  // The weights have to add back up to the field, or every rating shifts.
-  assert.equal(Math.round(represented(result)), 4000);
-});
-
-test("a partial final page is measured, not assumed full", async () => {
-  serveContest(3975); // last page holds 25, not 50
-  const result = await sampleParticipantHandles("1");
-  assert.equal(result.total, 3975);
-  assert.equal(Math.round(represented(result)), 3975);
-});
-
-test("no competitor is counted twice across strata", async () => {
-  serveContest(4000);
-  const result = await sampleParticipantHandles("1");
-  const all = result.groups.flatMap((group) => group.handles);
-  assert.equal(all.length, new Set(all).size);
-  assert.equal(all.length, sampledCount(result));
-});
-
-test("an understated last page falls back to reading everything", async () => {
-  // Pagination claims page 40 is last when 80 is: trusting it would size the
-  // field at half its true value and skew every rating in the contest.
-  const requested = serveContest(4000, { claimLastPage: 40 });
-  const result = await sampleParticipantHandles("1");
-
-  assert.equal(result.total, 4000, "must not accept the understated count");
-  assert.equal(result.groups.length, 1, "fallback reads the whole field");
-  assert.equal(sampledCount(result), 4000);
-  assert.ok(new Set(requested).size >= 80);
 });

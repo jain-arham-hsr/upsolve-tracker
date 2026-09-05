@@ -106,8 +106,10 @@ async function acquire({ contestId, subtype, session, onProgress = () => {} }) {
 
   return {
     ...record,
-    // `standings` is passed, never stored: it is a whole gym's field, and the
-    // built contest is what gets written to chrome.storage.
+    // `standings` is passed, never stored: it is a whole contest's field — a
+    // gym's, or ~8.5 MB of an official round's — and the built contest is what
+    // gets written to chrome.storage. Both types carry it now, so neither has
+    // to fetch the same response twice to measure the field.
     context: { type, subtype, solveCountsRead, partyHandles, standings },
   };
 }

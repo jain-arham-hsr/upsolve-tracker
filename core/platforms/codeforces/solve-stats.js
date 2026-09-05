@@ -147,6 +147,10 @@ async function officialStats(contestId, cfService) {
     // Official rounds are gated on the problemset instead, which a running
     // contest cannot be in — so this path needs no phase of its own.
     finished: null,
+    // Carried, never stored. `rating-distribution.js` needs the rows to measure
+    // the field when contest.ratingChanges is empty, and this is the response
+    // it would otherwise fetch a second time.
+    standings,
   };
 }
 

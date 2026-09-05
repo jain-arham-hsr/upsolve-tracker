@@ -142,19 +142,11 @@ async function estimateMissingRatings({
     // the field was recovered from who submitted instead.
     distribution = await getGymRatingDistFromParties(service, partyHandles);
   } else if (type === "contest") {
-    distribution = await getOfficialRatingDist(service, contestId, onProgress);
-    // An empty ratingChanges means the round isn't rated yet — the freshly
-    // finished contest you most want to upsolve. Fall back to the standings.
-    //
-    // The payload must be fetched *unsigned* and handed over. Codeforces serves
-    // a non-gym contest's standings only to an anonymous request with no extra
-    // parameters, and `getContestStandings` signs — so calling it here refused
-    // every time, silently leaving the field empty. A fallback that could never
-    // fire, which is why nothing noticed.
-    if (distributionSize(distribution) === 0) {
-      const standings = await service.getPublicContestStandings(contestId);
-      distribution = await getGymRatingDist(service, contestId, standings);
-    }
+    // `standings` is the response `problems.js` already fetched for the roster,
+    // carried here in `context` — the same trick the gym path uses. It is what
+    // the field falls back to when `ratingChanges` is empty, and passing it
+    // rather than re-fetching removes a second ~8.5 MB request.
+    distribution = await getOfficialRatingDist(service, contestId, standings, onProgress);
   } else {
     // The gym path: `solve-stats.js` already fetched this response to count
     // solves, so reuse it rather than paying for the same call twice.

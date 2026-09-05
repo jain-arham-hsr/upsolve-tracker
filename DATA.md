@@ -104,7 +104,7 @@ The per-platform sections below explain *why*; this is the *where*.
 
 | | Problems | Difficulty | Submissions |
 |:--|:--|:--|:--|
-| **Codeforces**<br>*official* | `contest.standings` — no HTML at all<br><br>Not `problemset.problems`: that files a problem under the contest it *originated* in, so a Div. 2 round sharing problems with a Div. 1 one lists only its own — 2 of 7 for Round 1079. Filtering it by contest id would store a short contest | `contest.standings`, then `problemset.problems`<br><br>Standings first because it is the only thing that reports a *shared* problem's rating under this contest's own index; without it Round 1079's D stored as 1500 against a published 1600. The problemset then covers anything standings left unrated, and is what re-checks weekly<br><br>*Genuinely unrated:* estimated here — solve counts from the same standings rows, the field from `contest.ratingChanges`, or ~32 sampled standings pages when that is empty | `user.status` — one call, whole history |
+| **Codeforces**<br>*official* | `contest.standings` — no HTML at all<br><br>Not `problemset.problems`: that files a problem under the contest it *originated* in, so a Div. 2 round sharing problems with a Div. 1 one lists only its own — 2 of 7 for Round 1079. Filtering it by contest id would store a short contest | `contest.standings`, then `problemset.problems`<br><br>Standings first because it is the only thing that reports a *shared* problem's rating under this contest's own index; without it Round 1079's D stored as 1500 against a published 1600. The problemset then covers anything standings left unrated, and is what re-checks weekly<br><br>*Genuinely unrated:* estimated here — solve counts, and the field, from the same standings rows. The field prefers `contest.ratingChanges`; when that is empty it samples ~1,500 of the rows already in hand and resolves them through `user.info`. **No HTML on this path at all** | `user.status` — one call, whole history |
 | **Codeforces**<br>*gym* | Scraped from `/gym/<id>/standings`<br><br>*Standings hidden:* scraped from the `/gym/<id>` page instead — a problem nobody attempted appears in no submission, so it cannot be recovered from those | `contest.standings` — about a third of gym problems carry Codeforces' own rating<br><br>*The rest:* estimated here. Solve counts **and** field both from `contest.standings`; for a hidden gym, from `contest.status` + `user.info` instead. Never sampled — a gym's whole field arrives in one response<br><br>*Field not visible at all:* refuses to add, since it never becomes visible later | `user.status` — the same call as official |
 | **AtCoder** | Scraped from `/contests/<id>/tasks`<br><br>*Unreadable:* waits and retries every refresh — a contest that hasn't finished doesn't list them | **Always estimated here.** AtCoder publishes no difficulty at all. Fitted from `/contests/<id>/standings/json` 🔒<br><br>*Unreadable:* stores `???` and retries one contest per refresh | Scraped from `/contests/<id>/submissions?f.User=…&f.Status=AC` 🔒<br><br>Once per tracked contest — AtCoder publishes no per-user list |
 | **CodeChef** | `/api/contests/<code>`, then `/api/contests/<code>/problems/<code>` — one request per problem<br><br>*Parent contest:* resolves to the division matching your rating; with no known rating it names the divisions rather than guessing | `difficulty_rating`, from that same per-problem call<br><br>*`-1` or `9999`:* stored as `???`. No estimator — CodeChef rates promptly | `/api/list/problems?group=attempted`, paged |
@@ -175,12 +175,15 @@ unique to it. And why in-contest counts can't come from `problemStatistics`: its
 All the HTML parsing lives in **one file**, `core/platforms/codeforces/standings-dom.js`. If Codeforces
 changes its layout, that's the only place to look.
 
-> **When the page is still read for an official round.** Only to measure the *field*, and
-> only when `contest.ratingChanges` comes back empty — a round Codeforces has not rated yet.
-> Reading standings costs one request per 50 competitors, so a big round would be hundreds;
-> instead ~32 pages are sampled, the top 10 in full (they're what decide the hard problems)
-> plus 20 spread evenly through the rest. Gyms never sample — their whole field arrives in
-> one `contest.standings` response.
+> **The page is never read for an official round.** It used to be, in one case: measuring
+> the *field* when `contest.ratingChanges` came back empty, for a round Codeforces has not
+> rated yet. That now samples the rows of the `contest.standings` response already fetched
+> for the problems, so it costs no extra request and touches no HTML.
+>
+> It is still a *sample* rather than the whole field, because turning rows into ratings
+> costs one `user.info` call per 250 handles: ~1,500 competitors are taken — the top 500 in
+> full, since they decide the hard problems, plus 1,000 spread evenly through the rest.
+> Gyms never sample; their whole field arrives in one response and is small enough to rate.
 
 ### Estimated difficulty
 

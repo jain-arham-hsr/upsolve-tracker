@@ -1,4 +1,4 @@
-import { sampleParticipantHandles } from "./scraping.js";
+import { stratifyRows } from "./sampling.js";
 
 /**
  * A rating distribution the estimator can work from, as one or more strata.
@@ -21,9 +21,26 @@ export function distributionSize(distribution) {
   );
 }
 
+/**
+ * The official field: pre-contest ratings for everyone who entered.
+ *
+ * Two sources, in order of directness.
+ *
+ * 1. `contest.ratingChanges` — the whole field's `oldRating`, exactly the
+ *    quantity wanted, one request. Empty for a round Codeforces has not rated
+ *    yet, which is the freshly-finished contest you most want to upsolve.
+ * 2. The standings rows the caller already holds, stratified and resolved
+ *    through `user.info` — see `sampling.js` for why it is sampled at all when
+ *    every row is in hand.
+ *
+ * @param {object} standings - a `getPublicContestStandings` response, passed in
+ *   rather than fetched. `problems.js` reads it for the roster, so re-fetching
+ *   here cost a second ~8.5 MB response for bytes already in memory.
+ */
 export async function getOfficialRatingDist(
   cfService,
   contestId,
+  standings = null,
   onProgress = () => {},
 ) {
   try {
@@ -41,64 +58,44 @@ export async function getOfficialRatingDist(
   console.warn(
     `[Rating Dist] ratingChanges empty for ${contestId}. Falling back to standings.`,
   );
-  return sampleOfficialStandings(cfService, contestId, onProgress);
+  return sampleOfficialStandings(cfService, standings, onProgress);
 }
 
-async function sampleOfficialStandings(cfService, contestId, onProgress) {
+async function sampleOfficialStandings(cfService, standings, onProgress) {
   try {
-    const { groups } = await sampleParticipantHandles(contestId, onProgress);
-    if (groups.length === 0) return FULL_FIELD([]);
+    const { groups, total } = stratifyRows(standings?.rows);
+    if (groups.length === 0) {
+      console.warn("[Rating Dist] Standings carried no rows to sample.");
+      return FULL_FIELD([]);
+    }
 
     onProgress("Looking up competitor ratings…");
 
-    // One lookup pass over every handle, then split back into strata, so the
-    // rate-limited chunking doesn't happen twice.
-    const allHandles = groups.flatMap((group) => group.handles);
-    const byHandle = await lookupRatings(cfService, allHandles);
+    // One lookup pass over every sampled party, then split back into strata, so
+    // the rate-limited `user.info` chunking does not happen twice.
+    const rated = await ratePartyList(
+      cfService,
+      groups.flatMap((group) => group.parties),
+    );
 
-    const strata = groups
-      .map(({ handles, scale }) => ({
-        ratings: handles.map((handle) => byHandle.get(handle) ?? 800),
-        scale,
-      }))
-      .filter((stratum) => stratum.ratings.length > 0);
+    let offset = 0;
+    const strata = [];
+    for (const group of groups) {
+      const ratings = rated.slice(offset, offset + group.parties.length);
+      offset += group.parties.length;
+      if (ratings.length > 0) strata.push({ ratings, scale: group.scale });
+    }
+
+    console.log(
+      `[Rating Dist] Rated ${rated.length} of ~${total} participants ` +
+        `across ${strata.length} stratum/strata.`,
+    );
 
     return strata.length > 0 ? { strata } : FULL_FIELD([]);
   } catch (error) {
-    console.warn(
-      `[Rating Dist] Standings sampling failed for ${contestId}:`,
-      error.message,
-    );
+    console.warn(`[Rating Dist] Standings sampling failed:`, error.message);
     return FULL_FIELD([]);
   }
-}
-
-/**
- * Resolves handles to ratings in chunks, spaced to stay inside the API's rate
- * limit. Unrated accounts count as 800, the floor Codeforces itself uses.
- *
- * @returns {Promise<Map<string, number>>}
- */
-async function lookupRatings(cfService, handles) {
-  const chunkSize = 250;
-  const handleToRating = new Map();
-
-  for (let i = 0; i < handles.length; i += chunkSize) {
-    try {
-      const usersInfo = await cfService.getUsersInfo(
-        handles.slice(i, i + chunkSize),
-      );
-      usersInfo?.forEach((user) => {
-        handleToRating.set(user.handle, user.rating ?? 800);
-      });
-    } catch {
-      console.warn(
-        `[Rating Dist] Chunk ${Math.floor(i / chunkSize) + 1} rejected. Skipping.`,
-      );
-    }
-  }
-
-  return handleToRating;
 }
 
 export async function getGymRatingDist(cfService, contestId, standings = null) {
