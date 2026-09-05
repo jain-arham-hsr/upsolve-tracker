@@ -263,7 +263,12 @@ test("the shared modules that need no imports still need none", () => {
   //
   // Note rating-models/rasch-upper-asymptote.js is deliberately absent: it imports
   // rasch.js, which is a dependency on maths rather than on anything platform-shaped.
-  for (const name of ["rating-models/rasch.js", "queue-order.js", "contest-status.js"]) {
+  for (const name of [
+    "rating-models/rasch.js",
+    "rating-models/team-rating.js",
+    "queue-order.js",
+    "contest-status.js",
+  ]) {
     assert.deepEqual(
       importsOf(read(path.join("core", name))),
       [],

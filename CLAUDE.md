@@ -508,6 +508,8 @@ failure in the payload (`status: "FAILED"`) rather than the transport.
 
 Each caller makes its own pacer, so budgets are independent — `HttpClient`'s counter was a single static shared by everything, which is now per-instance state and structurally impossible to cross.
 
+**`budget` is the one deliberate exception, and it exists because independence is wrong for two clients addressing one *host*.** Codeforces is two platforms with an API client each, and two clients each honouring a 2 s gap serve one request per second to codeforces.com — the same failure per-instance state was introduced to prevent, arrived at from the other side. A caller may name a `budget` (`codeforces-api`); every pacer naming it shares one queue, marker and count, while keeping its own gaps, cooldowns and transport. The name comes from the caller, so `request-pacer.js` still never learns which platforms exist, and a pacer naming none keeps private state exactly as before. Both halves are pinned in `request-pacer.test.js` and were confirmed by breaking each: ignoring the budget, and letting it leak into unnamed pacers.
+
 **`measureFrom` exists because of a real difference, not for symmetry.** `"start"` waits until `previousStart + gap`, so a slow request eats into the next gap. `"end"` waits the full gap after the previous request *finished*, and waits it before the first request too — which is what `HttpClient` did. They diverge exactly when a request outlasts the gap, and collapsing them onto `"start"` silently makes the Codeforces scrape **faster**. Even sampled, adding a contest issues tens of requests, and these delays are what keeps the extension from being blocked — do not remove or shorten them when optimizing. `tests/request-pacer.test.js` fails on that specific collapse; it was confirmed by making it and watching exactly those two assertions go red.
 
 Requests queue through a promise chain rather than each checking the clock. `HttpClient` had a variant of the flaw that guards against: it slept a random interval per call with no queue, so two concurrent callers slept in parallel and then fired together. It was latent rather than live, since every scrape call site is a sequential `await` — but absorbing it closed the hole rather than preserving it.
@@ -593,6 +595,8 @@ was extracted from `core/rating-estimator.js`, which had sat in shared space wit
 exactly one importer while naming no platform, so `module-boundaries.test.js` could
 not see it: the same shape as the old `start-time-service.js`, except that one at
 least had a genuinely shared export.
+
+`team-rating.js` is the third thing here, and the least model-like: it collapses an ICPC team into the single rating a lone competitor would need to be as likely to fail as the team is — `∏ 1/(1 + 10^((rᵢ − R)/400)) = 0.5`, by binary search. It is pure maths over ratings, which is why it sits here, but it also *has* to be in one place: Codeforces' two platforms build their fields with separate code — a gym's from `contest.standings` or from who submitted, an official round's from sampled standings rows — and team collapsing is the one step they genuinely share. Two copies of that search are two things free to disagree about what a team is worth. Note it lands **above** the strongest member, which is the point; `mean` and `max` were both tried and measured worse.
 
 `rasch-upper-asymptote.js` is the second model, `P = (1 − r) · σ(a(θ − b))`, used
 only for AGC's first problem where non-attempts are otherwise read as failures.

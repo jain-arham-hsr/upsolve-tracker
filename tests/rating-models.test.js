@@ -24,6 +24,7 @@ import { readFileSync } from "node:fs";
 
 import { fitDifficulty, solveProbability, expectedSolves } from "../core/rating-models/rasch.js";
 import { fitWithUpperAsymptote } from "../core/rating-models/rasch-upper-asymptote.js";
+import { computeTeamRating } from "../core/rating-models/team-rating.js";
 
 const { cases } = JSON.parse(
   readFileSync(new URL("./fixtures/rasch-reference.json", import.meta.url), "utf8"),
@@ -118,4 +119,46 @@ test("allowing for non-attempts can only make a problem read easier", () => {
     const { difficulty } = fitWithUpperAsymptote({ abilities, responses: c.responses, ...ATCODER });
     assert.ok(difficulty <= plain, `${difficulty} > ${plain}`);
   }
+});
+
+/**
+ * Team collapsing, which moved here from `codeforces/rating-distribution.js`
+ * when Codeforces became two platforms in two folders. It was private there and
+ * had no test of its own; the properties below are what the field-building code
+ * on both sides now relies on it for.
+ */
+test("a team collapses to a rating above its strongest member", () => {
+  // The whole point: three 1500s solve more than one 1500 does, so a team
+  // cannot collapse to its max. `max` was tried as a cheap substitute and
+  // measured worse — see tests/estimator-accuracy.test.js.
+  assert.ok(computeTeamRating([1500, 1500, 1500]) > 1500);
+  assert.ok(computeTeamRating([2000, 1200, 900]) > 2000);
+});
+
+test("a team of one is exactly that one, untouched by the search", () => {
+  // Every official Codeforces contest is individual, so this is the common
+  // case; rounding a solo competitor's own rating would shift the whole field.
+  for (const rating of [-500, 0, 800, 1337, 3500]) {
+    assert.equal(computeTeamRating([rating]), rating);
+  }
+});
+
+test("adding a weaker member never makes a team weaker", () => {
+  // Monotonicity. A member who contributes nothing should still not subtract,
+  // and a mean would break this — which is why `mean` was rejected too.
+  let previous = computeTeamRating([2400]);
+  for (const added of [800, 1000, 1200, 1600]) {
+    const next = computeTeamRating([2400, added]);
+    assert.ok(next >= previous, `adding ${added} dropped the team to ${next} from ${previous}`);
+    previous = next;
+  }
+});
+
+test("the collapsed rating is the ability with an even chance against the team", () => {
+  // The definition, asserted directly rather than through its consequences:
+  // the product of each member's loss probability against R is 0.5.
+  const members = [1800, 1600, 1400];
+  const R = computeTeamRating(members);
+  const loss = members.reduce((p, r) => p * (1 / (1 + Math.pow(10, (r - R) / 400))), 1);
+  assert.ok(Math.abs(loss - 0.5) < 0.01, `loss probability was ${loss}, not ~0.5`);
 });

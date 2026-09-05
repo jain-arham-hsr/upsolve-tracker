@@ -168,3 +168,50 @@ test("reset clears the cooldown counter as well as the clock", async () => {
     fetchStub.restore();
   }
 });
+
+test("two pacers sharing a budget serve one gap, not two", async () => {
+  // Independence is the default and the wrong answer for two clients addressing
+  // one host. Codeforces is two platforms with an API client each; two clients
+  // each honouring a 2s gap would serve one request per second to
+  // codeforces.com — the exact failure per-instance state exists to prevent,
+  // reached from the other direction.
+  const at = [];
+  const stub = async () => {
+    at.push(Date.now());
+    return new Response("ok");
+  };
+
+  const name = `test-budget-${Math.random()}`;
+  const one = createPacer({ gapMs: 60, budget: name, fetchImpl: stub });
+  const two = createPacer({ gapMs: 60, budget: name, fetchImpl: stub });
+
+  // Interleaved on purpose: alternating clients is what an unshared budget
+  // would let through back-to-back.
+  await Promise.all([one("/a"), two("/b"), one("/c"), two("/d")]);
+
+  assert.equal(at.length, 4);
+  for (let i = 1; i < at.length; i++) {
+    assert.ok(
+      at[i] - at[i - 1] >= 50,
+      `request ${i + 1} came ${at[i] - at[i - 1]}ms after the last; the budget is not shared`,
+    );
+  }
+});
+
+test("a pacer with no budget keeps its own state, as it always has", async () => {
+  // The sharing must be opt-in. If it leaked into unnamed pacers, one site's
+  // traffic would pace another's — which is what the single static counter in
+  // the old HttpClient did.
+  const at = [];
+  const stub = async () => {
+    at.push(Date.now());
+    return new Response("ok");
+  };
+
+  const one = createPacer({ gapMs: 60, fetchImpl: stub });
+  const two = createPacer({ gapMs: 60, fetchImpl: stub });
+  await Promise.all([one("/a"), two("/b")]);
+
+  assert.equal(at.length, 2);
+  near(at[1] - at[0], 0, 40, "independent pacers must not wait for each other");
+});

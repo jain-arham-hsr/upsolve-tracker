@@ -1,3 +1,4 @@
+import { computeTeamRating } from "../../rating-models/team-rating.js";
 import { stratifyRows } from "./sampling.js";
 
 /**
@@ -204,31 +205,4 @@ async function getRatingsFromStandings(cfService, contestId, prefetched = null) 
     );
     return [];
   }
-}
-
-/**
- * Computes the effective team rating R_team such that the product of each
- * member's loss probability against R_team equals 0.5.
- * Uses binary search to solve: ∏ 1/(1 + 10^((r_i - R_team)/400)) = 0.5
- */
-function computeTeamRating(memberRatings) {
-  if (memberRatings.length === 1) return memberRatings[0];
-
-  let low = -1000;
-  let high = 4000;
-
-  for (let i = 0; i < 30; i++) {
-    const mid = (low + high) / 2;
-    const teamLossProbability = memberRatings.reduce(
-      (product, r) => product * (1 / (1 + Math.pow(10, (r - mid) / 400))),
-      1,
-    );
-    if (teamLossProbability > 0.5) {
-      high = mid;
-    } else {
-      low = mid;
-    }
-  }
-
-  return Math.round(high);
 }

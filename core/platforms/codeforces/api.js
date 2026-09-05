@@ -23,7 +23,11 @@ const PROBLEMSET_TTL_MS = 60 * 1000;
  * second instance through `createSessionFrom` to check credentials you have
  * typed but not saved, and that must not come with a fresh allowance.
  */
-const paced = createPacer({ gapMs: 2000 });
+// `budget` rather than a bare pacer, because Codeforces is two platforms —
+// official and gyms — each of which gets its own copy of this client. Two
+// clients each honouring a 2 s gap would serve one request per second to
+// codeforces.com; naming a shared budget makes them queue as one.
+const paced = createPacer({ gapMs: 2000, budget: "codeforces-api" });
 
 export class CodeforcesService {
   static #problemsetCache = null;
