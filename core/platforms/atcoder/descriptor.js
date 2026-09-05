@@ -127,7 +127,7 @@ export const atcoder = {
    */
 
 
-  hostPermissions: ["*://*.atcoder.jp/*", "*://kenkoooo.com/*"],
+  hostPermissions: ["*://*.atcoder.jp/*"],
 
   // Not drawn: AtCoder's own crest, shrunk. Six hand-drawn attempts each read
   // as something else at this size — a security badge, then an apricot — while
@@ -152,7 +152,7 @@ export const atcoder = {
       store: "local",
       type: "text",
       placeholder: "e.g., tourist",
-      help: "No key needed \u2014 the handle alone reads which problems you have solved.",
+      help: "No key needed — the handle alone reads which problems you have solved, directly from AtCoder.",
     },
   ],
 

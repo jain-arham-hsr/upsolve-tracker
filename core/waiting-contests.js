@@ -124,13 +124,6 @@ export async function retryWaitingContests(
 
   const tracked = await LocalDB.getTrackedContests();
 
-  // Revalidate a platform's cached bulk data once per refresh, not once per
-  // entry. A successful revalidation resets the cache clock, so the rest of
-  // that platform's entries read a copy already known to be fresh — three
-  // waiting AtCoder contests must not mean twelve conditional requests
-  // against a service whose etiquette rule is one request per second.
-  const revalidated = new Set();
-
   onProgress(
     `Retrying ${entries.length} waiting contest${entries.length === 1 ? "" : "s"}…`,
   );
@@ -142,11 +135,8 @@ export async function retryWaitingContests(
       continue;
     }
 
-    const revalidate = !revalidated.has(entry.platform);
-    revalidated.add(entry.platform);
-
     try {
-      const contest = await addContest(entry.url, onProgress, { revalidate });
+      const contest = await addContest(entry.url, onProgress);
       added.push({ platform: entry.platform, id: contest.id, contest });
     } catch (error) {
       // Two reasons a wait may end rather than continue, and both mean the

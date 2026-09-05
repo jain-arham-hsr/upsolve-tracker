@@ -101,9 +101,16 @@ async function lookupRatings(cfService, handles) {
   return handleToRating;
 }
 
-export async function getGymRatingDist(cfService, contestId) {
+export async function getGymRatingDist(cfService, contestId, standings = null) {
   // Gym standings arrive whole from the API, so there's nothing to sample.
-  return FULL_FIELD(await getRatingsFromStandings(cfService, contestId));
+  //
+  // `standings` lets the caller hand over a response it already paid for.
+  // `solve-stats.js` fetches exactly this to count gym solves, so estimating
+  // afterwards used to fetch it a second time — one extra throttled API call,
+  // per gym add, for bytes already in memory. Optional rather than required:
+  // the hidden-standings path has no such response to pass, and neither does a
+  // caller that only wants the field.
+  return FULL_FIELD(await getRatingsFromStandings(cfService, contestId, standings));
 }
 
 /**
@@ -178,9 +185,9 @@ async function ratePartyList(cfService, parties) {
   });
 }
 
-async function getRatingsFromStandings(cfService, contestId) {
+async function getRatingsFromStandings(cfService, contestId, prefetched = null) {
   try {
-    const standings = await cfService.getContestStandings(contestId);
+    const standings = prefetched ?? (await cfService.getContestStandings(contestId));
 
     if (!standings?.rows?.length) {
       console.warn(

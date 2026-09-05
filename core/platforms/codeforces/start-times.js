@@ -29,6 +29,19 @@ export async function syncStartTimes(
   onProgress = () => {},
 ) {
   const pending = contests.filter((contest) => !contest.startTimeSeconds);
+
+  // Same guard as `problemset-sync.js#needsSync`, and for the same incident: the
+  // lookups below split by `contest.type`, so a record without one matches
+  // neither branch and resolves nothing — quietly, since an unresolved start
+  // time just sorts the contest last rather than erroring.
+  for (const contest of pending) {
+    if (typeof contest.type !== "string") {
+      throw new Error(
+        `Codeforces start-time sync got a contest with no type (id ${contest.id}). ` +
+          `Whatever built it is not producing a complete record.`,
+      );
+    }
+  }
   if (pending.length === 0) return 0;
 
   onProgress("Looking up contest dates…");

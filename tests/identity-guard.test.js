@@ -28,7 +28,8 @@
  *
  * **What this cannot establish, on Codeforces and AtCoder: that the handle is
  * yours.** `user.status?handle=X` returns X's submissions whoever's key signs
- * the request, and AtCoder's history comes from kenkoooo, which authenticates
+ * the request. AtCoder is now checked against the signed-in account, but only
+ * refuses on positive evidence of a mismatch; a signed-out browser authenticates
  * nobody. Neither site offers a "who am I" endpoint to compare against. Enter
  * someone else's handle and you get their solves. The containment is that a
  * *changed* identity clears that platform's flags rather than merging them, so
@@ -209,7 +210,7 @@ test("CodeChef verifies again itself, even if the caller already did", async () 
   // cookie rather than by a handle we ask about, so it does not rely on the
   // orchestrator having checked: a caller that skipped the check, or swallowed
   // its failure, must still not be able to read somebody else's solves.
-  const { fetchSolvedKeys } = await import("../core/platforms/codechef/adapter.js");
+  const { fetchAccepted } = await import("../core/platforms/codechef/submissions.js");
   stub({
     storage: { "upsolve_tracker.codechef_handle": "me" },
     handler: (url) =>
@@ -219,7 +220,7 @@ test("CodeChef verifies again itself, even if the caller already did", async () 
   });
 
   const session = { handle: "me", signedIn: true, signedInAs: "someone_else" };
-  await assert.rejects(() => fetchSolvedKeys(session, []), /someone_else/);
+  await assert.rejects(() => fetchAccepted(session, []), /someone_else/);
   assert.ok(
     !requests.some((u) => u.includes("/api/list/problems")),
     `solve history was read anyway: ${requests.join(", ")}`,

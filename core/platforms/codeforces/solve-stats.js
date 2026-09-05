@@ -87,6 +87,10 @@ export async function readSolveStats(type, contestId, cfService = null) {
     finished: standings?.contest?.phase
       ? standings.contest.phase === "FINISHED"
       : null,
+    // And it is the same response the estimator needs to measure the field, so
+    // it travels rather than being fetched again. Gym only — the official path
+    // never fetches this, and reads `ratingChanges` instead.
+    standings,
   };
 }
 

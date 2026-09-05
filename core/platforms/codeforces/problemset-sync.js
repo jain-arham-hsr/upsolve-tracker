@@ -28,6 +28,19 @@ const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
  * more than weekly, since plenty of problems never get either.
  */
 function needsSync(contest, now) {
+  // A record with no `type` is a caller bug, not a contest that isn't official
+  // — and answering `false` for it is the shape of failure this guard exists to
+  // stop. `codeforces/problems.js` once handed this a freshly-built record
+  // before the trunk had stamped `type` on it, so every official add silently
+  // skipped its published ratings and stored estimates instead. Nothing threw,
+  // no test failed, and the numbers were merely wrong. Fail loudly instead, the
+  // same rule `platformOf()` follows for a record with no `platform`.
+  if (typeof contest.type !== "string") {
+    throw new Error(
+      `Codeforces problemset sync got a contest with no type (id ${contest.id}). ` +
+        `Whatever built it is not producing a complete record.`,
+    );
+  }
   if (contest.type !== "OFFICIAL") return false;
 
   // Pre-timestamp records used a boolean; treat those as synced long ago.

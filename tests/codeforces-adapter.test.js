@@ -13,14 +13,14 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { shouldWait } from "../core/contest-status.js";
 import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
 const { CodeforcesHttp } = await import("../core/platforms/codeforces/http.js");
-const { fetchContestRecord } = await import(
-  "../core/platforms/codeforces/adapter.js"
-);
+const { getAdapter } = await import("../core/platforms/adapters.js");
+const { fetchContestRecord } = getAdapter("codeforces");
 
 const INDEXES = ["A", "B", "C"];
 
@@ -310,3 +310,107 @@ test("an unreadable phase proceeds rather than blocking the add", async () => {
   assert.equal(contest.problems.length, 3);
 });
 
+
+test("a blocked scrape answers sourceUnreachable, and that status waits", async () => {
+  // The other half of the fix: the flag has to become a status, or nothing
+  // upstream can act on it. `shouldWait` is asserted here rather than assumed,
+  // because "returns a status" and "actually retries" are different claims.
+  CodeforcesHttp.get = async () => {
+    throw Object.assign(new Error("Codeforces is blocking requests."), {
+      isSourceUnreachable: true,
+    });
+  };
+
+  const result = await fetchContestRecord({
+    contestId: "702859",
+    subtype: "GYM",
+    session: { service: { getContestStandings: async () => standingsApi([1300, 900, 2100]) } },
+  });
+
+  assert.equal(result.status, "sourceUnreachable");
+  assert.equal(shouldWait(result.status), true, "a challenge clears on its own, so it must retry");
+});
+
+test("a scrape failure that is not a block still escapes", async () => {
+  // `unavailable` and a bare throw both remain possible; only the challenge is
+  // reclassified. Swallowing everything here would hide real faults.
+  CodeforcesHttp.get = async () => {
+    throw new Error("something else went wrong");
+  };
+
+  await assert.rejects(
+    () => fetchContestRecord({ contestId: "702859", subtype: "GYM", session: { service: {} } }),
+    /something else went wrong/,
+  );
+});
+
+test("an official contest takes Codeforces' published ratings, not estimates", async () => {
+  // The regression this exists for: `problems.js` used to hand the metadata
+  // syncs a record with no `type`, and `problemset-sync.js#needsSync` gates on
+  // `contest.type !== "OFFICIAL"`. So every official add silently skipped the
+  // published ratings and tags, the estimator then ran on problems Codeforces
+  // had already rated, and the queue stored estimates — mean error ~211 — in
+  // their place. Nothing failed; the numbers were just quietly wrong.
+  //
+  // The whole suite passed with that bug present, because every other case here
+  // adds a GYM, where `needsSync` correctly answers false either way.
+  CodeforcesHttp.get = async () => standingsPage("2197");
+
+  const result = await fetchContestRecord({
+    contestId: "2197",
+    subtype: "OFFICIAL",
+    session: {
+      service: {
+        getProblemsetProblems: async () => ({
+          problems: INDEXES.map((index, i) => ({
+            contestId: 2197,
+            index,
+            rating: 800 + i * 400,
+            tags: ["math"],
+          })),
+        }),
+        getContestList: async () => [],
+        getUsersInfo: async () => {
+          throw new Error("the field must not be measured when CF published every rating");
+        },
+        getContestStandings: async () => {
+          throw new Error("no estimate should be needed");
+        },
+      },
+    },
+  });
+
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.contest.problems.map((p) => p.rating), [800, 1200, 1600]);
+  assert.deepEqual(
+    result.contest.problems.map((p) => p.ratingSource),
+    ["official", "official", "official"],
+  );
+  assert.deepEqual(result.contest.problems.map((p) => p.tags), [["math"], ["math"], ["math"]]);
+});
+
+test("a gym's standings are fetched once, not once per concern", async () => {
+  // `solve-stats.js` fetches contest.standings to count gym solves, and the
+  // estimator needs the very same response to measure the field. It used to
+  // fetch it again — one extra throttled API call per gym add, for bytes
+  // already in memory. The response now travels through `acquired.context`.
+  //
+  // Counted rather than eyeballed, because nothing about a correct rating says
+  // how many requests produced it: this could regress silently forever.
+  CodeforcesHttp.get = async () => standingsPage("702859");
+
+  let standingsCalls = 0;
+  const contest = await record({
+    getContestStandings: async () => {
+      standingsCalls++;
+      return standingsApi([1300, null, null]);
+    },
+    getUsersInfo: async (handles) => handles.map((handle) => ({ handle, rating: 1500 })),
+    getContestList: async () => [],
+  });
+
+  // Something must actually have needed estimating, or this proves nothing:
+  // a fully rated gym skips the estimator and would pass trivially.
+  assert.equal(contest.problems[1].ratingSource, "estimated");
+  assert.equal(standingsCalls, 1, "contest.standings was fetched more than once");
+});

@@ -7,7 +7,7 @@
  *
  * All three platforms define a problem's difficulty as roughly the rating at
  * which a contestant has a 50% chance of solving it in-contest — the same
- * quantity rating-estimator.js searches for. So feeding a problem's difficulty
+ * quantity rating-models/rasch.js searches for. So feeding a problem's difficulty
  * and your rating *on that same platform* into the Elo curve cancels the scale
  * and leaves a unitless probability.
  *

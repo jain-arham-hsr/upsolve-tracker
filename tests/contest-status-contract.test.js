@@ -132,10 +132,13 @@ test("no adapter throws a bare error where it should answer with a status", () =
   // unflagged, so it failed hard where it should have waited. Adapters may
   // still throw for genuine faults — that is what makes an escaping exception
   // a bug rather than a case — but the known situations must be statuses.
+  // Acquisition — and therefore every gate — lives in `problems.js` now; the
+  // trunk in `pipeline.js` only passes a status through. So this is where the
+  // vocabulary has to appear.
   for (const id of listPlatforms().map((p) => p.id)) {
-    const file = path.join(ROOT, "core/platforms", id, "adapter.js");
+    const file = path.join(ROOT, "core/platforms", id, "problems.js");
     const src = readFileSync(file, "utf8");
     const imported = /from\s+"\.\.\/\.\.\/contest-status\.js"/.test(src);
-    assert.ok(imported, `${id}/adapter.js does not use the shared vocabulary`);
+    assert.ok(imported, `${id}/problems.js does not use the shared vocabulary`);
   }
 });

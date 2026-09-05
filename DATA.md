@@ -25,6 +25,78 @@ is inline SVG, and the only remote addresses in the build are the data APIs list
 
 ---
 
+## How a contest gets into your queue
+
+```mermaid
+flowchart TD
+    A["You open a contest page<br/>and press Add"] --> B{"Is the URL one of<br/>the three sites?"}
+    B -->|"no"| Bx["Nothing happens"]
+    B -->|"yes"| C["Check the handle in Settings<br/>is a real account"]
+
+    C -->|"no handle, or wrong one"| Cx["Stops here and says so"]
+    C -->|"ok"| D["Ask the site for the contest"]
+
+    D --> E{"Did the site answer?"}
+    E -->|"not finished, or<br/>not published yet"| W["Waits, and retries<br/>on every refresh"]
+    E -->|"will never be available"| Ex["Refuses, and says why"]
+    E -->|"yes"| F["Build the contest record"]
+
+    F --> G{"Any problem the site<br/>hasn't rated?"}
+    G -->|"no"| J["Mark what you've already solved"]
+    G -->|"yes"| H["Estimate it from<br/>how the field did"]
+    H --> J
+
+    J --> K{"Everything already solved?"}
+    K -->|"yes"| Kx["Not stored — nothing to upsolve"]
+    K -->|"no"| L["Saved on your machine,<br/>and written to the backup file"]
+
+    W -.->|"next refresh"| D
+
+    %% Grey = the run ended here and nothing was stored. The labels already say
+    %% so; the shading just makes the path that *does* store readable at a glance.
+    classDef stop fill:#f0f0f0,stroke:#9e9e9e,color:#333
+    classDef kept fill:#e8f4ea,stroke:#5b8c62,color:#1f3b25
+    class Bx,Cx,Ex,Kx stop
+    class L kept
+```
+
+Nothing above leaves your machine except the requests to the three sites themselves.
+
+---
+
+## How a request actually reaches a site
+
+This one matters because it explains a failure you may hit.
+
+```mermaid
+flowchart LR
+    P["The extension<br/>wants a page"] --> Q{"Is a tab open<br/>on that site?"}
+    Q -->|"yes"| R["Ask that tab to fetch it"]
+    Q -->|"no"| S["Fetch it directly"]
+
+    R --> T["Signed in as you —<br/>works for anything"]
+    S --> U["Anonymous —<br/>public pages only"]
+
+    T --> V{"Did the site refuse?"}
+    U --> V
+    V -->|"blocked, or signed out"| Vx["Says so, and retries later.<br/>Never reports it as 'nothing found'"]
+    V -->|"no"| Vy["Used"]
+
+    classDef stop fill:#f0f0f0,stroke:#9e9e9e,color:#333
+    classDef kept fill:#e8f4ea,stroke:#5b8c62,color:#1f3b25
+    class Vx stop
+    class Vy kept
+```
+
+**Why the tab matters.** A request made by the extension on its own is treated by the browser
+as coming from a *different site*, so your cookies are not attached and the site sees a
+stranger. A request made from inside a tab you already have open is treated as coming from
+you, cookies and all. So anything needing a login — a private Codeforces gym, your AtCoder
+submissions — works when that site is open in a tab, and falls back to public-only access when
+it is not.
+
+---
+
 ## Codeforces
 
 Two channels are needed, because neither alone is enough.
@@ -105,28 +177,33 @@ nobody attempted appears in no submission and would silently go missing from you
 
 ## AtCoder
 
-No scraping and no estimating — difficulty is published.
+Everything comes from AtCoder itself. Difficulty is estimated here, because **AtCoder
+publishes none at all**.
 
-| Source | Used for |
-|:--|:--|
-| `kenkoooo.com/atcoder/resources/problems.json` | Problem names and IDs |
-| `…/contests.json` | Contest names and start times |
-| `…/contest-problem.json` | Which problems belong to which contest |
-| `…/problem-models.json` | Difficulty |
-| `…/atcoder-api/v3/user/submissions` | Your submissions, so solved problems clear |
-| `atcoder.jp/users/<handle>` | Verifying your handle and reading your rating |
+| Source | Used for | Needs you signed in? |
+|:--|:--|:--|
+| `atcoder.jp/contests/<id>/tasks` | Contest name, start time, the problem list | no |
+| `atcoder.jp/contests/<id>/submissions?f.User=…` | Your submissions, so solved problems clear | **yes** |
+| `atcoder.jp/contests/<id>/standings/json` | The field the difficulty is estimated from | **yes** |
+| `atcoder.jp/users/<handle>` | Verifying your handle and reading your rating | no |
 
-Only the last one touches AtCoder itself. Everything else comes from **AtCoder Problems**
-(kenkoooo), a well-known third-party project. It requires no login, which is why AtCoder needs
-only a handle.
+This used to come from **AtCoder Problems** (kenkoooo), a third-party project, which is no
+longer used at all.
 
-Two things that surprise people:
+Things worth knowing:
 
-- **`contest-problem.json` is not redundant.** 1,906 of 9,383 problems run in more than one
-  contest, and `problems.json` only records the first. Without it, a rerun shows 4 problems
-  instead of 9.
+- **Difficulty is an estimate, and always was.** AtCoder publishes no rating for its problems.
+  The number you see is fitted from how the contest's field actually did — the rating at which
+  a competitor had a 50-50 chance. It is shown with a dotted underline, like any estimate.
 - **Difficulty can be negative.** 931 problems are below zero — ABC 471's A is −817. That's
   real, not a bug.
+- **A problem is identified by its task id**, not its position, so solving one clears it from
+  every contest that reuses it — and 1,906 of 9,383 problems appear in more than one.
+- **Solved status is read per contest**, because AtCoder publishes no per-user submission
+  list. One consequence: solving a problem through a contest you *don't* track won't clear it
+  from one you do.
+- **Keep an atcoder.jp tab open when refreshing.** Two of the four sources above need your
+  session; see the request diagram above.
 
 ---
 
@@ -188,9 +265,13 @@ The check differs by site, and the difference matters:
 - **CodeChef answers for whoever is signed in**, so the signed-in account is compared against
   your configured handle. A mismatch stops the sync — otherwise someone else's solves would be
   written onto your queue, permanently.
-- **Codeforces and AtCoder are asked *about* a handle**, so who's signed in to those sites is
-  irrelevant. What's verified is that the handle **exists** — not that it's yours. Type
-  someone else's and you'll sync their solves. Neither site offers a way to check.
+- **Codeforces is asked *about* a handle**, so who's signed in there is irrelevant. What's
+  verified is that the handle **exists** — not that it's yours. Type someone else's and you'll
+  sync their solves; Codeforces offers no way to check.
+- **AtCoder is checked both ways.** The handle must exist, and if you're signed in to AtCoder
+  it must match the account you're signed in as. It only objects when it can *prove* a
+  mismatch: signed out, it falls back to checking the handle exists, because adding a contest
+  has to keep working without a session.
 
 If a handle changes, that site's solved flags are cleared so the next sync re-derives them
 against the new account.

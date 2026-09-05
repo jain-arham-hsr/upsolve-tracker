@@ -20,6 +20,19 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
 // of step that gets missed when a platform is added.
 manifest.host_permissions = listPlatforms().flatMap((platform) => platform.hostPermissions);
 
+// The same list, as content script matches. A request issued from inside a page
+// on the site is same-site, so the browser sends the user's cookies; one issued
+// from the panel is cross-site and arrives anonymous. Composed here for the same
+// reason host_permissions is: a new platform must not depend on someone
+// remembering to also edit the manifest.
+manifest.content_scripts = [
+  {
+    matches: listPlatforms().flatMap((platform) => platform.hostPermissions),
+    js: ["targets/chrome/content-script.js"],
+    run_at: "document_idle",
+  },
+];
+
 export default defineConfig({
   plugins: [crx({ manifest })],
   resolve: {

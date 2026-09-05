@@ -42,6 +42,20 @@
  * @param {{everyNth: number, gapMs: number|[number, number]}} [options.cooldown]
  *   A longer pause every Nth request, *replacing* that request's normal gap.
  * @param {"omit"|"include"|"same-origin"} [options.credentials]
+ * @param {(url: string, init: object) => Promise<Response>} [options.fetchImpl]
+ *   How the request is actually issued. Defaults to the global `fetch`.
+ *
+ *   This exists because a `fetch` from the extension's own origin is
+ *   **cross-site**, so Chrome withholds cookies whose `SameSite` is unset — the
+ *   default — and `credentials: "include"` does not override it. Measured: the
+ *   panel's request to Codeforces arrives unauthenticated and is challenged,
+ *   while the identical request issued from inside a page on that site carries
+ *   the session and succeeds. Swapping the issuer is therefore the difference
+ *   between reading a private gym and not.
+ *
+ *   It is a parameter *here*, rather than a wrapper around `paced`, because the
+ *   pacing must apply either way. Wrapping would either skip the delay or
+ *   double it, and these delays are what keep the extension from being blocked.
  * @param {(info: {count: number, ms: number, isCooldown: boolean}) => void} [options.onWait]
  *   Called with the chosen delay before it is served. Only the Codeforces
  *   scrape passes one; adding logging here unconditionally would put new
@@ -52,6 +66,7 @@ export function createPacer({
   measureFrom = "start",
   cooldown = null,
   credentials = "omit",
+  fetchImpl = null,
   onWait = null,
 }) {
   // `"end"` waits before the very first request; `"start"` does not. Both
@@ -90,7 +105,8 @@ export function createPacer({
 
       if (measureFrom === "start") marker = Date.now();
       try {
-        return await fetch(url, { credentials, ...init });
+        const issue = fetchImpl ?? fetch;
+        return await issue(url, { credentials, ...init });
       } finally {
         if (measureFrom === "end") marker = Date.now();
       }

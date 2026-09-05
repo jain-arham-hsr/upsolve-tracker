@@ -9,11 +9,11 @@ import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { extractSession, extractUserData } from "../core/platforms/codechef/page-data.js";
 import { resetApiState } from "../core/platforms/codechef/api.js";
-import {
-  fetchContestRecord,
-  fetchSolvedKeys,
-  syncMetadata,
-} from "../core/platforms/codechef/adapter.js";
+import { getAdapter } from "../core/platforms/adapters.js";
+
+// The adapter is composed in adapters.js now, so this exercises the real
+// assembled object rather than a module's raw exports.
+const { fetchContestRecord, fetchSolvedKeys, syncMetadata } = getAdapter("codechef");
 
 const PROBLEMS = {
   IOI7: {
@@ -77,8 +77,19 @@ function stub({ signedIn = true } = {}) {
   };
 }
 
-const jsonResponse = (body) => ({ ok: true, status: 200, async json() { return body; } });
-const textResponse = (body) => ({ ok: true, status: 200, async text() { return body; } });
+// Both shapes carry `text()` and a `url`, because a real Response does. The
+// stubs used to expose only the one method the caller happened to use, which
+// quietly encoded *how* the client read the body — so moving that read broke
+// eleven tests that were not about reading bodies at all.
+const respond = (body, { status = 200, url = "https://www.codechef.com/x" } = {}) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  url,
+  async text() { return body; },
+  async json() { return JSON.parse(body); },
+});
+const jsonResponse = (body) => respond(JSON.stringify(body));
+const textResponse = (body) => respond(body);
 
 /**
  * Deep, because tests flip `is_added_to_practice` on a payload entry to model
@@ -543,7 +554,7 @@ test("a failed problem request waits — it is not evidence of an unrated proble
     const inner = globalThis.fetch;
     globalThis.fetch = async (url) =>
       url.includes("/problems/IOI7")
-        ? { ok: false, status: httpStatus }
+        ? respond("", { status: httpStatus })
         : inner(url);
 
     const result = await statusOf();

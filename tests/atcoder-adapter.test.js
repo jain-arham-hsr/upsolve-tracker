@@ -1,267 +1,185 @@
 /**
- * The AtCoder adapter, against a stubbed fetch.
+ * The AtCoder adapter, now that it reads AtCoder rather than a mirror of it.
  *
- * The cases here are the ones that fail silently rather than loudly:
- * submission pagination stopping early (solved problems never leave the
- * queue), reading problems.json instead of contest-problem.json (half a
- * rerun contest goes missing), and clamping or inventing a difficulty.
+ * This file was rewritten wholesale. Every earlier case stubbed AtCoder
+ * Problems' static resources — `contest-problem.json`, `problem-models.json`,
+ * a paged submissions feed — and none of those is fetched any more. What
+ * replaced them is three routes on atcoder.jp, so the stub serves pages.
+ *
+ * The fit itself is not tested here: `tests/rating-models.test.js` pins it
+ * against numbers produced by running AtCoder Problems' own Python verbatim,
+ * which is a sharper check than anything a hand-built fixture could make.
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import {
-  clearResourceCache,
-  setRequestSpacing,
-  getAcceptedProblemIds,
-} from "../core/platforms/atcoder/problems-api.js";
-import {
-  fetchContestRecord,
-  fetchSolvedKeys,
-  syncMetadata,
-} from "../core/platforms/atcoder/adapter.js";
+import { DOMParser } from "linkedom";
 
-const RESOURCES = {
-  "problems.json": [
-    { id: "abc471_a", contest_id: "abc471", problem_index: "A", name: "Signs" },
-    { id: "abc471_b", contest_id: "abc471", problem_index: "B", name: "Bars" },
-    { id: "old_x", contest_id: "abc100", problem_index: "X", name: "Reused" },
-  ],
-  "contests.json": [
-    { id: "abc471", title: "AtCoder Beginner Contest 471", start_epoch_second: 1_755_000_000 },
-    { id: "rerun", title: "Daily Training", start_epoch_second: 1_756_000_000 },
-  ],
-  "contest-problem.json": [
-    { contest_id: "abc471", problem_id: "abc471_a", problem_index: "A" },
-    { contest_id: "abc471", problem_id: "abc471_b", problem_index: "B" },
-    // The same problem, run again in a later contest.
-    { contest_id: "rerun", problem_id: "abc471_a", problem_index: "C" },
-    { contest_id: "rerun", problem_id: "old_x", problem_index: "D" },
-  ],
-  "problem-models.json": {
-    abc471_a: { difficulty: -320, is_experimental: false },
-    abc471_b: { difficulty: 1500, is_experimental: true },
-    // old_x deliberately has a model with no difficulty in it.
-    old_x: { slope: -0.1, intercept: 4 },
-  },
-};
+globalThis.DOMParser = DOMParser;
 
-let submissionPages = [];
-let requestLog = [];
+const { getAdapter } = await import("../core/platforms/adapters.js");
+const { resetHttpState } = await import("../core/platforms/atcoder/http.js");
+const { fetchContestRecord, fetchSolvedKeys, syncMetadata } = getAdapter("atcoder");
 
-function stubFetch() {
-  requestLog = [];
-  globalThis.chrome = {
-    storage: { local: { async get() { return { "upsolve_tracker.atcoder_handle": "me" }; } } },
-  };
-  globalThis.fetch = async (url) => {
-    requestLog.push(url);
+const SESSION = { handle: "tourist" };
 
-    for (const [name, body] of Object.entries(RESOURCES)) {
-      if (url.endsWith(`/resources/${name}`)) return jsonResponse(body);
+const tasksPage = (rows) => `<html><body>
+  <a class="contest-title" href="/contests/abc432">Example Contest 432</a>
+  <time class='fixtime fixtime-full'>2025-11-15 21:00:00+0900</time>
+  <time class='fixtime fixtime-full'>2025-11-15 22:40:00+0900</time>
+  <table><tbody>${rows}</tbody></table>
+</body></html>`;
+
+const taskRow = (index, id, name) =>
+  `<tr><td><a href="/contests/abc432/tasks/${id}">${index}</a></td>` +
+  `<td><a href="/contests/abc432/tasks/${id}">${name}</a></td>` +
+  `<td>2 sec</td><td>1024 MiB</td></tr>`;
+
+const submissionsPage = (rows, pages = 1) => `<html><body>
+  <table><tbody>${rows}</tbody></table>
+  ${pages > 1 ? `<ul class="pagination"><li><a href="?page=${pages}">${pages}</a></li></ul>` : ""}
+</body></html>`;
+
+const submissionRow = (taskId, verdict) =>
+  `<tr><td>2026-01-01</td><td><a href="/contests/abc432/tasks/${taskId}">X</a></td>` +
+  `<td>tourist</td><td>C++</td><td><span>${verdict}</span></td></tr>`;
+
+let routes;
+let requested;
+
+function respond(url) {
+  requested.push(url);
+  for (const [pattern, body] of routes) {
+    if (url.includes(pattern)) {
+      if (body === "LOGIN") {
+        return { ok: true, status: 200, url: "https://atcoder.jp/login", text: async () => "", json: async () => ({}) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        url,
+        text: async () => body,
+        json: async () => body,
+      };
     }
-    if (url.includes("/user/submissions")) {
-      const from = Number(new URL(url).searchParams.get("from_second"));
-      const page = submissionPages.shift() ?? [];
-      return jsonResponse(page.filter((row) => row.epoch_second >= from));
-    }
-    return { ok: false, status: 404, headers: { get: () => null } };
-  };
+  }
+  return { ok: false, status: 404, url, text: async () => "", json: async () => ({}) };
 }
 
-const jsonResponse = (body) => ({
-  ok: true,
-  status: 200,
-  headers: { get: () => null },
-  async json() { return body; },
-});
-
 beforeEach(() => {
-  clearResourceCache();
-  setRequestSpacing(0);
-  stubFetch();
+  routes = [];
+  requested = [];
+  resetHttpState(0);
+  globalThis.fetch = async (url) => respond(String(url));
 });
 
-/**
- * fetchContestRecord answers with one of the five statuses in
- * core/contest-status.js. Most tests here are about the record it builds, so
- * this unwraps a "ready" and throws otherwise — the same shape
- * contest-manager gives the rest of the app. Status handling itself is
- * asserted directly, further down.
- */
-const record = async (args) => {
-  const result = await fetchContestRecord(args);
-  if (result.status !== "ready") {
-    throw Object.assign(new Error(result.reason), { contestStatus: result.status });
-  }
-  return result.contest;
-};
-
-test("a contest is built from contest-problem, so reruns are complete", async () => {
-  // problems.json says "rerun" has no problems at all — every one of them
-  // debuted elsewhere. Reading it instead would produce an empty contest.
-  const contest = await record({ contestId: "rerun", subtype: "OTHER" });
-  assert.deepEqual(contest.problems.map((p) => p.index), ["C", "D"]);
-  assert.deepEqual(contest.problems.map((p) => p.problemId), ["abc471_a", "old_x"]);
-});
-
-test("published difficulty is taken as-is, including negatives", async () => {
-  const contest = await record({ contestId: "abc471", subtype: "ABC" });
-  const [a, b] = contest.problems;
-  assert.equal(a.rating, -320, "a negative difficulty was clamped");
-  assert.equal(a.ratingSource, "official");
-  assert.equal(b.rating, 1500);
-});
-
-test("a low-confidence model is recorded as such, not passed off as measured", async () => {
-  const contest = await record({ contestId: "abc471", subtype: "ABC" });
-  assert.equal(contest.problems[0].ratingConfidence, null);
-  assert.equal(contest.problems[1].ratingConfidence, "experimental");
-});
-
-test("a model without a difficulty leaves the rating null, never a guess", async () => {
-  const contest = await record({ contestId: "rerun", subtype: "OTHER" });
-  const reused = contest.problems.find((p) => p.problemId === "old_x");
-  assert.equal(reused.rating, null);
-  assert.equal(reused.ratingSource, null);
-});
-
-test("an unindexed contest fails loudly rather than storing an empty one", async () => {
-  await assert.rejects(
-    () => record({ contestId: "abc999", subtype: "ABC" }),
-    /doesn't list contest/,
-  );
-});
-
-test("both not-yet-indexed cases answer notPublishedYet", async () => {
-  // The status, not the sentence, is what contest-manager branches on: a copy
-  // edit to either message must not silently turn a contest that would have
-  // resolved on its own into one that is never retried.
-  const missingContest = await fetchContestRecord({
-    contestId: "abc999",
-    subtype: "ABC",
-  });
-  assert.equal(missingContest.status, "notPublishedYet");
-
-  // Listed in contests.json, but contest-problem.json has not caught up.
-  RESOURCES["contests.json"].push({ id: "abc998", title: "Fresh", start_epoch_second: 1 });
-  clearResourceCache();
-  const noProblems = await fetchContestRecord({
-    contestId: "abc998",
-    subtype: "ABC",
-  });
-  RESOURCES["contests.json"].pop();
-
-  assert.match(noProblems.reason, /lists no problems/);
-  assert.equal(noProblems.status, "notPublishedYet");
-});
-
-test("a retry revalidates rather than answering from the cached copy", async () => {
-  // The resources are cached for 15 minutes. Without this, retrying a waiting
-  // contest inside that window re-reads the same stale array, fails on the
-  // same missing row, and looks like the check happened — so the wait could
-  // never end while the panel stayed open.
-  await assert.rejects(() => record({ contestId: "abc998", subtype: "ABC" }));
-  const before = requestLog.filter((url) => url.endsWith("contests.json")).length;
-
-  RESOURCES["contests.json"].push({ id: "abc998", title: "Fresh", start_epoch_second: 7 });
-  try {
-    const contest = await record({
-      contestId: "abc998",
-      subtype: "ABC",
-      revalidate: true,
-    }).catch((error) => error);
-
-    const after = requestLog.filter((url) => url.endsWith("contests.json")).length;
-    assert.ok(after > before, "the retry served contests.json from the stale cache");
-    // It is listed now; only contest-problem.json is still behind.
-    assert.match(contest.message, /lists no problems/);
-  } finally {
-    RESOURCES["contests.json"].pop();
-  }
-});
-
-test("start time and name come from the contest list", async () => {
-  const contest = await record({ contestId: "abc471", subtype: "ABC" });
-  assert.equal(contest.name, "AtCoder Beginner Contest 471");
-  assert.equal(contest.startTimeSeconds, 1_755_000_000);
-  assert.equal(contest.platform, "atcoder");
-});
-
-test("submission paging continues past a full page and dedupes the overlap", async () => {
-  // A full page must not be treated as the end. The cursor moves to the newest
-  // timestamp seen rather than past it, so the boundary row repeats and has to
-  // be deduplicated by id.
-  const full = Array.from({ length: 500 }, (_, i) => ({
-    id: i + 1, epoch_second: 1000 + i, problem_id: `p${i}`, result: i === 499 ? "AC" : "WA",
-  }));
-  const tail = [
-    { id: 500, epoch_second: 1499, problem_id: "p499", result: "AC" },
-    { id: 501, epoch_second: 1500, problem_id: "late", result: "AC" },
+test("a contest is built from its own tasks page, ids and all", async () => {
+  routes = [
+    ["/contests/abc432/tasks", tasksPage(taskRow("A", "abc432_a", "Alpha") + taskRow("B", "abc432_b", "Beta"))],
+    ["/standings/json", "LOGIN"],
   ];
-  submissionPages = [full, tail];
 
-  const accepted = await getAcceptedProblemIds("me");
-  assert.ok(accepted.has("p499"), "the boundary submission was lost");
-  assert.ok(accepted.has("late"), "paging stopped at the first full page");
-  assert.equal(accepted.size, 2);
+  const { status, contest } = await fetchContestRecord({
+    contestId: "abc432",
+    subtype: "ABC",
+    session: SESSION,
+  });
+
+  assert.equal(status, "ready");
+  assert.equal(contest.name, "Example Contest 432");
+  assert.equal(contest.platform, "atcoder");
+  assert.equal(contest.startTimeSeconds, 1763208000);
+  assert.deepEqual(contest.problems.map((p) => p.problemId), ["abc432_a", "abc432_b"]);
 });
 
-test("paging terminates when a page brings nothing new", async () => {
-  // Every row shares a timestamp, so the cursor cannot advance. Without the
-  // no-progress check this loops until the page cap.
-  const stuck = Array.from({ length: 500 }, (_, i) => ({
-    id: i + 1, epoch_second: 42, problem_id: `p${i}`, result: "AC",
-  }));
-  submissionPages = [stuck, stuck, stuck, stuck];
+test("an unreadable task list waits rather than storing an empty contest", async () => {
+  // Before a contest ends AtCoder does not list its problems. Storing a contest
+  // with none would look like a round that had none.
+  routes = [["/contests/abc432/tasks", "<html><body><p>nothing</p></body></html>"]];
 
-  const accepted = await getAcceptedProblemIds("me");
-  assert.equal(accepted.size, 500);
-  const pages = requestLog.filter((u) => u.includes("/user/submissions")).length;
-  assert.ok(pages <= 3, `made ${pages} requests for a stuck cursor`);
+  const result = await fetchContestRecord({
+    contestId: "abc432",
+    subtype: "ABC",
+    session: SESSION,
+  });
+  assert.equal(result.status, "notPublishedYet");
 });
 
-test("only accepted submissions count", async () => {
-  submissionPages = [[
-    { id: 1, epoch_second: 1, problem_id: "solved", result: "AC" },
-    { id: 2, epoch_second: 2, problem_id: "tried", result: "WA" },
-    { id: 3, epoch_second: 3, problem_id: "tle", result: "TLE" },
-  ]];
-  const accepted = await getAcceptedProblemIds("me");
-  assert.deepEqual([...accepted], ["solved"]);
+test("difficulty that cannot be fitted stays null, never a guess", async () => {
+  // Signed out, standings are unreachable — the contest must still be addable,
+  // with its problems rendering "???" until a later refresh can rate them.
+  routes = [
+    ["/contests/abc432/tasks", tasksPage(taskRow("A", "abc432_a", "Alpha"))],
+    ["/standings/json", "LOGIN"],
+  ];
+
+  const { status, contest } = await fetchContestRecord({
+    contestId: "abc432",
+    subtype: "ABC",
+    session: SESSION,
+  });
+
+  assert.equal(status, "ready", "a signed-out user must still be able to add a contest");
+  assert.equal(contest.problems[0].rating, null);
+  assert.equal(contest.problems[0].ratingSource, null);
 });
 
 test("solved keys are namespaced task ids, so a rerun clears too", async () => {
-  submissionPages = [[{ id: 1, epoch_second: 1, problem_id: "abc471_a", result: "AC" }]];
-  const keys = await fetchSolvedKeys({ handle: "me" }, []);
-  assert.deepEqual([...keys], ["atcoder:abc471_a"]);
+  routes = [["/submissions", submissionsPage(submissionRow("abc432_c", "AC"))]];
+
+  const keys = await fetchSolvedKeys(SESSION, [{ id: "abc432" }]);
+  assert.deepEqual([...keys], ["atcoder:abc432_c"]);
+});
+
+test("only accepted submissions count, even though the request filters for them", async () => {
+  // The filter is an optimisation, not a guarantee: if AtCoder renamed the
+  // parameter the page would return everything, and `solved` is sticky.
+  routes = [
+    ["/submissions", submissionsPage(submissionRow("abc432_a", "AC") + submissionRow("abc432_b", "WA"))],
+  ];
+
+  const keys = await fetchSolvedKeys(SESSION, [{ id: "abc432" }]);
+  assert.deepEqual([...keys], ["atcoder:abc432_a"]);
+});
+
+test("every tracked contest is asked, because AtCoder has no per-user list", async () => {
+  routes = [["/submissions", submissionsPage(submissionRow("abc432_a", "AC"))]];
+
+  await fetchSolvedKeys(SESSION, [{ id: "abc460" }, { id: "abc461" }]);
+  assert.ok(requested.some((u) => u.includes("/contests/abc460/submissions")));
+  assert.ok(requested.some((u) => u.includes("/contests/abc461/submissions")));
+});
+
+test("signed out fails loudly instead of reporting nothing solved", async () => {
+  // The CodeChef trap: an empty answer and a login wall look identical, and
+  // because `solved` is never cleared a silent empty read strands the queue.
+  routes = [["/submissions", "LOGIN"]];
+
+  await assert.rejects(
+    () => fetchSolvedKeys(SESSION, [{ id: "abc432" }]),
+    /not signed in/i,
+  );
 });
 
 test("no handle means no request and no keys", async () => {
-  const keys = await fetchSolvedKeys({ handle: undefined }, []);
+  const keys = await fetchSolvedKeys({ handle: null }, [{ id: "abc432" }]);
   assert.equal(keys.size, 0);
-  assert.equal(requestLog.length, 0);
-});
-
-test("a later refresh fills in a difficulty that wasn't published at add time", async () => {
-  const contest = {
-    id: "abc471",
-    platform: "atcoder",
-    startTimeSeconds: 1_755_000_000,
-    problems: [
-      { index: "A", problemId: "abc471_a", rating: null, ratingSource: null },
-      { index: "B", problemId: "abc471_b", rating: 1500, ratingSource: "official" },
-    ],
-  };
-  const resolved = await syncMetadata({}, [contest]);
-  assert.equal(resolved, 1);
-  assert.equal(contest.problems[0].rating, -320);
-  assert.equal(contest.problems[0].ratingSource, "official");
+  assert.deepEqual(requested, []);
 });
 
 test("a settled contest costs no requests on refresh", async () => {
-  const contest = {
-    id: "abc471", platform: "atcoder", startTimeSeconds: 1_755_000_000,
-    problems: [{ index: "A", problemId: "abc471_a", rating: -320, ratingSource: "official" }],
-  };
-  await syncMetadata({}, [contest]);
-  assert.equal(requestLog.length, 0);
+  const rated = { id: "abc432", problems: [{ problemId: "abc432_a", rating: 654 }] };
+  assert.equal(await syncMetadata(SESSION, [rated]), 0);
+  assert.deepEqual(requested, []);
+});
+
+test("an unrated contest is retried, but only one per refresh", async () => {
+  // A standings payload is around a megabyte; a contest that can never be rated
+  // must not levy that cost on every refresh forever.
+  routes = [["/standings/json", "LOGIN"]];
+
+  const unrated = () => ({ id: "abc432", problems: [{ problemId: "abc432_a", rating: null }] });
+  await syncMetadata(SESSION, [unrated(), unrated(), unrated()]);
+
+  const standingsCalls = requested.filter((u) => u.includes("/standings/json"));
+  assert.equal(standingsCalls.length, 1);
 });

@@ -1,0 +1,31 @@
+/**
+ * The one place AtCoder's page globals are read.
+ *
+ * The AtCoder counterpart to `codechef/page-data.js`, and it exists for the
+ * same reason: a site's embedded state is markup, and markup belongs in exactly
+ * one file so a layout change is a one-file fix.
+ *
+ * AtCoder renders `var userScreenName = "…"` into every page it serves — the
+ * site's own scripts read it, alongside `contestScreenName` — which makes it a
+ * far steadier signal than the navbar it is derived from.
+ */
+
+/**
+ * Who the browser is signed in to AtCoder as.
+ *
+ * **Three outcomes, and conflating any two of them loses information:**
+ *
+ *   - a handle — signed in, and this is who as
+ *   - `""` — the page rendered and nobody is signed in. A *fact*.
+ *   - `null` — the marker is missing entirely, so the page shape changed and we
+ *     do not know. Not the same as being signed out, and callers must not treat
+ *     it as such: "we could not tell" is not evidence of anything.
+ *
+ * @param {string} html
+ * @returns {string|null}
+ */
+export function extractSignedInUser(html) {
+  const match = /\bvar\s+userScreenName\s*=\s*"([^"]*)"/.exec(html);
+  if (!match) return null;
+  return match[1];
+}

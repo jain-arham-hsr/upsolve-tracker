@@ -219,10 +219,13 @@ test("a platform cannot half-register", () => {
 });
 
 test("the shared modules that need no imports still need none", () => {
-  // rating-estimator is pure maths, queue-order pure comparison, contest-status
-  // pure vocabulary. If one grows an import it has probably grown a dependency
-  // on something platform-shaped, which is worth noticing.
-  for (const name of ["rating-estimator.js", "queue-order.js", "contest-status.js"]) {
+  // rating-models/rasch is pure maths, queue-order pure comparison,
+  // contest-status pure vocabulary. If one grows an import it has probably grown
+  // a dependency on something platform-shaped, which is worth noticing.
+  //
+  // Note rating-models/rasch-upper-asymptote.js is deliberately absent: it imports
+  // rasch.js, which is a dependency on maths rather than on anything platform-shaped.
+  for (const name of ["rating-models/rasch.js", "queue-order.js", "contest-status.js"]) {
     assert.deepEqual(
       importsOf(read(path.join("core", name))),
       [],

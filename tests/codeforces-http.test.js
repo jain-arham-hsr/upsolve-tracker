@@ -101,3 +101,38 @@ test("requests actually go through the pacer", async () => {
     resetHttpState();
   }
 });
+
+test("a block is flagged, so it can wait instead of failing the add", async () => {
+  // Before this flag existed the block threw bare, and nothing turned it into a
+  // status — so `contest-manager.js` never set `isNotPublishedYet`, `ui/index.js`
+  // never made a waiting entry, and a Cloudflare challenge failed the add
+  // outright. The user had to notice and press Add again. `contest-status.js`
+  // had always defined `sourceUnreachable` for exactly this; only the wiring
+  // was missing.
+  //
+  // A flag, not a message match: a copy edit to that sentence must not silently
+  // change which failures retry.
+  for (const response of [
+    { status: 403, async text() { return ""; } },
+    { status: 200, async text() { return "<html>Just a moment</html>"; } },
+  ]) {
+    resetHttpState();
+    globalThis.fetch = async () => response;
+
+    const error = await CodeforcesHttp.get("https://codeforces.com/contest/1/standings").then(
+      () => null,
+      (e) => e,
+    );
+    assert.ok(error, "a block must throw");
+    assert.equal(error.isSourceUnreachable, true, `status ${response.status} was not flagged`);
+  }
+});
+
+test("an ordinary failure is not flagged, so it still fails loudly", async () => {
+  // Only the challenge waits. A layout change or a genuine fault must not be
+  // quietly retried forever under the same flag.
+  resetHttpState();
+  globalThis.fetch = async () => ({ status: 200, async text() { return "<html>fine</html>"; } });
+  const text = await CodeforcesHttp.get("https://codeforces.com/x");
+  assert.match(text, /fine/);
+});

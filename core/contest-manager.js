@@ -15,11 +15,7 @@ import {
   clearSolvedForPlatform,
 } from "./services/platform-identity.js";
 
-export async function processNewContest(
-  url,
-  onProgress = () => {},
-  { revalidate = false } = {},
-) {
+export async function processNewContest(url, onProgress = () => {}) {
   try {
     const parsed = matchContestUrl(url);
     if (!parsed) throw new Error("Not a supported contest URL.");
@@ -42,10 +38,6 @@ export async function processNewContest(
       contestId,
       subtype,
       session,
-      // Set when a waiting contest is retried, so an adapter that caches its
-      // bulk data re-reads it rather than answering from the copy that already
-      // failed. Adapters without a cache ignore it.
-      revalidate,
       onProgress,
     });
 

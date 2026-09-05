@@ -1,11 +1,9 @@
 /**
- * Fetching Codeforces HTML, and recognising when Codeforces refuses.
+ * Codeforces' HTML, and recognising when Codeforces refuses.
  *
- * This is what is left of `services/http-client.js` after the generic half —
- * jitter, periodic cooldown, queueing — moved into `services/request-pacer.js`.
- * What remains is Codeforces' own: it is the only source in this extension
- * behind Cloudflare, the only one whose session cookie has to ride along, and
- * the only one whose throttling numbers were tuned against a live site.
+ * The pacing and the fetching now live in `services/site-client.js`, shared with
+ * every other platform. What stays here is Codeforces' own: the throttling
+ * numbers, tuned against the live site, and what its refusal looks like.
  *
  * **Do not shorten these delays when optimising.** Even sampled, adding a
  * contest issues tens of requests, and they are what keeps the extension from
@@ -14,28 +12,53 @@
  * page count towards the next gap. `tests/request-pacer.test.js` fails if that
  * is collapsed.
  */
-import { createPacer } from "../../services/request-pacer.js";
+import { createSiteClient } from "../../services/site-client.js";
+import { createPageFetch } from "../../services/page-transport.js";
+import { codeforces } from "./descriptor.js";
 
 const BLOCKED =
   "Codeforces is blocking requests. Please visit codeforces.com in your browser and try again.";
 
-const paced = createPacer({
-  gapMs: [1000, 2500],
-  measureFrom: "end",
-  cooldown: { everyNth: 15, gapMs: [6000, 12000] },
-  // The user's Codeforces session cookie, without which a private gym's
-  // standings are invisible.
-  credentials: "include",
-  onWait: ({ count, ms, isCooldown }) => {
-    const seconds = (ms / 1000).toFixed(2);
-    if (isCooldown) {
-      // `info`, not `warn`. chrome://extensions collects warnings alongside
-      // errors, so a normal add used to file a row there every 15 requests —
-      // the same trap the waiting-contest logging was fixed for.
-      console.info(`[codeforces] Cooldown threshold reached. Pausing for ${seconds}s…`);
-    } else {
-      console.log(`[codeforces] Request ${count}: waiting ${seconds}s`);
-    }
+const client = createSiteClient({
+  // Routed through a Codeforces tab when one is open, so the request carries the
+  // session and Cloudflare sees the user rather than a stranger. Falls back to a
+  // direct fetch otherwise, which still reads anything public.
+  fetchImpl: createPageFetch({ matchPatterns: codeforces.hostPermissions }),
+  pacer: {
+    gapMs: [1000, 2500],
+    measureFrom: "end",
+    cooldown: { everyNth: 15, gapMs: [6000, 12000] },
+    // Sent, though measurement showed they do not arrive: a cross-site request
+    // from the extension's origin drops cookies whose SameSite is unset, which
+    // is the default. Kept because it is correct, and because it becomes true
+    // the moment the request is issued from inside a page on the site.
+    credentials: "include",
+    onWait: ({ count, ms, isCooldown }) => {
+      const seconds = (ms / 1000).toFixed(2);
+      if (isCooldown) {
+        // `info`, not `warn`. chrome://extensions collects warnings alongside
+        // errors, so a normal add used to file a row there every 15 requests.
+        console.info(`[codeforces] Cooldown threshold reached. Pausing for ${seconds}s…`);
+      } else {
+        console.log(`[codeforces] Request ${count}: waiting ${seconds}s`);
+      }
+    },
+  },
+
+  /**
+   * Cloudflare answers a challenge two ways, and both must be caught: a 403
+   * with no useful body, or a 200 whose body is the interstitial. Measured
+   * live — `cf-mitigated: challenge`, a page of scripts pointing at
+   * challenges.cloudflare.com — so this is not a heuristic.
+   *
+   * Flagged rather than thrown bare. `contest-status.js` defines
+   * `sourceUnreachable` as exactly this ("we failed to ask — network, 403,
+   * anything"), but until the flag existed nothing converted the throw into
+   * that status, so a challenge failed the add outright and was never retried.
+   */
+  refusal({ response, body }) {
+    if (response.status !== 403 && !body.includes("Just a moment")) return null;
+    return Object.assign(new Error(BLOCKED), { isSourceUnreachable: true });
   },
 });
 
@@ -45,19 +68,7 @@ export const CodeforcesHttp = {
    * @param {RequestInit} [options]
    * @returns {Promise<string>} the response body as text
    */
-  async get(url, options = {}) {
-    const response = await paced(url, options);
-
-    // Cloudflare answers a challenge with a 403 and no useful body.
-    if (response.status === 403) throw new Error(BLOCKED);
-
-    const text = await response.text();
-
-    // And sometimes with a 200 carrying the interstitial instead.
-    if (text.includes("Just a moment")) throw new Error(BLOCKED);
-
-    return text;
-  },
+  get: (url, options = {}) => client.get(url, options),
 };
 
 /**
@@ -66,6 +77,5 @@ export const CodeforcesHttp = {
  * wants the requests needs it out of the way.
  */
 export function resetHttpState(spacingMs = 0) {
-  paced.reset();
-  paced.setSpacing(spacingMs);
+  client.reset(spacingMs);
 }

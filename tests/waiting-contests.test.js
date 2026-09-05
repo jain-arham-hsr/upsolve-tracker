@@ -53,7 +53,7 @@ const ATC = (id) => ({
 function adder(behaviour) {
   const calls = [];
   const fn = async (url, _onProgress, options) => {
-    calls.push({ url, revalidate: options?.revalidate });
+    calls.push({ url });
     return behaviour(url);
   };
   fn.calls = calls;
@@ -198,29 +198,6 @@ test("one entry failing does not stop the others being retried", async () => {
 
   assert.deepEqual(added.map((entry) => entry.id), ["abc472", "abc474"]);
   assert.deepEqual(stillWaiting.map((entry) => entry.contestId), ["abc473"]);
-});
-
-test("bulk data is revalidated once per platform, not once per entry", async () => {
-  // Revalidating per entry would fire four conditional requests for four
-  // AtCoder contests against a service whose published etiquette rule is one
-  // request per second — and the first revalidation already made the rest
-  // fresh.
-  await addWaiting(ATC("abc472"));
-  await addWaiting(ATC("abc473"));
-  await addWaiting({
-    url: "https://codeforces.com/contest/2193",
-    platformId: "codeforces",
-    contestId: "2193",
-  });
-
-  const add = adder(() => fails("still nothing"));
-  await retryWaitingContests(() => {}, { addContest: add });
-
-  assert.deepEqual(
-    add.calls.map((call) => call.revalidate),
-    [true, false, true],
-    "each platform revalidates on its first entry only",
-  );
 });
 
 test("waiting entries never touch the tracked queue", async () => {

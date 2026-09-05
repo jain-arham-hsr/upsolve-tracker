@@ -1,19 +1,16 @@
 /**
- * The CodeChef adapter.
+ * What problems a CodeChef contest holds, and what they are worth.
  *
- * No estimator: CodeChef publishes `difficulty_rating` and does so promptly —
- * Starters 252 was rated within two days of running. `/api/rankings/` is
- * CSRF-gated, but nothing here needs it.
+ * No estimator here: CodeChef publishes `difficulty_rating` and does so
+ * promptly — Starters 252 was rated within two days of running. `/api/rankings/`
+ * is CSRF-gated, but nothing here needs it.
+ *
+ * Costs one request for the contest plus **one per problem** — difficulty and
+ * tags appear on no bulk or contest-level response, signed in or not. That is
+ * ~9 for a Starters division, still fewer than a Codeforces add.
  */
+import { getContest, getProblem, ACCEPTED } from "./api.js";
 import {
-  getAttemptedProblems,
-  getContest,
-  getDashboardHtml,
-  getProblem,
-} from "./api.js";
-import { extractSession } from "./page-data.js";
-import {
-  ready,
   notEndedYet,
   notPublishedYet,
   sourceUnreachable,
@@ -32,50 +29,8 @@ const NOT_RATED = new Set([-1, 9999]);
 /** Setter handles and contest codes get tagged alongside real topics. */
 const TAG_NOISE = /^(?:start|cook|ltime|snck)\d+$|_adm$/i;
 
-import { readSettingsValues } from "../../services/secure-store.js";
-import { codechef } from "./descriptor.js";
 
-export const HANDLE_KEY = "upsolve_tracker.codechef_handle";
-
-/**
- * The handle you declared, plus whoever the browser is actually signed in as.
- *
- * Both, because they can differ — and that difference is the whole point: the
- * configured handle says who this queue belongs to, and the session says whose
- * solved status the API is about to hand back.
- */
-export async function createSession() {
-  return createSessionFrom(await readSettingsValues(codechef));
-}
-
-/** The same session from unsaved values, so Settings can verify what you typed. */
-export async function createSessionFrom(values) {
-  const html = await getDashboardHtml();
-
-  // extractSession returns null both when signed out and when the page shape
-  // has changed. Either way the caller must not read an empty solved list as
-  // "nothing solved".
-  const page = extractSession(html);
-
-  return {
-    handle: values[HANDLE_KEY],
-    signedInAs: page?.username ?? null,
-    rating: page?.rating ?? null,
-    signedIn: Boolean(page?.username),
-  };
-}
-
-/**
- * CodeChef is the one platform where the browser session *is* the identity —
- * the other two are asked *about* a handle, whoever is signed in. Settings says
- * so in the verb, and that distinction is the adapter's to make rather than the
- * page's, or it turns back into a branch on the platform.
- */
-export function describeIdentity(identity) {
-  return `Signed in as ${identity.username}.`;
-}
-
-export async function fetchContestRecord({
+export async function fetchContest({
   contestId,
   subtype,
   session,
@@ -125,20 +80,18 @@ export async function fetchContestRecord({
     }
   }
 
-  return ready({
+  return {
     id: payload.code,
-    platform: codechef.id,
     // A parent contest resolves to one of its divisions, so the id stored is
     // not the id the user was looking at. Remember theirs, or the add banner
-    // can never tell that /START252 is already tracked as START252D.
-    ...(payload.code !== contestId ? { sourceId: contestId } : {}),
+    // can never tell that /START252 is already tracked as START252D. The trunk
+    // drops it when it matches.
+    sourceId: contestId,
     name: payload.contest.name ?? `Contest ${payload.code}`,
-    type: subtype,
     problems: built,
     publishedDataCheckedAt: Date.now(),
     startTimeSeconds: payload.contest.time?.start ?? null,
-    addedAt: Date.now(),
-  });
+  };
 }
 
 /**
@@ -183,18 +136,6 @@ async function resolveDivision(contestId, session, onProgress) {
   onProgress(`Using ${match.contest_code} (${match.div?.name ?? "your division"})…`);
   return { code: match.contest_code, contest: await getContest(match.contest_code) };
 }
-
-/**
- * 1 = Accepted, from the practice page's own status map:
- * `{0: Unattempted, 1: Accepted, 2: Partially Correct, 3: Wrong Answer, …}`.
- *
- * An explicit allow-list rather than "anything but 0". `solved` is sticky and
- * never cleared (progress-manager.js), so a false positive permanently hides a
- * problem you have not solved, while a false negative costs one refresh. And 2
- * is Partially Correct — scoring some subtasks is not finishing the problem,
- * the same call `problemsstats` already made by ignoring `partially_solved`.
- */
-const ACCEPTED = 1;
 
 /**
  * Signed out, `problemsstats.solved` is an empty **array**; signed in it is an
@@ -290,38 +231,6 @@ function cleanTags(detail, contestCode) {
     seen.add(key);
     return true;
   });
-}
-
-/**
- * Every problem this account has solved, contest or practice.
- *
- * This used to read `problemsstats.solved` per tracked contest, which only ever
- * reflects submissions made **during** the contest. CodeChef closes a contest
- * to submissions when it ends, so upsolving happens in practice — and that read
- * could never see it, leaving every CodeChef problem in the queue forever.
- *
- * Now user-wide, like Codeforces' `user.status` and AtCoder's submissions feed,
- * so `contests` is unused. It is also cheaper: a few paged requests rather than
- * one per tracked contest.
- */
-export async function fetchSolvedKeys(session, _contests, onProgress = () => {}) {
-  // Signed out — or signed in as somebody else — the listing answers for the
-  // wrong account, and an empty answer is indistinguishable from having solved
-  // nothing. Refuse, so the caller isolates the failure and leaves flags alone.
-  await verifyIdentity(session);
-
-  const rows = await getAttemptedProblems(onProgress);
-  const keys = new Set();
-
-  for (const row of rows) {
-    if (Number(row?.status) !== ACCEPTED) continue;
-    if (!row?.code) continue;
-    // solvedKey ignores its contest argument — a CodeChef problem is identified
-    // by its code alone, which is why one solve clears every tracked division.
-    keys.add(codechef.solvedKey(null, { index: row.code }));
-  }
-
-  return keys;
 }
 
 /**
@@ -452,44 +361,4 @@ async function refreshPracticeFlags(contests, onProgress) {
   }
 
   return changed;
-}
-
-/**
- * Checks the browser is signed in as the account this queue is for.
- *
- * Unlike the other two, CodeChef's data comes back for whoever holds the
- * session cookie rather than for a handle we ask about. So the configured
- * handle is the authority, and the session is checked against it.
- *
- * @throws when no handle is configured, when signed out, or — the dangerous
- *   one — when signed in as somebody else. Signing out is indistinguishable
- *   from having solved nothing, since `problemsstats.solved` is simply empty,
- *   so none of these may fall through to a caller.
- */
-export async function verifyIdentity(session) {
-  if (!session?.handle) {
-    throw new Error("No CodeChef handle set. Add one in Settings.");
-  }
-
-  if (!session.signedIn) {
-    throw new Error(
-      `Not signed in to CodeChef. Sign in as ${session.handle} at codechef.com.`,
-    );
-  }
-
-  if (session.signedInAs !== session.handle) {
-    const error = new Error(
-      `Signed in to CodeChef as ${session.signedInAs}, but this queue is for ` +
-        `${session.handle}. Sign in as ${session.handle}, or change the handle in Settings.`,
-    );
-    // Flagged so callers can tell "the wrong account is signed in" — which
-    // must always stop the operation — from "this platform isn't set up".
-    error.isIdentityMismatch = true;
-    throw error;
-  }
-
-  return {
-    username: session.handle,
-    rating: typeof session.rating === "number" ? session.rating : null,
-  };
 }

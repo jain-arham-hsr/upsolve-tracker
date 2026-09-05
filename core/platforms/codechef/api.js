@@ -20,7 +20,9 @@
  * Cookies are sent because `problemsstats` is per-user; everything else the
  * endpoints return is public.
  */
-import { createPacer } from "../../services/request-pacer.js";
+import { createSiteClient } from "../../services/site-client.js";
+import { createPageFetch } from "../../services/page-transport.js";
+import { codechef } from "./descriptor.js";
 
 const BASE = "https://www.codechef.com";
 
@@ -44,24 +46,39 @@ const MAX_ATTEMPTED = 5000;
 /** Contest payloads are reused within a single add; nothing is kept long. */
 const CONTEST_TTL_MS = 60 * 1000;
 
-const paced = createPacer({ gapMs: MIN_GAP_MS, credentials: "include" });
+const client = createSiteClient({
+  // CodeChef answers for whoever holds the session cookie, so routing through a
+  // tab is what makes the signed-in account visible at all.
+  fetchImpl: createPageFetch({ matchPatterns: codechef.hostPermissions }),
+  pacer: { gapMs: MIN_GAP_MS, credentials: "include" },
+
+  /**
+   * CodeChef's refusal is a 403 — its `/api/` routes are CSRF-gated, and an
+   * unauthenticated or rate-limited caller gets one rather than an error body.
+   *
+   * Note this is *not* how a signed-out session shows up: that returns a
+   * perfectly good 200 with an empty solved list, which is why
+   * `submissions.js` verifies identity rather than trusting the payload. Two
+   * different refusals, and conflating them is how the platform became
+   * untrackable once before.
+   */
+  refusal({ response, url }) {
+    if (response.status === 403) {
+      return new Error(
+        "CodeChef refused the request. Open codechef.com in a tab, make sure you're " +
+          "signed in, and try again.",
+      );
+    }
+    if (response.ok) return null;
+    return new Error(`CodeChef returned ${response.status} for ${new URL(url).pathname}.`);
+  },
+});
 const contestCache = new Map();
 
 async function getJson(path) {
-  const response = await paced(`${BASE}${path}`, {
+  return client.getJson(`${BASE}${path}`, {
     headers: { Accept: "application/json" },
   });
-
-  if (response.status === 403) {
-    throw new Error(
-      "CodeChef refused the request. Open codechef.com in a tab, make sure you're " +
-        "signed in, and try again.",
-    );
-  }
-  if (!response.ok) {
-    throw new Error(`CodeChef returned ${response.status} for ${path}.`);
-  }
-  return response.json();
 }
 
 export async function getContest(code) {
@@ -141,16 +158,26 @@ export async function getAttemptedProblems(onProgress = () => {}) {
  * for the homepage, which doesn't carry it at all.
  */
 export async function getDashboardHtml() {
-  const response = await paced(`${BASE}/dashboard`, { credentials: "include" });
-  if (!response.ok) {
-    throw new Error(`CodeChef returned ${response.status} for the dashboard.`);
-  }
-  return response.text();
+  return client.get(`${BASE}/dashboard`);
 }
 
 /** Test seam. */
 export function resetApiState() {
   contestCache.clear();
-  paced.reset();
-  paced.setSpacing(0);
+  client.reset(0);
 }
+
+/**
+ * Accepted, from the practice bundle's own status map:
+ * `{0: Unattempted, 1: Accepted, 2: Partially Correct, 3: Wrong Answer, …}`.
+ *
+ * Match this value explicitly rather than "anything but 0" — `solved` is sticky
+ * and never cleared, so a false positive hides a problem permanently while a
+ * false negative costs one refresh. `2` is Partially Correct and is excluded for
+ * the same reason `partially_solved` always was.
+ *
+ * It lives here rather than in either caller because both halves need it:
+ * `problems.js` reads it off the contest payload and `submissions.js` off the
+ * practice listing. Duplicating a magic number across the two is how they drift.
+ */
+export const ACCEPTED = 1;

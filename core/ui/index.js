@@ -10,6 +10,7 @@ import { hasCompleteSetup } from "../services/secure-store.js";
 import { processNewContest } from "../contest-manager.js";
 import { LocalDB } from "../services/storage.js";
 import { matchContestUrl, findTrackedContest } from "../platforms/registry.js";
+import { waitingExplanation } from "./waiting-message.js";
 import {
   loadWaiting,
   findWaiting,
@@ -226,10 +227,9 @@ export class UpsolveApp extends HTMLElement {
           lastError: error.message,
         });
         this.renderAddBanner();
-        this.setSyncStatus(
-          `${pending.match.contestId} isn't published yet. It'll be added on a refresh — cancel it under Contests.`,
-          { sticky: true },
-        );
+        this.setSyncStatus(waitingExplanation(error, pending.match.contestId), {
+          sticky: true,
+        });
       } else {
         this.setSyncStatus(error.message, { sticky: true });
         this.renderAddBanner({ label: "Add" });

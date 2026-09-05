@@ -18,18 +18,12 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { clearResourceCache, setRequestSpacing } = await import(
-  "../core/platforms/atcoder/problems-api.js"
-);
+const { resetHttpState } = await import("../core/platforms/atcoder/http.js");
 const { processNewContest } = await import("../core/contest-manager.js");
 
-// abc472 is deliberately absent from contests.json — the case in hand.
-const RESOURCES = {
-  "problems.json": [],
-  "contests.json": [{ id: "abc471", title: "ABC 471", start_epoch_second: 1 }],
-  "contest-problem.json": [],
-  "problem-models.json": {},
-};
+// A contest AtCoder has not finished does not list its problems — the case in
+// hand. The tasks page renders, but with no task table in it.
+const TASKS_NOT_YET = `<html><body><p>The contest has not started.</p></body></html>`;
 
 const PROFILE = `<html><body><table class="dl-table">
   <tr><th class="no-break">Rating</th><td><span class="user-blue">1600</span></td></tr>
@@ -40,8 +34,7 @@ let logged;
 let real;
 
 beforeEach(() => {
-  clearResourceCache();
-  setRequestSpacing(0);
+  resetHttpState(0);
 
   store = { "upsolve_tracker.atcoder_handle": "me" };
   globalThis.chrome = {
@@ -69,14 +62,18 @@ beforeEach(() => {
 
   globalThis.fetch = async (url) => {
     if (String(url).includes("atcoder.jp/users/")) {
-      return { ok: true, status: 200, async text() { return PROFILE; } };
+      return { ok: true, status: 200, url: String(url), async text() { return PROFILE; } };
     }
-    for (const [name, body] of Object.entries(RESOURCES)) {
-      if (String(url).endsWith(`/resources/${name}`)) {
-        return { ok: true, status: 200, headers: { get: () => null }, async json() { return body; } };
-      }
+    if (String(url).includes("/tasks")) {
+      return {
+        ok: true,
+        status: 200,
+        url: String(url),
+        headers: { get: () => null },
+        async text() { return TASKS_NOT_YET; },
+      };
     }
-    return { ok: false, status: 404, headers: { get: () => null } };
+    return { ok: false, status: 404, url: String(url), headers: { get: () => null } };
   };
 
   // Both levels are captured because chrome://extensions collects both. A
