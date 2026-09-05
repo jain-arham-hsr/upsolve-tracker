@@ -142,8 +142,15 @@ async function estimateMissingRatings({
     distribution = await getOfficialRatingDist(service, contestId, onProgress);
     // An empty ratingChanges means the round isn't rated yet — the freshly
     // finished contest you most want to upsolve. Fall back to the standings.
+    //
+    // The payload must be fetched *unsigned* and handed over. Codeforces serves
+    // a non-gym contest's standings only to an anonymous request with no extra
+    // parameters, and `getContestStandings` signs — so calling it here refused
+    // every time, silently leaving the field empty. A fallback that could never
+    // fire, which is why nothing noticed.
     if (distributionSize(distribution) === 0) {
-      distribution = await getGymRatingDist(service, contestId);
+      const standings = await service.getPublicContestStandings(contestId);
+      distribution = await getGymRatingDist(service, contestId, standings);
     }
   } else {
     // The gym path: `solve-stats.js` already fetched this response to count

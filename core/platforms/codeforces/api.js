@@ -73,6 +73,56 @@ export class CodeforcesService {
   }
 
   /**
+   * Standings for an **official** contest, fetched without signing.
+   *
+   * ## Why this cannot go through `_callMethod`
+   *
+   * Codeforces answers a non-gym `contest.standings` only for *"anonymous GET
+   * requests with no extra parameters"* — and `apiKey` and `time`, which
+   * `_callMethod` always appends, are extra parameters. A signed request is
+   * refused with that exact complaint, independently of whether the key is
+   * valid. So this is a bare GET on purpose, not an oversight; signing it would
+   * break it.
+   *
+   * The same rule forbids trimming the response: `count`, `from`, `handles`,
+   * `showUnofficial` and `participantTypes` are all rejected, verified across
+   * five contests. A Div. 2 round is ~8.5 MB, and there is no smaller shape —
+   * we want seven problem objects and must accept eleven thousand rows to get
+   * them. **Read what is needed and drop the reference**; this must not be
+   * retained.
+   *
+   * ## Why it is worth the bytes
+   *
+   * `problemset.problems` lists each problem once, under the contest it
+   * originated in. A Div. 1 / Div. 2 pair shares problems, and the shared ones
+   * are filed under Div. 1 only — so Round 1079's Div. 2 (2197) lists just A
+   * and B, while C–F live under 2196 with Div. 1 indices. Looking them up by
+   * `contestId-index` finds nothing and the estimator then rates problems
+   * Codeforces has already rated, storing numbers up to 100 off.
+   *
+   * Nothing exposes that pairing: not the API — the contest and problem objects
+   * carry no such field — and not the HTML, where the contest page, the problem
+   * statement and the standings page never mention the twin's id. Matching on
+   * start time is unsound (13% of same-start groups are unrelated contests, such
+   * as ICPC problem sets), and matching on problem name is unsound too (contest
+   * 100 also has a "Friendly Numbers").
+   *
+   * This response sidesteps all of it: asked about 2197 it returns that
+   * contest's own indices with the correct published ratings attached, because
+   * a rating belongs to the problem rather than to the contest. No inference.
+   */
+  async getPublicContestStandings(contestId) {
+    const url = `${this.baseUrl}contest.standings?contestId=${encodeURIComponent(contestId)}`;
+    const response = await paced(url);
+    const data = await response.json();
+
+    if (data.status !== "OK") {
+      throw new Error(data.comment || "Codeforces API Error");
+    }
+    return data.result;
+  }
+
+  /**
    * Fetches submissions for a contest.
    *
    * This is the only window into a gym whose standings Codeforces has hidden:

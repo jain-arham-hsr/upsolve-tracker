@@ -414,3 +414,82 @@ test("a gym's standings are fetched once, not once per concern", async () => {
   assert.equal(contest.problems[1].ratingSource, "estimated");
   assert.equal(standingsCalls, 1, "contest.standings was fetched more than once");
 });
+
+test("a shared Div 1 / Div 2 problem takes its published rating, not an estimate", async () => {
+  // The regression this exists for. `problemset.problems` lists each problem
+  // once, under the contest it originated in — so a Div 2 round sharing
+  // problems with a Div 1 one finds nothing for them under its own id, and the
+  // estimator rated problems Codeforces had already rated. Round 1079 stored
+  // D as 1500 against a published 1600, and E2 as 2100 against 2000.
+  //
+  // Nothing exposes the pairing — not the API, not the HTML — so the fix is to
+  // read the ratings Codeforces attaches to *this* contest's own indices.
+  CodeforcesHttp.get = async () => standingsPage("2197");
+
+  const result = await fetchContestRecord({
+    contestId: "2197",
+    subtype: "OFFICIAL",
+    session: {
+      service: {
+        // Only A is filed under this contest; B and C live under the Div 1 twin.
+        getProblemsetProblems: async () => ({
+          problems: [{ contestId: 2197, index: "A", rating: 800, tags: ["math"] }],
+        }),
+        // …but the contest's own standings carry all three, correctly.
+        getPublicContestStandings: async () => ({
+          problems: [
+            { index: "A", name: "Problem A", rating: 800, tags: ["math"] },
+            { index: "B", name: "Problem B", rating: 1600, tags: ["dp"] },
+            { index: "C", name: "Problem C", rating: 2000, tags: ["graphs"] },
+          ],
+          rows: [],
+        }),
+        getContestList: async () => [],
+        getUsersInfo: async () => {
+          throw new Error("the field must not be measured — every rating is published");
+        },
+        getContestStandings: async () => {
+          throw new Error("the signed call is refused for a non-gym contest");
+        },
+      },
+    },
+  });
+
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.contest.problems.map((p) => p.rating), [800, 1600, 2000]);
+  assert.deepEqual(
+    result.contest.problems.map((p) => p.ratingSource),
+    ["official", "official", "official"],
+    "B and C are published under the twin, so they must not read as estimates",
+  );
+});
+
+test("published ratings failing is soft — the add still succeeds", async () => {
+  // Losing that call costs the shared problems an estimate, not the contest.
+  // Everything filed under this contest's own id still comes from the
+  // problemset, which is most of a round.
+  CodeforcesHttp.get = async () => standingsPage("2197");
+
+  const result = await fetchContestRecord({
+    contestId: "2197",
+    subtype: "OFFICIAL",
+    session: {
+      service: {
+        getProblemsetProblems: async () => ({
+          problems: INDEXES.map((index, i) => ({
+            contestId: 2197, index, rating: 800 + i * 100, tags: ["math"],
+          })),
+        }),
+        getPublicContestStandings: async () => {
+          throw new Error("network");
+        },
+        getContestList: async () => [],
+        getUsersInfo: async () => { throw new Error("nothing needs estimating"); },
+      },
+    },
+  });
+
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.contest.problems.map((p) => p.ratingSource),
+    ["official", "official", "official"]);
+});

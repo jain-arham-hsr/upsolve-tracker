@@ -36,11 +36,32 @@ export async function readSolveStats(type, contestId, cfService = null) {
   const { contestName, problems, solveCountsRead } = scraped;
 
   if (type !== "gym") {
-    // Official tags, ratings and start times come from bulk endpoints — see
-    // problemset-sync.js and start-times.js.
+    // Take the published ratings and tags Codeforces attaches to *this*
+    // contest's problems. `problemset.problems` lists each problem once, under
+    // the contest it originated in — so a Div. 2 round sharing problems with a
+    // Div. 1 one finds nothing for them under its own id, and the estimator
+    // then rates problems Codeforces has already rated. See
+    // `api.js#getPublicContestStandings` for why nothing cheaper works.
+    //
+    // Failure is soft: `problemset-sync.js` still runs afterwards and covers
+    // every problem filed under this contest's own id, which is most of them.
+    // Losing this call costs the shared ones an estimate, not the add.
+    try {
+      const standings = await cfService.getPublicContestStandings(contestId);
+      applyStandingsProblemData(standings, problems);
+    } catch (error) {
+      console.info(
+        `[Codeforces] Couldn't read published ratings from ${contestId}'s standings; ` +
+          `anything the problemset doesn't cover will be estimated. (${error.message})`,
+      );
+    }
+
     return {
       contestName,
       problems,
+      // Still false: `problemset-sync.js` must run regardless, both to cover
+      // anything above that failed and because it is what re-checks weekly as
+      // Codeforces publishes ratings later.
       tagsSynced: false,
       startTimeSeconds: null,
       solveCountsRead,

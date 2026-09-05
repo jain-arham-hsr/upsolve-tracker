@@ -734,6 +734,40 @@ Every CSS selector and parsing rule for Codeforces' HTML lives in that one file,
 
 Both come from `problemset.problems` via `problemset-sync.js` (`tag-service.js` now only counts tags for the stats view). Ratings are preferred over estimates — same quantity, measured rather than inferred — and `problem.ratingSource` records `"official"` or `"estimated"`. Because CF publishes ratings days after a round, the weekly re-check means estimates converge to real ratings over time; a contest added right after it ends starts estimated and settles.
 
+**`problemset.problems` alone is not enough, and the reason is easy to miss.** It lists each
+problem *once*, under the contest it originated in — so a shared Div. 1 / Div. 2 problem is
+filed under Div. 1 only. Round 1079's Div. 2 (2197) lists just A and B; C–F live under 2196
+with Div. 1 indices. `syncOfficialProblemData` matches on `contestId-index`, finds nothing,
+and the estimator then rates problems Codeforces has already rated — measured on 2197, D
+stored 1500 against a published 1600 and E2 stored 2100 against 2000.
+
+`solve-stats.js` therefore also reads `contest.standings` for official contests, which
+reports a shared problem's rating under *this* contest's index, because a rating belongs to
+the problem rather than the contest. Four things about that call:
+
+- **It must not be signed.** Codeforces serves a non-gym standings only to *"anonymous GET
+  requests with no extra parameters"*, and `_callMethod` always appends `apiKey` and `time`.
+  A signed request is refused with that exact complaint independently of key validity — so
+  `getPublicContestStandings` is a bare GET on purpose. Signing it would break it, which is
+  why the comment there is long.
+- **It cannot be trimmed.** `count`, `from`, `handles`, `showUnofficial` and
+  `participantTypes` are all rejected by the same rule, verified across five contests. ~8.5 MB
+  buys seven problem objects out of eleven thousand rows. Read and drop it; never retain it.
+- **Nothing cheaper exists — this was searched for, not assumed.** No API field links the
+  paired contests (a problem carries only `contestId, index, name, type, points, tags,
+  rating`; a contest only `id, name, type, phase, frozen, duration/start/relativeTimeSeconds`).
+  Nor does the HTML: the contest page, the problem statement and the standings page never
+  mention the twin's id. Matching on start time is unsound — 13% of same-start groups are
+  unrelated contests, including ICPC problem sets — and matching on problem name is unsound
+  too, since contest 100 also has a "Friendly Numbers".
+- **Failure is soft.** `problemset-sync` still runs and covers everything filed under the
+  contest's own id, which is most of a round. Losing the call costs the shared problems an
+  estimate, not the add.
+
+The same rule had left a dead fallback: `estimator.js` answered an empty `ratingChanges` by
+calling `getGymRatingDist` on an official contest, which signs — so it was refused every
+time, leaving the field empty. It now fetches unsigned and hands the payload over.
+
 The tag source differs by contest type:
 
 - **Official** — `problemset.problems`, one ~2 MB request covering all ~11k problems, keyed by `contestId-index`. The per-contest alternative (`contest.standings`) also returns tags but embeds every participant row — ~12 MB for one Div. 3 — so it must not be used in a loop. Note this endpoint rejects `from`/`count` for non-gym contests; it only answers anonymous parameter-less GETs.
