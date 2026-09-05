@@ -97,23 +97,49 @@ it is not.
 
 ---
 
+## Every source, at a glance
+
+Where each kind of data actually comes from, and what happens when that source fails.
+The per-platform sections below explain *why*; this is the *where*.
+
+| | Problems | Difficulty | Submissions |
+|:--|:--|:--|:--|
+| **Codeforces** | Scraped from `/{contest\|gym}/<id>/standings`<br><br>*Gym with hidden standings:* scraped from the `/gym/<id>` problems page instead — a problem nobody attempted appears in no submission, so it cannot be recovered from those | `problemset.problems` (official)<br>`contest.standings` (gym)<br><br>*Anything left unrated:* estimated here, measuring the field via `contest.ratingChanges` → else sampled standings pages → else, for a hidden gym, `contest.status` + `user.info`<br><br>*Still nothing on a gym:* refuses to add it, rather than storing a guess | `user.status` — one call, whole history |
+| **AtCoder** | Scraped from `/contests/<id>/tasks`<br><br>*Unreadable:* waits and retries every refresh — a contest that hasn't finished doesn't list them | **Always estimated here.** AtCoder publishes no difficulty at all. Fitted from `/contests/<id>/standings/json` 🔒<br><br>*Unreadable:* stores `???` and retries one contest per refresh | Scraped from `/contests/<id>/submissions?f.User=…&f.Status=AC` 🔒<br><br>Once per tracked contest — AtCoder publishes no per-user list |
+| **CodeChef** | `/api/contests/<code>`, then `/api/contests/<code>/problems/<code>` — one request per problem<br><br>*Parent contest:* resolves to the division matching your rating; with no known rating it names the divisions rather than guessing | `difficulty_rating`, from that same per-problem call<br><br>*`-1` or `9999`:* stored as `???`. No estimator — CodeChef rates promptly | `/api/list/problems?group=attempted`, paged |
+
+🔒 **needs you signed in to that site.** See the request diagram above: without a tab open
+on that site the request goes out anonymously, and these two refuse rather than returning
+an empty answer.
+
+### Everything else that gets fetched
+
+| | Also fetched |
+|:--|:--|
+| **Codeforces** | `user.info` — verifying your handle, and reading your rating<br>`contest.list` — when a contest started, so the Contests tab can sort by date |
+| **AtCoder** | `/users/<handle>` — verifying your handle, reading your rating, and checking it matches the account you're signed in as.<br>Contest name and start time come from the same `/tasks` page as the problems |
+| **CodeChef** | `/dashboard` — which account is signed in, which is what your configured handle is checked against.<br>Contest name and divisions come from `/api/contests/<code>` |
+
+**Nothing here fails silently.** Every "unreadable" above surfaces as a message or a `???`
+— never as an empty result. A blank would be indistinguishable from having genuinely solved
+nothing, and solved status is only ever set, never cleared, so a swallowed failure would
+strand the queue permanently.
+
+---
+
 ## Codeforces
 
 Two channels are needed, because neither alone is enough.
 
 ### The API (`codeforces.com/api/…`)
 
-Signed with your key and secret. Seven methods, each for one job:
+Signed with your key and secret — which is the reason Codeforces is the one platform that
+asks for more than a handle. Seven methods are used, all of them named in the two tables above.
 
-| Method | Used for |
-|:--|:--|
-| `user.info` | Verifying your handle, and reading your rating |
-| `user.status` | Your accepted submissions — this is what clears problems from the queue |
-| `problemset.problems` | Official difficulties and tags, all ~11k problems in one request — and the check for whether a contest has been published at all |
-| `contest.list` | When a contest started, so the Contests tab can sort by date |
-| `contest.ratingChanges` | Everyone's rating *before* a contest, used to estimate difficulty |
-| `contest.standings` | Gym participants and their ratings, plus gym problem tags **and difficulties** |
-| `contest.status` | Every submission to a gym whose standings are hidden — see below |
+Two are worth knowing about beyond what that table says. `problemset.problems` returns all
+~11k problems in a single request, and doubles as the check for whether a contest has been
+published at all. And `contest.standings` is the only place a *gym* publishes its problems'
+tags and difficulties, which is why gyms need it even when nothing is being estimated.
 
 ### The standings page (scraped)
 
@@ -177,18 +203,9 @@ nobody attempted appears in no submission and would silently go missing from you
 
 ## AtCoder
 
-Everything comes from AtCoder itself. Difficulty is estimated here, because **AtCoder
-publishes none at all**.
-
-| Source | Used for | Needs you signed in? |
-|:--|:--|:--|
-| `atcoder.jp/contests/<id>/tasks` | Contest name, start time, the problem list | no |
-| `atcoder.jp/contests/<id>/submissions?f.User=…` | Your submissions, so solved problems clear | **yes** |
-| `atcoder.jp/contests/<id>/standings/json` | The field the difficulty is estimated from | **yes** |
-| `atcoder.jp/users/<handle>` | Verifying your handle and reading your rating | no |
-
-This used to come from **AtCoder Problems** (kenkoooo), a third-party project, which is no
-longer used at all.
+Everything comes from AtCoder itself. It used to come almost entirely from **AtCoder
+Problems** (kenkoooo), a third-party project, which is no longer used at all — including for
+difficulty, which is now fitted here.
 
 Things worth knowing:
 
@@ -202,8 +219,9 @@ Things worth knowing:
 - **Solved status is read per contest**, because AtCoder publishes no per-user submission
   list. One consequence: solving a problem through a contest you *don't* track won't clear it
   from one you do.
-- **Keep an atcoder.jp tab open when refreshing.** Two of the four sources above need your
-  session; see the request diagram above.
+- **Keep an atcoder.jp tab open when refreshing.** Both the submissions list and the
+  standings need your session — the two marked 🔒 in the table above — and without a tab
+  open the request goes out anonymously and is refused.
 
 ---
 
@@ -211,13 +229,6 @@ Things worth knowing:
 
 CodeChef's public API was retired, so the extension uses the same `/api/` endpoints the site's
 own front end calls, and only ever for things you're already tracking.
-
-| Endpoint | Used for |
-|:--|:--|
-| `/api/contests/<code>` | Contest name, its problem list, divisions |
-| `/api/contests/<code>/problems/<code>` | Difficulty and tags — one request per problem |
-| `/api/list/problems?group=attempted` | **Every problem you've attempted**, which is how solves clear |
-| `/dashboard` | Reading which account is signed in |
 
 ### When a CodeChef contest isn't ready
 
