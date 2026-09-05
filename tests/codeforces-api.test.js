@@ -16,7 +16,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { CodeforcesService, resetApiState } from "../core/platforms/codeforces/api.js";
+import { CodeforcesService, resetApiState } from "../core/platforms/codeforces-official/api.js";
+import {
+  CodeforcesService as GymService,
+  resetApiState as resetGymApiState,
+} from "../core/platforms/codeforces-gyms/api.js";
 
 function stubFetch(result = []) {
   const calls = [];
@@ -92,13 +96,89 @@ test("a FAILED response becomes the comment Codeforces gave", async () => {
   });
 
   try {
-    // This exact string is what codeforces/solve-stats.js keys its
+    // This exact string is what codeforces-gyms/solve-stats.js keys its
     // hidden-standings fallback off, so it has to survive the round trip.
+    // `contest.standings` is a gym-only endpoint — the official client dropped
+    // it in the split — so this is the gym half of the client.
     await assert.rejects(
-      () => new CodeforcesService("k", "s").getContestStandings(712373),
+      () => new GymService("k", "s").getContestStandings(712373),
       /Standings are not available/,
     );
   } finally {
     globalThis.fetch = original;
   }
+});
+
+/**
+ * The two clients are separate files in separate platforms with no shared
+ * folder between them, so `_callMethod` and its SHA-512 signing exist twice.
+ * That is the one duplication in the Codeforces split with a real failure mode:
+ * a fix, or a Codeforces protocol change, applied to one file only.
+ *
+ * Signing is not observable from a response — a wrong `apiSig` comes back as an
+ * ordinary FAILED — so nothing else here would notice the two drifting apart.
+ */
+test("both Codeforces clients sign a request identically", async () => {
+  resetApiState(0);
+  resetGymApiState(0);
+
+  const seen = [];
+  const original = globalThis.fetch;
+  // `apiSig` opens with six random characters by design, so the signature
+  // itself cannot be compared directly. Everything else in the URL can, and the
+  // *shape* of the signature can: same length, same hex alphabet.
+  globalThis.fetch = async (url) => {
+    seen.push(url);
+    return { async json() { return { status: "OK", result: [] }; } };
+  };
+
+  try {
+    await new CodeforcesService("thekey", "thesecret").getUsersInfo(["tourist"]);
+    await new GymService("thekey", "thesecret").getUsersInfo(["tourist"]);
+  } finally {
+    globalThis.fetch = original;
+  }
+
+  assert.equal(seen.length, 2);
+  const [official, gym] = seen.map((url) => new URL(url));
+
+  assert.equal(official.origin + official.pathname, gym.origin + gym.pathname);
+  assert.equal(official.searchParams.get("handles"), gym.searchParams.get("handles"));
+  assert.equal(official.searchParams.get("apiKey"), gym.searchParams.get("apiKey"));
+
+  const sigs = [official, gym].map((u) => u.searchParams.get("apiSig"));
+  for (const sig of sigs) {
+    assert.match(sig, /^[0-9a-z]{6}[0-9a-f]{128}$/, `apiSig is not rand + SHA-512: ${sig}`);
+  }
+  assert.equal(sigs[0].length, sigs[1].length);
+});
+
+test("both clients agree on which parameters they append", async () => {
+  // The signature covers the sorted parameter list, so a client that appended a
+  // different set would sign a different string and be refused — silently, as a
+  // FAILED response indistinguishable from a bad key.
+  resetApiState(0);
+  resetGymApiState(0);
+
+  const seen = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    seen.push(url);
+    return { async json() { return { status: "OK", result: [] }; } };
+  };
+
+  try {
+    await new CodeforcesService("k", "s").getContestList();
+    await new GymService("k", "s").getContestList();
+  } finally {
+    globalThis.fetch = original;
+  }
+
+  const names = seen.map((url) =>
+    [...new URL(url).searchParams.keys()].filter((k) => k !== "gym").sort(),
+  );
+  assert.deepEqual(names[0], names[1], "the two clients append different parameters");
+  // And the one difference that *should* exist: gyms are a separate list.
+  assert.ok(!seen[0].includes("gym=true"), "official must not ask for the gym list");
+  assert.ok(seen[1].includes("gym=true"), "gyms must ask for the gym list");
 });

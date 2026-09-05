@@ -18,9 +18,17 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { CodeforcesHttp } = await import("../core/platforms/codeforces/http.js");
+const { CodeforcesHttp } = await import("../core/platforms/codeforces-gyms/http.js");
 const { getAdapter } = await import("../core/platforms/adapters.js");
-const { fetchContestRecord } = getAdapter("codeforces");
+
+/**
+ * Codeforces is two platforms now, and the subtype is what picks between them —
+ * so this routes the way `matchContestUrl` does, and every case below keeps
+ * naming the subtype it is about.
+ */
+const fetchContestRecord = ({ subtype, ...rest }) =>
+  getAdapter(subtype === "GYM" ? "codeforces-gyms" : "codeforces-official")
+    .fetchContestRecord({ subtype, ...rest });
 
 const INDEXES = ["A", "B", "C"];
 

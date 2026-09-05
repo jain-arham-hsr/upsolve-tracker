@@ -12,7 +12,7 @@ import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { resetApiState } from "../core/platforms/codechef/api.js";
 import * as codechef from "../core/platforms/codechef/identity.js";
-import * as codeforces from "../core/platforms/codeforces/identity.js";
+import * as codeforces from "../core/platforms/codeforces-official/identity.js";
 
 beforeEach(() => resetApiState());
 

@@ -77,7 +77,7 @@ test("a waiting entry is keyed exactly like a tracked contest", async () => {
 
   assert.equal(entries.length, 1);
   assert.ok(findWaiting(entries, "atcoder", "abc472"));
-  assert.equal(findWaiting(entries, "codeforces", "abc472"), null);
+  assert.equal(findWaiting(entries, "codeforces-official", "abc472"), null);
 });
 
 test("adding the same contest twice queues one attempt, keeping the original start", async () => {

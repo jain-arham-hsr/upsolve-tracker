@@ -41,10 +41,10 @@ beforeEach(() => stubChrome());
 test("a platform that failed keeps its previous rating", async () => {
   // The important one. Clearing on failure would drop every problem from that
   // site to the bottom of the queue, silently.
-  stubChrome({ [AUTO_KEY]: { codeforces: 1800, atcoder: 1500 } });
-  await storeFetchedRatings({ codeforces: 1850 });
+  stubChrome({ [AUTO_KEY]: { "codeforces-official": 1800, atcoder: 1500 } });
+  await storeFetchedRatings({ "codeforces-official": 1850 });
 
-  assert.deepEqual(store[AUTO_KEY], { codeforces: 1850, atcoder: 1500 });
+  assert.deepEqual(store[AUTO_KEY], { "codeforces-official": 1850, atcoder: 1500 });
 });
 
 test("asking and getting no answer is recorded, unlike failing to ask", async () => {
@@ -56,15 +56,15 @@ test("asking and getting no answer is recorded, unlike failing to ask", async ()
 });
 
 test("an empty result set writes nothing at all", async () => {
-  stubChrome({ [AUTO_KEY]: { codeforces: 1800 } });
+  stubChrome({ [AUTO_KEY]: { "codeforces-official": 1800 } });
   await storeFetchedRatings({});
   await storeFetchedRatings(null);
-  assert.deepEqual(store[AUTO_KEY], { codeforces: 1800 });
+  assert.deepEqual(store[AUTO_KEY], { "codeforces-official": 1800 });
 });
 
 test("effective ratings are whatever was last fetched", async () => {
-  stubChrome({ [AUTO_KEY]: { codeforces: 1800, atcoder: 400 } });
-  assert.deepEqual(await getEffectiveRatings(), { codeforces: 1800, atcoder: 400 });
+  stubChrome({ [AUTO_KEY]: { "codeforces-official": 1800, atcoder: 400 } });
+  assert.deepEqual(await getEffectiveRatings(), { "codeforces-official": 1800, atcoder: 400 });
 });
 
 test("no data anywhere yields an empty map, not zeroes", async () => {

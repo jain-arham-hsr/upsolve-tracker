@@ -63,7 +63,7 @@ const STORE = {
   "upsolve_tracker.handle": "tourist",
   "upsolve_tracker.atcoder_handle": "tourist",
   "upsolve_tracker.codechef_handle": "tourist",
-  "upsolve_tracker.platform_ratings": { codeforces: 1450, atcoder: 900, codechef: 1600 },
+  "upsolve_tracker.platform_ratings": { "codeforces-official": 1450, atcoder: 900, codechef: 1600 },
   // Open, so the Contests tab actually renders the waiting rows. Collapsed
   // they are one button, and a typo inside a row would ship unseen — which is
   // the exact class of escape this harness exists for.
@@ -80,7 +80,7 @@ const STORE = {
     },
     {
       // One with a recorded failure, since that is a separate branch.
-      url: "https://codeforces.com/contest/2240", platform: "codeforces",
+      url: "https://codeforces.com/contest/2240", platform: "codeforces-official",
       contestId: "2240", waitingSince: 1_730_000_000_000,
       lastTriedAt: 1_730_000_100_000,
       lastError: "Codeforces returned no participant ratings for 2240.",
@@ -88,7 +88,7 @@ const STORE = {
   ],
   trackedContests: [
     {
-      id: "2237", platform: "codeforces", type: "OFFICIAL", name: "Codeforces Round 1",
+      id: "2237", platform: "codeforces-official", type: "OFFICIAL", name: "Codeforces Round 1",
       startTimeSeconds: 1_700_000_000, publishedDataCheckedAt: Date.now(),
       problems: [
         // ratingSource "estimated" is what draws the underline. Seeded here so
@@ -99,7 +99,7 @@ const STORE = {
       ],
     },
     {
-      id: "709413", platform: "codeforces", type: "GYM", name: "ICPC Regional",
+      id: "709413", platform: "codeforces-gyms", type: "GYM", name: "ICPC Regional",
       startTimeSeconds: 1_690_000_000, publishedDataCheckedAt: null,
       problems: [{ index: "A", name: "Untagged", rating: null, tags: [], solved: false }],
     },
@@ -350,7 +350,7 @@ const driver = `<script type="module">
   // That row specifically, not the first one: the list sorts by date, so
   // "#contest-items .contest-menu-btn" is Starters 252 and removing it would
   // leave the banner correctly still reading "Added" for contest 2237.
-  const row = '[data-key="codeforces:2237"]';
+  const row = '[data-key="codeforces-official:2237"]';
   document.querySelector(row + " .contest-menu-btn")?.click();
   await wait(400);
   banner.tracked = bannerLabel();

@@ -9,6 +9,20 @@
  * "who am I" endpoint, so the handle is verified to **exist, not to be yours**.
  * The changed-identity path in `services/platform-identity.js` is what contains
  * that, by clearing this platform's flags rather than merging them.
+ *
+ * ## Two copies of this file, deliberately
+ *
+ * `codeforces-official/` and `codeforces-gyms/` are separate platforms with no
+ * shared folder between them, and identity is one of the few things they
+ * genuinely share: one handle, one key pair, one settings section. So this file
+ * is duplicated rather than imported across the boundary, and
+ * `tests/codeforces-signing.test.js` asserts the two copies still agree.
+ *
+ * The duplication reaches further than it looks: `progress-manager.js` loops
+ * platforms, so a refresh verifies the handle twice and reads the whole
+ * account's `user.status` twice. That is a knowing cost, and the second read is
+ * **load-bearing** — each platform namespaces solved keys by its own id, so
+ * skipping either fetch stops solves clearing for that platform.
  */
 import { CodeforcesService } from "./api.js";
 import { getSettings } from "../../settings/store.js";

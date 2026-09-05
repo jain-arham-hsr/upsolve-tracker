@@ -58,11 +58,21 @@ export function renderFilterControl(selected) {
     </div>`;
 }
 
-/** One mark per platform with anything selected — deduplicated, in fixed order. */
+/**
+ * One mark per *site* with anything selected, in fixed order.
+ *
+ * Deduplicated by the rendered mark rather than by platform, which is not the
+ * same thing any more: Codeforces is two platforms — official and gyms — that
+ * are one site and share one icon, so selecting both used to draw the
+ * Codeforces mark twice. The collapsed button is a summary, and a repeated mark
+ * reads as two different things.
+ */
 function marksFor(platforms, active) {
+  const seen = new Set();
   return platforms
     .filter(({ groups }) => groups.some((group) => active.includes(group.key)))
     .map(({ platform }) => platformIcon(platform.id, platform.shortLabel))
+    .filter((mark) => !seen.has(mark) && seen.add(mark))
     .join("");
 }
 

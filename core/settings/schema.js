@@ -87,10 +87,15 @@ export const SECTIONS = [
      * the registry by `tests/module-boundaries.test.js` — a typo here is
      * otherwise silent, since `getAdapter` returns null and the button throws
      * only once pressed.
+     *
+     * Either Codeforces platform would do: they hold identical copies of
+     * `identity.js`, which `tests/codeforces-signing.test.js` pins against each
+     * other. This names official because that is the one most users configure
+     * for.
      */
     verify: {
       trigger: "button",
-      adapter: "codeforces",
+      adapter: "codeforces-official",
       label: "Test connection",
       help: "Checks the handle and key against Codeforces before you rely on them.",
       incomplete: "Fill in all three fields first.",

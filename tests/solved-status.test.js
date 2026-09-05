@@ -6,11 +6,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applySolvedStatus } from "../core/progress-manager.js";
-import { codeforces } from "../core/platforms/codeforces/descriptor.js";
+import { codeforcesOfficial as codeforces } from "../core/platforms/codeforces-official/descriptor.js";
+import { getPlatform } from "../core/platforms/registry.js";
 
 const contest = (over = {}) => ({
   id: "2193",
-  platform: "codeforces",
+  platform: "codeforces-official",
   type: "OFFICIAL",
   problems: [
     { index: "A", solved: false },
@@ -52,7 +53,13 @@ test("a fully solved contest is removed and reported", () => {
 });
 
 test("a gym reports its own label", () => {
-  const c = contest({ type: "GYM", problems: [{ index: "A", solved: true }] });
+  // The label comes off the platform now rather than off `contest.type`, so the
+  // record has to name the platform that owns it.
+  const c = contest({
+    platform: "codeforces-gyms",
+    type: "GYM",
+    problems: [{ index: "A", solved: true }],
+  });
   const { removed } = applySolvedStatus([c], new Set());
   assert.equal(removed[0].type, "Gym contest");
 });
@@ -60,11 +67,23 @@ test("a gym reports its own label", () => {
 test("solved keys are namespaced, so platforms sharing a contest id don't cross-mark", () => {
   // Codeforces 2193A must not mark some other platform's 2193A solved.
   const key = codeforces.solvedKey({ id: "2193" }, { index: "A" });
-  assert.match(key, /^codeforces:/);
+  assert.match(key, /^codeforces-official:/);
   assert.notEqual(key, "2193-A");
 
-  const foreign = contest({ platform: "codeforces" });
+  const foreign = contest({ platform: "codeforces-official" });
   const { kept } = applySolvedStatus([foreign], new Set(["2193-A"]));
   assert.equal(kept[0].problems[0].solved, false, "an unnamespaced key matched");
+});
+
+test("the two Codeforces platforms do not cross-mark each other", () => {
+  // Each adapter reads the whole account's `user.status` and stamps its own
+  // prefix, so both sets are in play at once. A gym key must not mark an
+  // official problem solved, or a shared contest number would clear the wrong
+  // row — and `solved` is never cleared again.
+  const official = contest();
+  const gymKey = getPlatform("codeforces-gyms").solvedKey({ id: "2193" }, { index: "A" });
+
+  const { kept } = applySolvedStatus([official], new Set([gymKey]));
+  assert.equal(kept[0].problems[0].solved, false, "a gym key marked an official problem");
 });
 

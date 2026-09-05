@@ -59,11 +59,11 @@ test("classifying without a verified account is a programming error, not a defau
 });
 
 test("a deliberately changed handle is adopted", async () => {
-  stubChrome({ [IDENTITY_STORAGE_KEY]: { codeforces: "old" } });
+  stubChrome({ [IDENTITY_STORAGE_KEY]: { "codeforces-official": "old" } });
 
-  const verdict = await settleIdentity(platform("codeforces", "Codeforces"), { username: "new" });
+  const verdict = await settleIdentity(platform("codeforces-official", "Codeforces"), { username: "new" });
   assert.equal(verdict, "changed");
-  assert.equal(await getStoredIdentity("codeforces"), "new");
+  assert.equal(await getStoredIdentity("codeforces-official"), "new");
 });
 
 test("first use records the account", async () => {
@@ -73,13 +73,13 @@ test("first use records the account", async () => {
 });
 
 const queue = () => [
-  { platform: "codeforces", problems: [{ solved: true }, { solved: false }] },
+  { platform: "codeforces-official", problems: [{ solved: true }, { solved: false }] },
   { platform: "atcoder", problems: [{ solved: true }] },
 ];
 
 test("clearing solved flags touches only the platform that changed", () => {
   const contests = queue();
-  const cleared = clearSolvedForPlatform(contests, "codeforces");
+  const cleared = clearSolvedForPlatform(contests, "codeforces-official");
 
   assert.equal(cleared, 1);
   assert.equal(contests[0].problems[0].solved, false);
@@ -93,6 +93,6 @@ test("clearing a platform with nothing solved changes nothing", () => {
 });
 
 test("clearing survives missing arrays rather than throwing mid-sync", () => {
-  assert.equal(clearSolvedForPlatform(undefined, "codeforces"), 0);
-  assert.equal(clearSolvedForPlatform([{ platform: "codeforces" }], "codeforces"), 0);
+  assert.equal(clearSolvedForPlatform(undefined, "codeforces-official"), 0);
+  assert.equal(clearSolvedForPlatform([{ platform: "codeforces-official" }], "codeforces-official"), 0);
 });

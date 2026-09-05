@@ -58,13 +58,16 @@ const PLATFORMS = path.join(CORE, "platforms");
  */
 const ALLOWED = {
   "core/ui/views/stats-view.js":
-    "renderHint gates a tag-backfill hint on Codeforces official contests. It " +
-    "looks dead — 0 of 68 tracked contests match — but pipeline.js still stores " +
-    "publishedDataCheckedAt: null when a problemset sync does not complete, so " +
-    "it can fire. Making it agnostic is not free: the honest condition is 'this " +
-    "platform publishes bulk problem data', and simply dropping the id test " +
-    "would catch Codeforces gyms, whose tags come from the standings instead — " +
-    "so the hint's advice would be wrong for them.",
+    "renderHint gates a tag-backfill hint on the codeforces-official platform. " +
+    "It looks dead — 0 of 68 tracked contests match — but pipeline.js still " +
+    "stores publishedDataCheckedAt: null when a problemset sync does not " +
+    "complete, so it can fire. Making it agnostic is not free: the honest " +
+    "condition is 'this platform publishes bulk problem data', and simply " +
+    "dropping the id test would catch Codeforces gyms, whose tags come from the " +
+    "standings instead — so the hint's advice would be wrong for them. Note the " +
+    "id here went stale once already: it read \"codeforces\" after that platform " +
+    "was split in two, matching nothing, and this exception kept passing because " +
+    "the *subtype* half of the condition still satisfied the staleness check.",
 
   "core/settings/schema.js":
     "The settings page is declared by hand, and verify.adapter has to name the " +
@@ -157,7 +160,7 @@ test("nothing outside core/platforms/ names a platform in code", () => {
 test("nothing outside core/platforms/ uses a platform's subtype vocabulary", () => {
   // The leak with no platform name in it. "OFFICIAL", "GYM" and "ABC" are one
   // platform's language, so a shared file comparing contest.type to one of them
-  // is coupled just as surely as if it had said "codeforces".
+  // is coupled just as surely as if it had said "codeforces-official".
   const subtypes = listPlatforms().flatMap((platform) =>
     (platform.subtypes ?? []).map((subtype) => subtype.value),
   );
@@ -190,6 +193,20 @@ test("every named exception is still doing work", () => {
       stillCoupled,
       `${file} no longer names a platform — remove its exception rather than leaving it. Reason given: ${reason}`,
     );
+
+    // And the id it names must be one that *exists*. The check above is an OR
+    // over ids and subtypes, so a file whose id went stale kept passing on the
+    // strength of its subtype — which is exactly what happened when Codeforces
+    // became two platforms: stats-view.js still read "codeforces", matched no
+    // platform, and its hint could never fire again. Silently, since a filter
+    // that matches nothing renders nothing.
+    for (const [, named] of code.matchAll(/\.id === "([a-z-]+)"/g)) {
+      assert.ok(
+        ids.includes(named),
+        `${file} compares a platform id against "${named}", which is not registered — ` +
+          `that condition can never be true`,
+      );
+    }
   }
 });
 
@@ -297,4 +314,89 @@ test("the retired names survive nowhere", () => {
   }
 
   assert.deepEqual(offenders, [], "a rename that lives on in one file is worse than none");
+});
+
+/**
+ * Codeforces is two platforms in two folders with nothing between them.
+ *
+ * The three tests below are what keeps that true. Without them the split is a
+ * convention, and a convention erodes on the first shortcut — the cheapest of
+ * which is to reach sideways for something the other folder already has.
+ */
+const cfFolders = ["codeforces-official", "codeforces-gyms"];
+
+test("the two Codeforces platforms do not import each other", () => {
+  const offenders = [];
+
+  for (const folder of cfFolders) {
+    const other = cfFolders.find((candidate) => candidate !== folder);
+    const dir = path.join(PLATFORMS, folder);
+
+    for (const file of sourceFiles(dir, [".js"])) {
+      for (const spec of importsOf(readFileSync(file, "utf8"))) {
+        if (spec.includes(other)) {
+          offenders.push(`${path.relative(ROOT, file)} → ${spec}`);
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    "the folders share an account, not code — duplicate it or lift it to core/",
+  );
+});
+
+test("a folder under core/platforms/ has a descriptor iff it is registered", () => {
+  // This is what stops a shared `codeforces-common/` reappearing between the
+  // two: a folder with no descriptor is not a platform, and there is nowhere
+  // else for one to sit. It also catches the opposite — a platform folder that
+  // was written but never wired into registry.js, which would simply never run.
+  const registered = new Set(listPlatforms().map((platform) => platform.id));
+  const folders = readdirSync(PLATFORMS, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+
+  for (const folder of folders) {
+    const hasDescriptor = readdirSync(path.join(PLATFORMS, folder)).includes("descriptor.js");
+    assert.equal(
+      hasDescriptor,
+      registered.has(folder),
+      hasDescriptor
+        ? `core/platforms/${folder}/ has a descriptor but is not in registry.js`
+        : `core/platforms/${folder}/ is registered but has no descriptor.js`,
+    );
+  }
+
+  assert.deepEqual(
+    folders.slice().sort(),
+    [...registered].sort(),
+    "every platform folder is a registered platform, and vice versa",
+  );
+});
+
+test("the official Codeforces platform reaches no HTML at all", () => {
+  // The reason the split is worth having, asserted structurally rather than by
+  // counting requests. An official add is pure JSON API: it cannot be
+  // Cloudflare-challenged, and needs no tab open on codeforces.com.
+  //
+  // `tests/codeforces-adapter.test.js` asserts the same thing dynamically, by
+  // failing if a request is issued while reaching the estimator. This one
+  // catches the import before it can ever run.
+  const forbidden = ["http.js", "scraping.js", "standings-dom.js", "DOMParser"];
+  const offenders = [];
+
+  for (const file of sourceFiles(path.join(PLATFORMS, "codeforces-official"), [".js"])) {
+    const relative = path.relative(ROOT, file);
+    const code = stripComments(readFileSync(file, "utf8"));
+
+    for (const name of forbidden) {
+      if (importsOf(code).some((spec) => spec.endsWith(name)) || code.includes(name)) {
+        offenders.push(`${relative} uses ${name}`);
+      }
+    }
+  }
+
+  assert.deepEqual(offenders, [], "the official path must stay pure JSON API");
 });

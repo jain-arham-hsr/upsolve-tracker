@@ -73,7 +73,7 @@ test("the trunk emits every contest field its readers actually read", () => {
   assert.ok(read_fields.size >= 5, "the scan found almost nothing; it has stopped working");
 
   const built = buildContestRecord(
-    { id: "codeforces" },
+    { id: "codeforces-official" },
     {
       id: "1",
       sourceId: "0",
@@ -125,7 +125,7 @@ test("some test actually reaches the code that applies published ratings", () =>
 
   const row = run.stdout
     .split("\n")
-    .find((line) => line.includes("codeforces/problemset-sync.js"));
+    .find((line) => line.includes("codeforces-official/problemset-sync.js"));
 
   // Without this, a changed coverage format would make the assertion below
   // vacuous — the same hollowness this test replaced.
@@ -142,7 +142,7 @@ test("some test actually reaches the code that applies published ratings", () =>
   // covered line and passes — silently, which is the failure this whole file
   // exists to prevent.
   const source = readFileSync(
-    path.join(PLATFORMS, "codeforces", "problemset-sync.js"),
+    path.join(PLATFORMS, "codeforces-official", "problemset-sync.js"),
     "utf8",
   ).split("\n");
   const applyIndex = source.findIndex((line) => line.includes("prob.tags = published.tags"));

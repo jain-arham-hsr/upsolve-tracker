@@ -46,7 +46,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { estimateProblemRating } from "../core/platforms/codeforces/estimator.js";
+import { estimateProblemRating } from "../core/platforms/codeforces-official/estimator.js";
 
 const { fields } = JSON.parse(
   readFileSync(new URL("./fixtures/real-contest-fields.json", import.meta.url)),

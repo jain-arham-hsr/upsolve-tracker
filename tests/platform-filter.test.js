@@ -45,28 +45,30 @@ test("a stored selection is used as-is", async () => {
 
 test("filtering keeps only the selected groups", () => {
   const contests = [
-    { platform: "codeforces", type: "OFFICIAL" },
-    { platform: "codeforces", type: "GYM" },
+    { platform: "codeforces-official", type: "OFFICIAL" },
+    { platform: "codeforces-gyms", type: "GYM" },
     { platform: "atcoder", type: "ABC" },
     { platform: "codechef", type: "STARTERS" },
   ];
-  const kept = contests.filter((c) => matchesFilter(c, ["codeforces:GYM", "atcoder"]));
-  assert.deepEqual(kept.map((c) => c.platform + ":" + c.type), ["codeforces:GYM", "atcoder:ABC"]);
+  const kept = contests.filter((c) => matchesFilter(c, ["codeforces-gyms", "atcoder"]));
+  assert.deepEqual(kept.map((c) => c.platform + ":" + c.type), ["codeforces-gyms:GYM", "atcoder:ABC"]);
 });
 
 
 test("the collapsed button says what is filtered without being opened", () => {
   assert.match(renderFilterControl([]), /All platforms/);
 
-  const some = renderFilterControl(["codeforces:GYM", "codechef"]);
+  const some = renderFilterControl(["codeforces-gyms", "codechef"]);
   assert.match(some, /2 of 4/, "should count selected groups against the total");
   assert.ok(!/All platforms/.test(some));
 });
 
-test("the summary shows one mark per platform, not one per group", () => {
-  // Selecting both Codeforces groups is still one platform, so the collapsed
-  // button shows a single Codeforces mark — plus the two panel rows.
-  const both = renderFilterControl(["codeforces:OFFICIAL", "codeforces:GYM"]);
+test("the summary shows one mark per site, not one per platform", () => {
+  // Codeforces is two platforms now, but one site with one mark — so selecting
+  // both still shows a single Codeforces mark on the collapsed button, plus the
+  // two panel rows. Before the split this deduplicated by platform, which gave
+  // the same answer for the wrong reason and would now draw the mark twice.
+  const both = renderFilterControl(["codeforces-official", "codeforces-gyms"]);
   assert.equal((both.match(/(?:aria-label|alt)="Codeforces"/g) ?? []).length, 3);
   assert.match(both, /2 of 4/);
 });
@@ -114,6 +116,6 @@ test("a stale key from an older build doesn't inflate the count", () => {
 });
 
 test("round-tripping a selection through storage preserves it", async () => {
-  await saveFilter(["codechef", "codeforces:OFFICIAL"]);
-  assert.deepEqual(await loadFilter(), ["codechef", "codeforces:OFFICIAL"]);
+  await saveFilter(["codechef", "codeforces-official"]);
+  assert.deepEqual(await loadFilter(), ["codechef", "codeforces-official"]);
 });

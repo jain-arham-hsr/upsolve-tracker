@@ -58,15 +58,15 @@ test("Codeforces problems sharing an index across contests are distinct", () => 
   // A problem belongs to exactly one contest there, so 1993A and 1994A are
   // different problems and must both survive.
   const pending = collectPendingProblems([
-    { id: "1993", platform: "codeforces", type: "OFFICIAL", problems: [unsolved({ index: "A" })] },
-    { id: "1994", platform: "codeforces", type: "OFFICIAL", problems: [unsolved({ index: "A" })] },
+    { id: "1993", platform: "codeforces-official", type: "OFFICIAL", problems: [unsolved({ index: "A" })] },
+    { id: "1994", platform: "codeforces-official", type: "OFFICIAL", problems: [unsolved({ index: "A" })] },
   ]);
   assert.equal(pending.length, 2);
 });
 
 test("problems sharing an index across platforms are distinct", () => {
   const pending = collectPendingProblems([
-    { id: "1993", platform: "codeforces", type: "OFFICIAL", problems: [unsolved({ index: "A" })] },
+    { id: "1993", platform: "codeforces-official", type: "OFFICIAL", problems: [unsolved({ index: "A" })] },
     { id: "S1", platform: "codechef", type: "STARTERS", problems: [unsolved({ index: "A" })] },
   ]);
   assert.equal(pending.length, 2);
@@ -74,7 +74,7 @@ test("problems sharing an index across platforms are distinct", () => {
 
 test("solved problems are excluded, and an empty queue is empty", () => {
   const pending = collectPendingProblems([
-    { id: "1", platform: "codeforces", problems: [unsolved({ index: "A", solved: true })] },
+    { id: "1", platform: "codeforces-official", problems: [unsolved({ index: "A", solved: true })] },
   ]);
   assert.deepEqual(pending, []);
   assert.deepEqual(collectPendingProblems([]), []);

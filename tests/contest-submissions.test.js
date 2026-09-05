@@ -19,7 +19,7 @@ import { readFileSync } from "node:fs";
 const {
   summariseSubmissions,
   fetchContestSubmissions,
-} = await import("../core/platforms/codeforces/contest-submissions.js");
+} = await import("../core/platforms/codeforces-gyms/contest-submissions.js");
 
 const FIXTURE = JSON.parse(
   readFileSync(new URL("./fixtures/gym-standings-hidden.json", import.meta.url)),

@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 
 import { buildContestRecord, normalizeProblem } from "../core/platforms/pipeline.js";
 
-const descriptor = { id: "codeforces" };
+const descriptor = { id: "codeforces-official" };
 const base = {
   id: "2197",
   name: "Round 1079",
@@ -41,7 +41,7 @@ test("every field the rest of the codebase reads off a contest is present", () =
 });
 
 test("platform comes from the descriptor, never a literal", () => {
-  // `codeforces/adapter.js` used to write `platform: "codeforces"` by hand,
+  // `codeforces/adapter.js` used to write `platform: "codeforces-official"` by hand,
   // beside a descriptor that already knew its own id.
   assert.equal(buildContestRecord({ id: "codechef" }, base).platform, "codechef");
 });

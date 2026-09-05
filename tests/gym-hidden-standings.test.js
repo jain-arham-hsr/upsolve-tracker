@@ -14,8 +14,11 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { CodeforcesHttp } = await import("../core/platforms/codeforces/http.js");
-const { readSolveStats } = await import("../core/platforms/codeforces/solve-stats.js");
+const { CodeforcesHttp } = await import("../core/platforms/codeforces-gyms/http.js");
+const { readSolveStats } = await import("../core/platforms/codeforces-gyms/solve-stats.js");
+const { readSolveStats: readOfficialStats } = await import(
+  "../core/platforms/codeforces-official/solve-stats.js"
+);
 
 const PROBLEMS = [
   ["A", "Everything Everywhere All But One"],
@@ -108,19 +111,18 @@ const submission = (index, party, verdict = "OK") => ({
   verdict,
 });
 
-test("an official contest never reaches the scrape, so the fallback cannot open for it", async () => {
-  // This used to assert that an official contest with no standings *table* failed
-  // loudly rather than taking the gym fallback — the reasoning being that a
-  // missing table is far likelier a layout change than a deliberate setting.
+test("the official reader is a different module, and it reaches no page at all", async () => {
+  // This began as a guard that an official contest with no standings *table*
+  // failed loudly rather than taking the gym fallback — a missing table being
+  // far likelier a layout change than a deliberate setting.
   //
-  // That reasoning is now moot in a better way: official contests read
-  // `contest.standings` and never fetch the page at all, so there is no table to
-  // be missing. What the test protects is unchanged — the hidden-standings
-  // fallback stays gym-only — but the official half is now structural rather
-  // than a guard that could be got wrong.
+  // It is moot twice over now. Official contests read `contest.standings` and
+  // never fetch the page, so there is no table to be missing; and the reader
+  // below is a different module in a different platform, so the fallback is not
+  // something it could reach even by mistake. The guard became the directory.
   const seen = serve({ standings: NO_TABLE, problems: problemsPage(1) });
 
-  const stats = await readSolveStats("contest", "2193", forbiddenService({
+  const stats = await readOfficialStats("2193", forbiddenService({
     getPublicContestStandings: async () => ({
       contest: { name: "Round 2193", startTimeSeconds: 4242 },
       problems: [{ index: "A", name: "Alpha", rating: 900, tags: ["math"] }],
@@ -139,7 +141,6 @@ test("a gym whose standings are readable never calls contest.status", async () =
   serve({ standings: standingsPage(702859), problems: problemsPage(702859) });
 
   const stats = await readSolveStats(
-    "gym",
     "702859",
     forbiddenService({
       getContestStandings: async () => ({
@@ -192,7 +193,8 @@ test("a gym failing for any other reason rethrows rather than falling back", asy
   serve({ standings: blocked, problems: problemsPage(712373) });
 
   await assert.rejects(
-    () => readSolveStats("gym", "712373", forbiddenService()),
+    () => readSolveStats(
+    "712373", forbiddenService()),
     /blocking requests/,
   );
 });
@@ -200,7 +202,8 @@ test("a gym failing for any other reason rethrows rather than falling back", asy
 test("a gym with hidden standings is rebuilt from contest.status", async () => {
   const seen = serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
-  const stats = await readSolveStats("gym", "712373", {
+  const stats = await readSolveStats(
+    "712373", {
     getContestStandings: async () => {
       throw new Error("contestId: Standings are not available");
     },
@@ -231,7 +234,8 @@ test("a problem nobody submitted to still reaches the queue", async () => {
   // submissions: C had no attempts, and would otherwise silently vanish.
   serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
-  const stats = await readSolveStats("gym", "712373", {
+  const stats = await readSolveStats(
+    "712373", {
     getContestStatus: async () => [submission("A", 1)],
   });
 
@@ -246,7 +250,8 @@ test("refuses loudly when the problems page can't be read either", async () => {
   serve({ standings: NO_TABLE, problems: "<html><body>nothing here</body></html>" });
 
   await assert.rejects(
-    () => readSolveStats("gym", "712373", forbiddenService()),
+    () => readSolveStats(
+    "712373", forbiddenService()),
     /standings hidden.*problems page couldn't be read/s,
   );
 });
@@ -254,7 +259,8 @@ test("refuses loudly when the problems page can't be read either", async () => {
 test("no official submissions means the solve counts are unusable, not zero", async () => {
   serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
-  const stats = await readSolveStats("gym", "712373", {
+  const stats = await readSolveStats(
+    "712373", {
     getContestStatus: async () => [
       { ...submission("A", 1), author: { ...submission("A", 1).author, participantType: "PRACTICE" } },
     ],
@@ -294,7 +300,8 @@ test("gym 712373 end to end, against its real submissions", () => {
       : `<html><body>${sidebar(712373)}
          <table class="problems"><tr><th>#</th></tr>${rows}</table></body></html>`;
 
-  return readSolveStats("gym", "712373", {
+  return readSolveStats(
+    "712373", {
     getContestStatus: async () => structuredClone(fixture.submissions),
   }).then((stats) => {
     assert.deepEqual(

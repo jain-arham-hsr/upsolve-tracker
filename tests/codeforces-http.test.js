@@ -15,7 +15,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { CodeforcesHttp, resetHttpState } from "../core/platforms/codeforces/http.js";
+import { CodeforcesHttp, resetHttpState } from "../core/platforms/codeforces-gyms/http.js";
 
 function stubFetch(handler) {
   const calls = [];

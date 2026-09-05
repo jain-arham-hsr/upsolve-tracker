@@ -16,9 +16,9 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { CodeforcesHttp } = await import("../core/platforms/codeforces/http.js");
+const { CodeforcesHttp } = await import("../core/platforms/codeforces-gyms/http.js");
 const { scrapeContestProblems } = await import(
-  "../core/platforms/codeforces/scraping.js"
+  "../core/platforms/codeforces-gyms/scraping.js"
 );
 
 const PER_PAGE = 50;

@@ -29,7 +29,7 @@ test("contest URLs are recognised, including non-numeric ids", () => {
 test("the Codeforces regex would have rejected every one of those", () => {
   // Both old regexes captured (\d+); abc471 and typical90 are not numeric.
   assert.equal(
-    getPlatform("codeforces").matchUrl("https://atcoder.jp/contests/abc471"),
+    getPlatform("codeforces-official").matchUrl("https://atcoder.jp/contests/abc471"),
     null,
   );
 });
@@ -53,7 +53,7 @@ test("solved status keys on the task id, so a reused problem clears everywhere",
 });
 
 test("keys are namespaced away from Codeforces", () => {
-  const cf = getPlatform("codeforces").solvedKey({ id: "471" }, { index: "A" });
+  const cf = getPlatform("codeforces-official").solvedKey({ id: "471" }, { index: "A" });
   const ac = atcoder.solvedKey({ id: "abc471" }, { problemId: "471-A", index: "A" });
   assert.notEqual(cf, ac);
 });
@@ -79,5 +79,5 @@ test("no estimator here, which is what permits a \"???\"", () => {
   // on all three platforms — so a fourth could have set them inconsistently
   // and made every partly-rated contest silently unaddable.
   assert.equal(atcoder.capabilities.canEstimate, false);
-  assert.equal(getPlatform("codeforces").capabilities.canEstimate, true);
+  assert.equal(getPlatform("codeforces-official").capabilities.canEstimate, true);
 });

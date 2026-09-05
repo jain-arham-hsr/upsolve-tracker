@@ -28,20 +28,17 @@ const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
  * more than weekly, since plenty of problems never get either.
  */
 function needsSync(contest, now) {
-  // A record with no `type` is a caller bug, not a contest that isn't official
-  // — and answering `false` for it is the shape of failure this guard exists to
-  // stop. `codeforces/problems.js` once handed this a freshly-built record
-  // before the trunk had stamped `type` on it, so every official add silently
-  // skipped its published ratings and stored estimates instead. Nothing threw,
-  // no test failed, and the numbers were merely wrong. Fail loudly instead, the
-  // same rule `platformOf()` follows for a record with no `platform`.
-  if (typeof contest.type !== "string") {
-    throw new Error(
-      `Codeforces problemset sync got a contest with no type (id ${contest.id}). ` +
-        `Whatever built it is not producing a complete record.`,
-    );
-  }
-  if (contest.type !== "OFFICIAL") return false;
+  // **This used to gate on `contest.type !== "OFFICIAL"`, and that gate is now
+  // the folder.** Only official contests reach this module, so a gym can no
+  // longer arrive here at all.
+  //
+  // Worth recording why the gate was dangerous rather than merely redundant.
+  // `problems.js` once handed this a freshly-built record before `type` had
+  // been stamped on it, so the comparison answered "not official", every
+  // official add silently skipped its published ratings, and estimates with a
+  // mean error of ~211 were stored in their place. Nothing threw, no test
+  // failed, and the numbers were merely wrong. A structural gate cannot fail
+  // that way — there is no field left to read incorrectly.
 
   // Pre-timestamp records used a boolean; treat those as synced long ago.
   const syncedAt = contest.publishedDataCheckedAt ?? null;

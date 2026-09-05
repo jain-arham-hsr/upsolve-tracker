@@ -6,7 +6,7 @@ import { byStartTimeDesc } from "../core/queue-order.js";
 
 const contest = (over = {}) => ({
   id: "2193",
-  platform: "codeforces",
+  platform: "codeforces-official",
   type: "OFFICIAL",
   problems: [{ index: "A", solved: false, rating: 1200, tags: ["dp"] }],
   ...over,
@@ -129,7 +129,7 @@ test("a supported platform is accepted", () => {
 
 test("an explicit codeforces platform is accepted", () => {
   assert.equal(
-    describeBackupProblem({ trackedContests: [contest({ platform: "codeforces" })] }),
+    describeBackupProblem({ trackedContests: [contest({ platform: "codeforces-official" })] }),
     null,
   );
 });

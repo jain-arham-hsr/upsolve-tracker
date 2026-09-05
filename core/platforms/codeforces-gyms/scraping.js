@@ -11,14 +11,15 @@ import {
 
 /**
  * Fetches and parses the standings page for a contest.
- * @param {string} type - "contest" or "gym"
  * @param {string} contestId
  * @returns {{ contestName: string, standingsTable: Element, doc: Document }}
  */
-async function fetchStandingsPage(type, contestId) {
-  const showUnofficial = type === "gym";
+async function fetchStandingsPage(contestId) {
+  // `showUnofficial=true` always: a gym's field includes out-of-competition
+  // entrants, and the official platform — which passed false here — no longer
+  // reads HTML at all.
   const rawHtml = await CodeforcesHttp.get(
-    `https://codeforces.com/${type}/${contestId}/standings?showUnofficial=${showUnofficial}`,
+    `https://codeforces.com/gym/${contestId}/standings?showUnofficial=true`,
   );
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
   return doc;
@@ -27,20 +28,19 @@ async function fetchStandingsPage(type, contestId) {
 /**
  * Extracts problem metadata and solve counts from a contest standings page.
  *
- * @param {string} type - "contest" or "gym"
  * @param {string} contestId
  * @returns {{ contestName: string, problems: object[], solveCountsRead: boolean }}
  *   solveCountsRead is false when the totals row couldn't be parsed. The
  *   counts are left at 0, which is only safe if nothing goes on to estimate
  *   ratings from them — so the caller has to check.
  */
-export async function scrapeContestProblems(type, contestId) {
-  const doc = await fetchStandingsPage(type, contestId);
+export async function scrapeContestProblems(contestId) {
+  const doc = await fetchStandingsPage(contestId);
 
   const standingsTable = findStandingsTable(doc);
   if (!standingsTable) {
     const error = new Error(
-      `Couldn't read the standings for ${type} ${contestId} — the page didn't contain a standings table. ` +
+      `Couldn't read the standings for gym ${contestId} — the page didn't contain a standings table. ` +
         `Codeforces may have changed its layout, or the contest may be private.`,
     );
     // A flag rather than a message match, the same idiom as isNotPublishedYet
@@ -54,7 +54,7 @@ export async function scrapeContestProblems(type, contestId) {
   const parsed = extractProblems(standingsTable);
   if (!parsed) {
     throw new Error(
-      `Couldn't read the problem list for ${type} ${contestId} from the standings header. ` +
+      `Couldn't read the problem list for gym ${contestId} from the standings header. ` +
         `Codeforces may have changed its layout.`,
     );
   }
@@ -69,7 +69,7 @@ export async function scrapeContestProblems(type, contestId) {
     });
   } else {
     console.warn(
-      `[Scraping Service] Solve counts unreadable for ${type} ${contestId}.`,
+      `[Scraping Service] Solve counts unreadable for gym ${contestId}.`,
     );
   }
 
@@ -88,13 +88,12 @@ export async function scrapeContestProblems(type, contestId) {
  * those elsewhere; what it does carry is the definitive problem list,
  * including problems nobody submitted to.
  *
- * @param {string} type - "contest" or "gym"
  * @param {string} contestId
  * @returns {{ contestName: string, problems: object[] }|null}
  *   null when the page can't be parsed, so the caller can refuse loudly.
  */
-export async function scrapeProblemsPage(type, contestId) {
-  const path = `/${type}/${contestId}`;
+export async function scrapeProblemsPage(contestId) {
+  const path = `/gym/${contestId}`;
   const rawHtml = await CodeforcesHttp.get(`https://codeforces.com${path}`);
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
 

@@ -8,44 +8,40 @@ import {
 } from "./contest-submissions.js";
 
 /**
- * Fetches problem metadata and solve counts for a contest.
+ * Fetches a gym's problem metadata and solve counts.
  *
- * **Official contests never touch HTML.** One unsigned `contest.standings` call
- * carries the contest name, the problems in order with their published ratings
- * and tags, the start time, and rows enough to count in-contest solves. That
- * call is made anyway — it is the only thing that reports a shared Div. 1 /
- * Div. 2 problem's rating under this contest's index — so scraping the page for
- * the same facts was work we paid for twice.
+ * **The only Codeforces path that scrapes**, and the reason this platform
+ * carries `http.js`, `scraping.js` and `standings-dom.js` while the official
+ * one carries none of them. A gym's roster has no API source: `contest.standings`
+ * needs signing, and a gym whose standings Codeforces has hidden answers
+ * `FAILED` to that call outright.
  *
- * It saves no bytes: the scrape was ~760 KB against a response of ~8.5 MB either
- * way. What it removes is the failure mode. That scrape was the sole
- * Cloudflare-exposed request on the official path, and a challenge there broke
- * adding official contests outright.
+ * Two paths, then: the standings page for the roster and name, with
+ * `contest.standings` supplying counts, tags, published ratings, start time and
+ * phase — or, when that response is gone, the `/gym/<id>` problems page plus
+ * `contest.status`.
  *
- * **Gyms still scrape**, because a gym's roster has no API source: its standings
- * need signing, and a hidden-standings gym answers FAILED to that call entirely.
- *
- * @param {string} type - "contest" or "gym"
  * @param {string} contestId
- * @param {CodeforcesService} [cfService] - Required for gym contests
+ * @param {CodeforcesService} cfService
  * @returns {{ contestName: string, problems: object[], tagsSynced: boolean,
  *   startTimeSeconds: number|null, solveCountsRead: boolean,
- *   partyHandles: string[][]|null }}
- *   partyHandles is null on every path but the hidden-standings fallback,
- *   where it is the field the estimator would otherwise read from standings.
+ *   partyHandles: string[][]|null, finished: boolean|null, standings: object }}
+ *   `partyHandles` is null except on the hidden-standings fallback, where it is
+ *   the field the estimator would otherwise read from standings.
  */
-export async function readSolveStats(type, contestId, cfService = null) {
-  if (type !== "gym") return officialStats(contestId, cfService);
-
+export async function readSolveStats(contestId, cfService) {
   let scraped;
   try {
-    scraped = await scrapeContestProblems(type, contestId);
+    scraped = await scrapeContestProblems(contestId);
   } catch (error) {
-    // The one new branch. It opens only where the add already fails outright:
-    // a gym whose standings Codeforces has hidden. Anything else — including
-    // an official contest missing its table, which is far more likely to be a
-    // layout change worth failing loudly on — rethrows untouched.
-    if (type !== "gym" || !error.isStandingsHidden) throw error;
+    // Opens only where the add would otherwise fail outright: a gym whose
+    // standings Codeforces has hidden. Anything else — a layout change, say —
+    // rethrows untouched, and must, since routing around one would turn a
+    // broken parser into a silently shorter contest.
+    //
+    // This used to also test `type !== "gym"`, guarding against an official
+    // contest reaching the fallback. The folder is that guard now.
+    if (!error.isStandingsHidden) throw error;
     return statsFromContestStatus(contestId, cfService, error);
   }
 
@@ -95,66 +91,6 @@ export async function readSolveStats(type, contestId, cfService = null) {
 }
 
 /**
- * Everything an official contest needs, from one response.
- *
- * Failure is hard here, unlike the gym path's soft fallbacks: this is the only
- * source of the roster, so losing it means there is no contest to store. It
- * answers `sourceUnreachable` rather than refusing, because the API being
- * unreachable is a reason to retry — see contest-status.js. Deliberately no
- * fallback to the scrape: keeping one would preserve the exact HTML path this
- * removes, for a case where Cloudflare has usually blocked it anyway.
- */
-async function officialStats(contestId, cfService) {
-  const standings = await cfService.getPublicContestStandings(contestId);
-
-  const problems = (standings?.problems ?? []).map((problem) => ({
-    index: problem.index,
-    name: problem.name,
-  }));
-
-  if (problems.length === 0) {
-    throw Object.assign(
-      new Error(
-        `Codeforces returned no problems for contest ${contestId}, so there is ` +
-          `nothing to store.`,
-      ),
-      { isSourceUnreachable: true },
-    );
-  }
-
-  // Published ratings and tags ride on the same entries.
-  applyStandingsProblemData(standings, problems);
-
-  // The same counter the gym path uses. Verified to agree exactly with counting
-  // `points > 0` across all seven problems of a real round, so official needs no
-  // second implementation — and the ghost filter inside it is simply a no-op
-  // here, since a parameterless official response is CONTESTANT-only.
-  populateSolveCountsFromApi(standings, problems);
-
-  return {
-    contestName: standings?.contest?.name ?? `Contest ${contestId}`,
-    problems,
-    // Still false: `problemset-sync.js` must run regardless, both to cover
-    // anything this response left unrated and because it is what re-checks
-    // weekly as Codeforces publishes ratings later.
-    tagsSynced: false,
-    // Arrives here now, where it used to be null until `contest.list` was
-    // fetched — which `start-times.js` will now skip entirely.
-    startTimeSeconds: standings?.contest?.startTimeSeconds ?? null,
-    // No totals row to misparse any more; counts come from rows or not at all.
-    solveCountsRead: true,
-    partyHandles: null,
-    // Official rounds are gated on the problemset instead, which a running
-    // contest cannot be in — so this path needs no phase of its own.
-    finished: null,
-    // Carried, never stored. `rating-distribution.js` needs the rows to measure
-    // the field when contest.ratingChanges is empty, and this is the response
-    // it would otherwise fetch a second time.
-    standings,
-  };
-}
-
-/**
  * Rebuilds a gym whose standings Codeforces has hidden.
  *
  * Both usual sources are gone at once: the standings page has no table and
@@ -169,7 +105,7 @@ async function officialStats(contestId, cfService) {
  *   failure here can name the original cause rather than replacing it.
  */
 async function statsFromContestStatus(contestId, cfService, standingsError) {
-  const page = await scrapeProblemsPage("gym", contestId);
+  const page = await scrapeProblemsPage(contestId);
 
   // Never fall back to a submission-derived list: it would look like a
   // shorter contest rather than a failure.

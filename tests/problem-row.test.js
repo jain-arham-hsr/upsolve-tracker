@@ -28,7 +28,7 @@ const build = (platformId, problem, contest = {}, ratings = {}) =>
   );
 
 test("the rating carries no label — the word implied one shared scale", () => {
-  const html = renderProblemRow(build("codeforces", { index: "A", name: "X", rating: 1300 }));
+  const html = renderProblemRow(build("codeforces-official", { index: "A", name: "X", rating: 1300 }));
   assert.ok(!/Rating:/.test(html), "the 'Rating:' label is what suggested a common axis");
   assert.match(html, />1300</);
 });
@@ -36,8 +36,8 @@ test("the rating carries no label — the word implied one shared scale", () => 
 test("only Codeforces tints its ratings — its colours are the site's own", () => {
   // Everywhere else the same palette would import a rank meaning that does not
   // transfer: "cyan 1600" says something on Codeforces and nothing on CodeChef.
-  assert.equal(build("codeforces", { index: "A", name: "X", rating: 1500 }).tone, "tone-cyan");
-  assert.equal(build("codeforces", { index: "A", name: "X", rating: 2500 }).tone, "tone-red");
+  assert.equal(build("codeforces-official", { index: "A", name: "X", rating: 1500 }).tone, "tone-cyan");
+  assert.equal(build("codeforces-official", { index: "A", name: "X", rating: 2500 }).tone, "tone-red");
 });
 
 test("platforms with no rank scheme of their own render neutral", () => {
@@ -61,7 +61,7 @@ test("a negative difficulty survives — AtCoder's scale runs below zero", () =>
 });
 
 test("an unrated problem shows ??? and no probability, never a stand-in", () => {
-  const html = renderProblemRow(build("codeforces", { index: "A", name: "X", rating: null }));
+  const html = renderProblemRow(build("codeforces-official", { index: "A", name: "X", rating: null }));
   assert.match(html, /is-unrated">\?\?\?/);
   assert.match(html, /—/);
 });
@@ -69,7 +69,7 @@ test("an unrated problem shows ??? and no probability, never a stand-in", () => 
 test("a known rating with no rating of yours shows the number but no chance", () => {
   // The second of the two reasons a row can lack a probability; conflating
   // them would hide a missing *user* rating behind missing problem data.
-  const row = build("codeforces", { index: "A", name: "X", rating: 1600 }, {}, {});
+  const row = build("codeforces-official", { index: "A", name: "X", rating: 1600 }, {}, {});
   assert.equal(row.solveProbability, null);
   const html = renderProblemRow(row);
   assert.match(html, />1600</);
@@ -77,14 +77,14 @@ test("a known rating with no rating of yours shows the number but no chance", ()
 });
 
 test("position is optional, so an expansion can omit the queue's global numbering", () => {
-  const row = build("codeforces", { index: "A", name: "X", rating: 1300 });
+  const row = build("codeforces-official", { index: "A", name: "X", rating: 1300 });
   assert.match(renderProblemRow(row, { position: 7 }), /problem-index">07\./);
   assert.ok(!/problem-index/.test(renderProblemRow(row)));
 });
 
 test("names are escaped; a problem title comes from scraped markup", () => {
   const html = renderProblemRow(
-    build("codeforces", { index: "A", name: '<img src=x onerror=alert(1)>', rating: 1300 }),
+    build("codeforces-official", { index: "A", name: '<img src=x onerror=alert(1)>', rating: 1300 }),
   );
   assert.ok(!/<img/.test(html));
   assert.match(html, /&lt;img/);
@@ -159,7 +159,7 @@ test("an ordinary problem carries no mark, and neither does an absent flag", () 
  */
 test("an estimated rating is marked", () => {
   const html = renderProblemRow(
-    build("codeforces", { index: "A", name: "X", rating: 1400, ratingSource: "estimated" }),
+    build("codeforces-official", { index: "A", name: "X", rating: 1400, ratingSource: "estimated" }),
   );
   assert.ok(isMarked(html));
   assert.match(html, /the platform publishes no rating/);
@@ -167,7 +167,7 @@ test("an estimated rating is marked", () => {
 
 test("a published rating is not marked at all", () => {
   const html = renderProblemRow(
-    build("codeforces", { index: "A", name: "X", rating: 1400, ratingSource: "official" }),
+    build("codeforces-official", { index: "A", name: "X", rating: 1400, ratingSource: "official" }),
   );
   assert.ok(!isMarked(html));
   // No tooltip either: hovering an ordinary rating should not explain a mark
@@ -188,7 +188,7 @@ test("AtCoder's own low-confidence model is marked, with its own wording", () =>
 
 test("a problem that is both experimental and estimated gets one mark, not two", () => {
   const html = renderProblemRow(
-    build("codeforces", {
+    build("codeforces-official", {
       index: "A", name: "X", rating: 1400,
       ratingSource: "estimated", ratingConfidence: "experimental",
     }),
@@ -202,7 +202,7 @@ test("a problem with no rating at all is not marked as an estimate", () => {
   // is a soft number when there is none.
   for (const source of [null, "estimated"]) {
     const html = renderProblemRow(
-      build("codeforces", { index: "A", name: "X", rating: null, ratingSource: source }),
+      build("codeforces-official", { index: "A", name: "X", rating: null, ratingSource: source }),
     );
     assert.match(html, /\?\?\?</);
     assert.ok(!isMarked(html), `rating null + ratingSource ${source}`);
@@ -221,7 +221,7 @@ test("a problem with no rating at all is not marked as an estimate", () => {
  * sits would not.
  */
 const compactChildren = (problem) => {
-  const html = renderProblemRow(build("codeforces", problem), { compact: true });
+  const html = renderProblemRow(build("codeforces-official", problem), { compact: true });
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
   return [...doc.querySelector("a.problem-row").children];
 };
@@ -271,7 +271,7 @@ test("the queue rating is the hover target, not some child of it", () => {
   // did nothing at all.
   const problem = { index: "A", name: "X", rating: 1800, ratingSource: "estimated" };
   const doc = new DOMParser().parseFromString(
-    `<body>${renderProblemRow(build("codeforces", problem), { position: 1 })}</body>`,
+    `<body>${renderProblemRow(build("codeforces-official", problem), { position: 1 })}</body>`,
     "text/html",
   );
   const rating = doc.querySelector(".rating");
@@ -281,7 +281,7 @@ test("the queue rating is the hover target, not some child of it", () => {
 
 test("both layouts mark the same element, so the views can't drift", () => {
   const problem = { index: "A", name: "X", rating: 1800, ratingSource: "estimated" };
-  const full = renderProblemRow(build("codeforces", problem), { position: 1 });
+  const full = renderProblemRow(build("codeforces-official", problem), { position: 1 });
   const doc = new DOMParser().parseFromString(`<body>${full}</body>`, "text/html");
 
   assert.match(doc.querySelector(".rating").className, /is-estimated/);

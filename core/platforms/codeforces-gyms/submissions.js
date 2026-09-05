@@ -7,6 +7,13 @@
  * `contests` is unused: `user.status` returns the whole history in one call, so
  * cost does not grow with the queue. CodeChef answers per contest and does need
  * it; AtCoder will once it reads submissions from the site itself.
+ *
+ * Duplicated in the sibling platform, and the duplicate fetch is load-bearing
+ * rather than merely wasteful: `user.status` returns the whole account's
+ * submissions with no gym/official marker, so each platform reads the same
+ * stream and stamps its own `solvedKey` prefix on it. `applySolvedStatus` looks
+ * up by the prefix of the platform that *owns* the contest, so both reads have
+ * to happen or one platform's solves never clear.
  */
 
 /**

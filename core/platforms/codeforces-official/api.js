@@ -1,3 +1,24 @@
+/**
+ * The Codeforces API client, official half.
+ *
+ * ## Two copies of this file, deliberately
+ *
+ * `codeforces-official/` and `codeforces-gyms/` are separate platforms with no
+ * shared folder between them, so each carries its own client — trimmed to the
+ * endpoints it actually calls, which is why neither is the whole of what they
+ * were split from. Here: `user.status`, `user.info`, `contest.list`,
+ * `contest.ratingChanges`, `problemset.problems`, and the deliberately
+ * unsigned `getPublicContestStandings`.
+ *
+ * What they genuinely share is `_callMethod` and its SHA-512 signing, and that
+ * is the one duplication here with a real failure mode: a fix applied to one
+ * file only. `tests/codeforces-signing.test.js` pins the two against each other
+ * for exactly that reason.
+ *
+ * They must **not** get separate request budgets, which is what
+ * `budget: "codeforces-api"` below prevents — two clients each honouring a 2 s
+ * gap would serve one request per second to codeforces.com.
+ */
 import { createPacer } from "../../services/request-pacer.js";
 
 /**
@@ -65,18 +86,6 @@ export class CodeforcesService {
   }
 
   /**
-   * Fetches standings for a contest to extract contestant handles.
-   * @param {string|number} contestId
-   */
-  async getContestStandings(contestId) {
-    return this._callMethod("contest.standings", {
-      contestId: contestId,
-      showUnofficial: true,
-      participantTypes: "CONTESTANT,VIRTUAL",
-    });
-  }
-
-  /**
    * Standings for an **official** contest, fetched without signing.
    *
    * ## Why this cannot go through `_callMethod`
@@ -127,29 +136,14 @@ export class CodeforcesService {
   }
 
   /**
-   * Fetches submissions for a contest.
+   * Contest metadata (including startTimeSeconds) in bulk, ~400 KB.
    *
-   * This is the only window into a gym whose standings Codeforces has hidden:
-   * contest.standings answers FAILED for those, but contest.status still
-   * answers. See platforms/codeforces/contest-submissions.js.
-   *
-   * @param {string|number} contestId
-   * @param {{from?: number, count?: number}} [page]
+   * Official rounds only — the gym list is a separate call, and lives in the
+   * sibling platform's client. The `gym` parameter this used to take is gone
+   * with the branch that chose it.
    */
-  async getContestStatus(contestId, { from = 1, count = 10000 } = {}) {
-    return this._callMethod("contest.status", {
-      contestId: contestId,
-      from: from,
-      count: count,
-    });
-  }
-
-  /**
-   * Fetches contest metadata (including startTimeSeconds) in bulk.
-   * @param {boolean} gym - Gym contests are a separate list from official ones.
-   */
-  async getContestList(gym = false) {
-    return this._callMethod("contest.list", gym ? { gym: true } : {});
+  async getContestList() {
+    return this._callMethod("contest.list", {});
   }
 
   /**

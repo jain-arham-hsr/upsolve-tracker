@@ -18,7 +18,14 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
 // requires these declared statically, but nothing requires a human to keep the
 // list in step — and "remember to also edit the manifest" is exactly the kind
 // of step that gets missed when a platform is added.
-manifest.host_permissions = listPlatforms().flatMap((platform) => platform.hostPermissions);
+//
+// Deduplicated, because two platforms can name one origin: Codeforces is
+// `codeforces-official` and `codeforces-gyms`, both on codeforces.com. Chrome
+// tolerates a repeat, but the composed list is diffed against the previous
+// build to prove nothing drifted, and a duplicate would read as drift.
+const origins = [...new Set(listPlatforms().flatMap((platform) => platform.hostPermissions))];
+
+manifest.host_permissions = origins;
 
 // The same list, as content script matches. A request issued from inside a page
 // on the site is same-site, so the browser sends the user's cookies; one issued
@@ -27,7 +34,7 @@ manifest.host_permissions = listPlatforms().flatMap((platform) => platform.hostP
 // remembering to also edit the manifest.
 manifest.content_scripts = [
   {
-    matches: listPlatforms().flatMap((platform) => platform.hostPermissions),
+    matches: origins,
     js: ["targets/chrome/content-script.js"],
     run_at: "document_idle",
   },

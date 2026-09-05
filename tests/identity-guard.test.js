@@ -113,7 +113,7 @@ const contestFor = (platform, id, index) => ({
 test("Codeforces: an unrecognised handle stops before user.status", async () => {
   stub({
     storage: {
-      trackedContests: [contestFor("codeforces", "2237", "A")],
+      trackedContests: [contestFor("codeforces-official", "2237", "A")],
       "upsolve_tracker.handle": "not_a_real_handle",
     },
     handler: (url) => {

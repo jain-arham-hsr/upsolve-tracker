@@ -5,12 +5,13 @@
  * which platform a contest came from. Contests stored before platforms existed
  * carry no `platform` field, so every lookup falls back to Codeforces rather
  */
-import { codeforces } from "./codeforces/descriptor.js";
+import { codeforcesOfficial } from "./codeforces-official/descriptor.js";
+import { codeforcesGyms } from "./codeforces-gyms/descriptor.js";
 import { atcoder } from "./atcoder/descriptor.js";
 import { codechef } from "./codechef/descriptor.js";
 
 
-const PLATFORMS = [codeforces, atcoder, codechef];
+const PLATFORMS = [codeforcesOfficial, codeforcesGyms, atcoder, codechef];
 const BY_ID = new Map(PLATFORMS.map((platform) => [platform.id, platform]));
 
 export function listPlatforms() {

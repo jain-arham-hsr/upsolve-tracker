@@ -14,7 +14,7 @@
  */
 import { createSiteClient } from "../../services/site-client.js";
 import { createPageFetch } from "../../services/page-transport.js";
-import { codeforces } from "./descriptor.js";
+import { codeforcesGyms } from "./descriptor.js";
 
 const BLOCKED =
   "Codeforces is blocking requests. Please visit codeforces.com in your browser and try again.";
@@ -23,7 +23,7 @@ const client = createSiteClient({
   // Routed through a Codeforces tab when one is open, so the request carries the
   // session and Cloudflare sees the user rather than a stranger. Falls back to a
   // direct fetch otherwise, which still reads anything public.
-  fetchImpl: createPageFetch({ matchPatterns: codeforces.hostPermissions }),
+  fetchImpl: createPageFetch({ matchPatterns: codeforcesGyms.hostPermissions }),
   pacer: {
     gapMs: [1000, 2500],
     measureFrom: "end",

@@ -13,14 +13,20 @@
  * at some later call — which is why no separate validator is needed.
  */
 import { buildAdapter } from "./pipeline.js";
-import { codeforces } from "./codeforces/descriptor.js";
+import { codeforcesOfficial } from "./codeforces-official/descriptor.js";
+import { codeforcesGyms } from "./codeforces-gyms/descriptor.js";
 import { atcoder } from "./atcoder/descriptor.js";
 import { codechef } from "./codechef/descriptor.js";
 
-import * as cfProblems from "./codeforces/problems.js";
-import * as cfSubmissions from "./codeforces/submissions.js";
-import * as cfIdentity from "./codeforces/identity.js";
-import * as cfEstimator from "./codeforces/estimator.js";
+import * as cfoProblems from "./codeforces-official/problems.js";
+import * as cfoSubmissions from "./codeforces-official/submissions.js";
+import * as cfoIdentity from "./codeforces-official/identity.js";
+import * as cfoEstimator from "./codeforces-official/estimator.js";
+
+import * as cfgProblems from "./codeforces-gyms/problems.js";
+import * as cfgSubmissions from "./codeforces-gyms/submissions.js";
+import * as cfgIdentity from "./codeforces-gyms/identity.js";
+import * as cfgEstimator from "./codeforces-gyms/estimator.js";
 
 import * as acProblems from "./atcoder/problems.js";
 import * as acSubmissions from "./atcoder/submissions.js";
@@ -32,11 +38,23 @@ import * as ccSubmissions from "./codechef/submissions.js";
 import * as ccIdentity from "./codechef/identity.js";
 
 const ADAPTERS = {
-  codeforces: buildAdapter(codeforces, {
-    problems: cfProblems,
-    submissions: cfSubmissions,
-    identity: cfIdentity,
-    estimator: cfEstimator,
+  // Two Codeforces platforms over one account. They share a handle, a key pair
+  // and a settings section, but not a line of acquisition code: an official
+  // round is pure JSON API, a gym is the only Codeforces path that scrapes.
+  // Their identity and submissions modules are duplicates rather than shared
+  // imports, since the two folders deliberately do not reach into each other.
+  "codeforces-official": buildAdapter(codeforcesOfficial, {
+    problems: cfoProblems,
+    submissions: cfoSubmissions,
+    identity: cfoIdentity,
+    estimator: cfoEstimator,
+  }),
+
+  "codeforces-gyms": buildAdapter(codeforcesGyms, {
+    problems: cfgProblems,
+    submissions: cfgSubmissions,
+    identity: cfgIdentity,
+    estimator: cfgEstimator,
   }),
 
   // AtCoder publishes no difficulty at all, so every rating here is fitted

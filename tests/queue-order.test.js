@@ -44,7 +44,7 @@ test("the same rating on two platforms can mean different probabilities", () => 
 });
 
 const item = (over = {}) => ({
-  platform: "codeforces", contestId: "1", index: "A",
+  platform: "codeforces-official", contestId: "1", index: "A",
   rating: 1500, solveProbability: 0.5, startTimeSeconds: 100, ...over,
 });
 
@@ -88,14 +88,14 @@ test("ties break deterministically, so the list doesn't reshuffle on re-render",
   const rows = [
     item({ platform: "codechef", contestId: "S1", index: "B" }),
     item({ platform: "atcoder", contestId: "abc1", index: "A" }),
-    item({ platform: "codeforces", contestId: "9", index: "A", startTimeSeconds: 500 }),
-    item({ platform: "codeforces", contestId: "8", index: "A", startTimeSeconds: 100 }),
+    item({ platform: "codeforces-official", contestId: "9", index: "A", startTimeSeconds: 500 }),
+    item({ platform: "codeforces-official", contestId: "8", index: "A", startTimeSeconds: 100 }),
   ];
   const once = [...rows].sort(compareQueueItems).map((i) => `${i.platform}:${i.contestId}${i.index}`);
   const twice = [...rows].reverse().sort(compareQueueItems).map((i) => `${i.platform}:${i.contestId}${i.index}`);
   assert.deepEqual(once, twice, "order depends on input order");
   // Newer contests first within a platform, matching the contest list.
-  assert.ok(once.indexOf("codeforces:9A") < once.indexOf("codeforces:8A"));
+  assert.ok(once.indexOf("codeforces-official:9A") < once.indexOf("codeforces-official:8A"));
 });
 
 test("probabilities are shown coarsely, because they are modelled", () => {

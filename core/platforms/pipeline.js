@@ -123,6 +123,10 @@ export function buildAdapter(descriptor, { problems, submissions, identity, esti
       // vocabulary, so pass it straight through rather than re-classifying.
       if (acquired?.status) return acquired;
 
+      // `type` still comes from `matchUrl`'s subtype rather than from the
+      // platform, so there is exactly one source for it. Codeforces' two
+      // platforms each declare a single subtype and so always supply the same
+      // constant, but AtCoder derives a real one (ABC/ARC/AGC) from the id.
       const contest = buildContestRecord(descriptor, { type: subtype, ...acquired });
 
       if (estimator) {

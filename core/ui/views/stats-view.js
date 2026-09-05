@@ -223,8 +223,11 @@ export class StatsView extends HTMLElement {
   renderHint() {
     const untagged = this.contests.filter(
       (contest) =>
-        platformOf(contest).id === "codeforces" &&
-        contest.type === "OFFICIAL" &&
+        // The `contest.type === "OFFICIAL"` half of this condition is gone:
+        // official is a platform now, so the id says it. Note the id itself had
+        // to change — it read "codeforces", which after the split matched
+        // nothing, so the hint could never have fired again.
+        platformOf(contest).id === "codeforces-official" &&
         contest.publishedDataCheckedAt == null,
     ).length;
 
