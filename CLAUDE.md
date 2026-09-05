@@ -241,7 +241,7 @@ The composed adapter exposes six things, two of them optional:
 - `syncMetadata(session, contests, onProgress)` — optional; fills in data that only arrives later.
 - `describeIdentity(identity)` — optional; how Settings names the resolved account. Defaults to *"Connected as X"*; CodeChef overrides it to *"Signed in as X"* because there the browser session **is** the identity. It lives on the adapter so that distinction is not a branch on the platform in shared code.
 
-`contest-manager.js` is now just the orchestrator: match the URL, pick the adapter, mark solved, decide whether the record is complete enough to store. Everything Codeforces-specific — the signed API, the standings scrape, the Elo estimator — sits under `core/platforms/codeforces/`. Adding a platform means writing four small modules and one entry in `adapters.js`, not editing the orchestrator.
+`contest-manager.js` is now just the orchestrator: match the URL, pick the adapter, mark solved, decide whether the record is complete enough to store. Everything Codeforces-specific — the signed API, the standings scrape, the Elo estimator — sits under `core/platforms/codeforces-official/` and `core/platforms/codeforces-gyms/`. Adding a platform means writing four small modules and one entry in `adapters.js`, not editing the orchestrator.
 
 **`estimator.js` and `scraping.js` are conventions, not obligations.** Where a
 platform estimates or scrapes, the file carries that name so the parallel is visible
