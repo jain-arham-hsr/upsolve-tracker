@@ -458,6 +458,14 @@ Four things that are easy to get wrong:
 - **`status === 1` is Accepted**, from the practice bundle's own map: `{0: Unattempted, 1: Accepted, 2: Partially Correct, 3: Wrong Answer, …}`. Match that value explicitly rather than "anything but 0" — `solved` is sticky and never cleared, so a false positive hides a problem permanently while a false negative costs one refresh. `2` is Partially Correct, excluded for the same reason `partially_solved` always was.
 - **`page` is zero-based.** Page 1 silently skips the first hundred rows.
 - **`start_rating` must be `-1`.** A range starting at 0 drops every unrated problem — 5,519 of 21,488 survive that filter.
+- **Only the attempted-problems route needs a session; the rest is public.** Measured
+  anonymously: `/api/contests/START252D` answers `success` with all 8 problems, and
+  `/api/contests/START252D/problems/IOI7` answers with `difficulty_rating` and `user_tags`.
+  So a `🔒` on the whole platform would be wrong. What is *not* public is the one below —
+  and it fails in the dangerous direction, answering `success` while ignoring the filter,
+  where AtCoder's gated routes redirect to `/login` and are caught loudly. Adding a CodeChef
+  contest does still require a session, but that is `establishIdentity`'s doing, not
+  CodeChef's.
 - **The page cap is load-bearing.** Signed out, `group=attempted` is *ignored* and the endpoint answers with the whole catalogue. If that ever happens signed in, paging to `count` would walk 21,000 rows and become exactly the sweep this client forbids — so `getAttemptedProblems` refuses when `count` exceeds `MAX_ATTEMPTED` rather than continuing.
 
 Dead ends, so they are not re-investigated: the profile page's solved list carries problem **names only**, no codes or links; "Recent Activity" is AJAX from `/recent/user`, which robots.txt disallows; and the listing endpoint has **no** status filter and **no** `contest_code` filter, so "just my solved ones" and "just this contest's" are both unavailable.
