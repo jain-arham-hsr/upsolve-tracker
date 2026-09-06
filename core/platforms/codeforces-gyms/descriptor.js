@@ -7,7 +7,7 @@
  * has **no API source** — `contest.standings` needs signing and a
  * hidden-standings gym answers `FAILED` to it outright — so this is the only
  * Codeforces path that scrapes HTML, and it is the only one that carries
- * `http.js`, `scraping.js` and `dom-parsers/`. An official round shares
+ * `http.js`, `scraping.js` and `dom-readers/`. An official round shares
  * none of that.
  *
  * They still share one Codeforces **account** — one handle, one key pair, one

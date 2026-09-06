@@ -7,13 +7,13 @@
  *
  * **It is a DOM node**, and this file used to pretend otherwise, regexing the
  * raw HTML string instead of selecting the script that holds it. That was the
- * only thing making this look like an exception in `dom-parsers/`; it is not
- * one. It is simply the parser for a fragment every page carries rather than
+ * only thing making this look like an exception in `dom-readers/`; it is not
+ * one. It is simply the reader for a fragment every page carries rather than
  * for one page, which is why it is named for the global instead.
  */
-import { PageParser } from "../../page-parser.js";
+import { DomReader } from "../../dom-reader.js";
 
-export class PageGlobals extends PageParser {
+export class PageGlobals extends DomReader {
   static selectors = {
     // No id or class to select on, so the script is picked by content.
     bootstrap: "script",
@@ -33,12 +33,12 @@ export class PageGlobals extends PageParser {
    *     treat it as such: "we could not tell" is not evidence of anything.
    *
    * The page itself is never null here — every AtCoder page is a page this
-   * parser knows, so a missing marker is a null *field*, not a wrong page.
+   * reader knows, so a missing marker is a null *field*, not a wrong page.
    *
    * @param {Document} doc
    * @returns {{signedInAs: string|null}}
    */
-  static parse(doc) {
+  static read(doc) {
     for (const script of this.all(doc, this.selectors.bootstrap)) {
       const match = this.#SCREEN_NAME.exec(script.textContent ?? "");
       if (match) return { signedInAs: match[1] };

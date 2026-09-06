@@ -12,8 +12,8 @@
  * platform's flags rather than merging them, so the mistake is recoverable.
  */
 import { getSettings } from "../../settings/store.js";
-import { ProfilePage } from "./dom-parsers/profile.js";
-import { PageGlobals } from "./dom-parsers/page-globals.js";
+import { ProfilePage } from "./dom-readers/profile.js";
+import { PageGlobals } from "./dom-readers/page-globals.js";
 import { getDocument } from "./http.js";
 
 const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
@@ -67,7 +67,7 @@ export async function verifyIdentity(session) {
     throw new Error("No AtCoder handle set. Add one in Settings.");
   }
 
-  // One fetch, one parse, read by two parsers. This used to fetch the page as a
+  // One fetch, one parse, read by two readers. This used to fetch the page as a
   // string and hand-build a Document from it, because the two disagreed about
   // their input — the marker was read by regex off the raw HTML. It is a
   // `<script>` element, so both take the same doc now, and the last
@@ -82,7 +82,7 @@ export async function verifyIdentity(session) {
     throw error;
   }
 
-  const { signedInAs } = PageGlobals.parse(doc);
+  const { signedInAs } = PageGlobals.read(doc);
 
   if (signedInAs && signedInAs.toLowerCase() !== session.handle.toLowerCase()) {
     // Flagged, not matched on the sentence — the same idiom as CodeChef's, so a
@@ -102,6 +102,6 @@ export async function verifyIdentity(session) {
     // AtCoder's own casing where we have it, so "Tourist" and "tourist" do not
     // read as two different accounts on the next comparison.
     username: signedInAs || session.handle,
-    rating: ProfilePage.parse(doc).rating,
+    rating: ProfilePage.read(doc).rating,
   };
 }

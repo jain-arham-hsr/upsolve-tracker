@@ -9,9 +9,9 @@
  * AtCoder problem in the queue, because one rating shifts a whole platform's
  * block at once. Hence the folder rule: null, never a plausible default.
  */
-import { PageParser } from "../../page-parser.js";
+import { DomReader } from "../../dom-reader.js";
 
-export class ProfilePage extends PageParser {
+export class ProfilePage extends DomReader {
   static selectors = {
     header: "th",
   };
@@ -25,9 +25,9 @@ export class ProfilePage extends PageParser {
    * The page has no load-bearing table whose absence would mean "this is not a
    * profile" — a profile with no rating row is a real profile belonging to
    * someone who has not competed. So the *field* is nullable and the page is
-   * not, which is the distinction `page-parser.js` exists to keep.
+   * not, which is the distinction `dom-reader.js` exists to keep.
    */
-  static parse(doc) {
+  static read(doc) {
     return { rating: this.#rating(doc) };
   }
 

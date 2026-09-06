@@ -11,12 +11,12 @@
  * mistake is permanent and silent. Reading the verdict costs nothing and makes
  * the filter an optimisation rather than a load-bearing assumption.
  */
-import { PageParser } from "../../page-parser.js";
+import { DomReader } from "../../dom-reader.js";
 
 /** AtCoder prints the verdict as a short label; only an exact "AC" counts. */
 const ACCEPTED = "AC";
 
-export class SubmissionsPage extends PageParser {
+export class SubmissionsPage extends DomReader {
   static selectors = {
     table: "table",
     row: "tbody tr",
@@ -36,7 +36,7 @@ export class SubmissionsPage extends PageParser {
    *   nothing in this contest. Conflating those would let a broken selector
    *   read as "no solves", and `solved` being sticky makes that permanent.
    */
-  static parse(doc) {
+  static read(doc) {
     const table = this.first(doc, this.selectors.table);
     if (!table) return null;
 

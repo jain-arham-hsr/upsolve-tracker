@@ -1,11 +1,11 @@
 /**
- * The AtCoder tasks-page parser, against markup captured from the live site.
+ * The AtCoder tasks-page reader, against markup captured from the live site.
  *
  * `tests/fixtures/atcoder-tasks.html` is a real response for abc432, saved
  * verbatim — this page is public, so unlike the standings and submissions
  * fixtures it needed no session to capture and can be refreshed by anyone.
  *
- * The negative cases matter as much as the positive ones: this parser replaces
+ * The negative cases matter as much as the positive ones: this reader replaces
  * three kenkoooo resources, so a silent shape change would produce a contest
  * that merely looks short rather than one that fails.
  */
@@ -14,13 +14,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseHTML } from "linkedom";
 
-import { TasksPage } from "../core/platforms/atcoder/dom-parsers/tasks.js";
+import { TasksPage } from "../core/platforms/atcoder/dom-readers/tasks.js";
 
 // One parse per page now, so these read the fields off it. `parse` returns
 // null exactly when the task table is missing, which is what `findTasks`
 // used to signal on its own.
-const findTasks = (doc) => TasksPage.parse(doc)?.problems ?? null;
-const findContestName = (doc) => TasksPage.parse(doc)?.name ?? null;
+const findTasks = (doc) => TasksPage.read(doc)?.problems ?? null;
+const findContestName = (doc) => TasksPage.read(doc)?.name ?? null;
 
 /**
  * A page with a valid task table but nothing else, so the *field*-level nulls
@@ -45,7 +45,7 @@ test("reads the contest name from the sidebar link, not the title suffix", () =>
 });
 
 test("reads start and end as epoch seconds, honouring the +0900 offset", () => {
-  const { startTimeSeconds, endTimeSeconds } = TasksPage.parse(doc());
+  const { startTimeSeconds, endTimeSeconds } = TasksPage.read(doc());
   // 2025-11-15 21:00:00+0900
   assert.equal(startTimeSeconds, 1763208000);
   assert.equal(endTimeSeconds, 1763214000);
@@ -95,7 +95,7 @@ test("a missing name or missing times answer null rather than a default", () => 
   // with no task table is a different statement — the next test — and the two
   // must not be conflated: one says "we could not read the page", the other
   // says "the page rendered and this value is not on it".
-  const page = TasksPage.parse(tasksOnly());
+  const page = TasksPage.read(tasksOnly());
 
   assert.equal(page.name, null);
   assert.equal(page.startTimeSeconds, null);
@@ -105,5 +105,5 @@ test("a missing name or missing times answer null rather than a default", () => 
 
 test("no task table means the page did not parse at all", () => {
   // The distinction the line above rests on, asserted directly.
-  assert.equal(TasksPage.parse(empty("<p>nothing</p>")), null);
+  assert.equal(TasksPage.read(empty("<p>nothing</p>")), null);
 });

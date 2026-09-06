@@ -196,7 +196,7 @@ The check differs by how each platform is addressed:
 
 Settings confirms the resolved account for all three, in one shape: *“Connected as tourist”* where the handle is looked up, *“Signed in as tourist”* on CodeChef where the browser session really is the identity. Each runs the **same `verifyIdentity` the sync runs** — a check that exercises a different call can pass while the real path fails — and Codeforces runs it against the values typed in the form rather than the saved ones. AtCoder previously showed nothing at all, which mattered most there: its history is read *about* a handle, so the resolved account is the only thing between a typo and a queue synced against a stranger.
 
-**What the check can and cannot establish differs by platform, and the difference is not cosmetic.** On CodeChef the browser session *is* the identity, so the signed-in account is compared against the configured handle and a mismatch throws. On Codeforces and AtCoder there is no session involved — `user.status?handle=X` returns X's submissions whoever's key signs the request, and AtCoder's submissions are read *about* a handle through `f.User=`, which returns that handle's rows whoever is signed in. Codeforces offers no "who am I" endpoint, so there **the handle is verified to exist, not to be yours**. **AtCoder no longer has that gap:** every page it serves carries `var userScreenName`, so `atcoder/dom-parsers/page-globals.js` reads the signed-in account and `verifyIdentity` refuses a handle that contradicts it. The policy is narrower than CodeChef's on purpose — there the session *is* the identity, so a mismatch means the data is the wrong person's; here `f.User=` means the data is right either way and a mismatch just says Settings has the wrong handle. So it throws only on **positive evidence**: signed out (`""`) or a missing marker (`null`) both proceed, because adding a contest has to keep working without a session and "we could not tell" is not evidence: enter someone else's and you will sync their solves. What contains that is the *changed*-identity path, which clears that platform's flags rather than merging them, so the mistake is recoverable.
+**What the check can and cannot establish differs by platform, and the difference is not cosmetic.** On CodeChef the browser session *is* the identity, so the signed-in account is compared against the configured handle and a mismatch throws. On Codeforces and AtCoder there is no session involved — `user.status?handle=X` returns X's submissions whoever's key signs the request, and AtCoder's submissions are read *about* a handle through `f.User=`, which returns that handle's rows whoever is signed in. Codeforces offers no "who am I" endpoint, so there **the handle is verified to exist, not to be yours**. **AtCoder no longer has that gap:** every page it serves carries `var userScreenName`, so `atcoder/dom-readers/page-globals.js` reads the signed-in account and `verifyIdentity` refuses a handle that contradicts it. The policy is narrower than CodeChef's on purpose — there the session *is* the identity, so a mismatch means the data is the wrong person's; here `f.User=` means the data is right either way and a mismatch just says Settings has the wrong handle. So it throws only on **positive evidence**: signed out (`""`) or a missing marker (`null`) both proceed, because adding a contest has to keep working without a session and "we could not tell" is not evidence: enter someone else's and you will sync their solves. What contains that is the *changed*-identity path, which clears that platform's flags rather than merging them, so the mistake is recoverable.
 
 The guarantee rests on three independent layers, each confirmed by removing it and watching `tests/identity-guard.test.js` fail:
 
@@ -208,7 +208,7 @@ The guarantee rests on three independent layers, each confirmed by removing it a
 
 `updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption. The shell reports them **last**, after the backup write and the view refresh — reporting earlier let `"Writing backup…"` overwrite the message for exactly the users whose backup was at risk.
 
-Note the Codeforces scrape sends cookies (`platforms/codeforces-gyms/http.js`), but the one page it still reads — `/gym/<id>`, parsed by `dom-parsers/problems-page.js` — yields only the contest name and its problem list, nothing about the viewer. So it needs no identity, and neither does AtCoder's public tasks page. (That file used to read competitors' handles, solve counts and pagination too; the standings scrape is gone, which is what the rename recorded.)
+Note the Codeforces scrape sends cookies (`platforms/codeforces-gyms/http.js`), but the one page it still reads — `/gym/<id>`, read by `dom-readers/problems-page.js` — yields only the contest name and its problem list, nothing about the viewer. So it needs no identity, and neither does AtCoder's public tasks page. (That file used to read competitors' handles, solve counts and pagination too; the standings scrape is gone, which is what the rename recorded.)
 
 ### Platform adapters
 
@@ -275,7 +275,7 @@ Four files are the contract above; the rest is convention. **Where a platform do
 the thing, the file carries the name, so the parallel is visible from a directory
 listing; where it does not, the file is simply absent** — and the absence says
 something too. `codeforces-official/` having no `http.js`, no `scraping.js` and no
-`dom-parsers/` is how you can see at a glance that it never touches HTML.
+`dom-readers/` is how you can see at a glance that it never touches HTML.
 
 **The root is a closed set of nine names**, and `module-boundaries.test.js` fails on
 a tenth. Anything a platform can have *N* of lives in a folder named for its kind, so
@@ -295,7 +295,7 @@ a tenth. Anything a platform can have *N* of lives in a folder named for its kin
 
 | folder | one file per | today |
 |---|---|---|
-| `dom-parsers/` | page parsed | 6 |
+| `dom-readers/` | page read | 6 |
 | `sync/` | pass filling in data that arrives after the add | 5 |
 | `sources/` | extra endpoint the add reads | 5 |
 
@@ -317,18 +317,29 @@ Four of those rows are load-bearing rather than tidy:
   fact: claiming the capability with no estimator refuses every add, and
   estimating without claiming it stores `???` beside numbers already worked out.
   It only became true when AtCoder flipped.
-- **Nothing in a `dom-parsers/` folder fetches** — no client import, no bare
-  `fetch`, also pinned. That is what lets every parser run in Node against
+- **Nothing in a `dom-readers/` folder fetches** — no client import, no bare
+  `fetch`, also pinned. That is what lets every reader run in Node against
   `linkedom` with no network stack, which is most of the coverage these platforms
-  have, and reaching for the client from inside a parser is the shortest path to
-  losing it silently.
-- **A parser owns one page, and `parse(doc)` returns that page's facts or null.**
-  `PageParser` in `core/platforms/page-parser.js` states it; the folder used to be
+  have, and reaching for the client from inside one is the shortest path to losing
+  it silently. **The assertion carries more weight than the folder name does**:
+  "read" is the verb of I/O, so a file in there that opened a connection would read
+  as doing exactly what it says. That is the same objection that ruled out calling
+  the folder `scrapers/`, where the `scraping.js` one directory up already means
+  *fetch*.
+- **A reader owns one page, and `read(doc)` returns that page's facts or null.**
+  `DomReader` in `core/platforms/dom-reader.js` states it; the folder used to be
   six files sharing nothing but a directory. The assembly of a page's facts lived
   in `scraping.js`, which is why "what do these have in common" had no good answer
-  — it had been moved out. Statics, not instances: parsing is pure and nothing
+  — it had been moved out. Statics, not instances: reading is pure and nothing
   needs `new`. `page-globals.js` is named for a fragment rather than a page because
-  AtCoder emits its marker on every page it serves; it is a parser like the rest.
+  AtCoder emits its marker on every page it serves; it is a reader like the rest.
+
+  **The name took four passes** — `scrapers/` → `html-parsers/` → `dom-parsers/` →
+  `dom-readers/` — because each verb described something the folder does not do.
+  Nothing in it parses: the string→`Document` step happens once, in
+  `site-client.js#getDocument`, using the browser's real `DOMParser`, and these
+  classes only ever receive a finished `Document`. Nothing in it scrapes either,
+  for the reason above. Worth knowing before proposing a fifth.
 - **`estimator.js` is *not* pure**: it acquires the field it fits against
   (`codeforces-gyms/field.js` calls `getContestStandings`, AtCoder's fetches
   `standings/json`). Only the models under `core/rating-models/` are pure.
@@ -440,7 +451,7 @@ Things that are easy to get wrong:
 - **Identity is the task id**, not contest + index — `solvedKey` and `problemKey` are
   both `atcoder:<task_id>`. In a daily-training rerun `abc432_c` is listed as problem
   E, so anything keyed on the displayed index silently treats them as different
-  problems. `dom-parsers/tasks.js` and `dom-parsers/submissions.js` both read the id from the row's
+  problems. `dom-readers/tasks.js` and `dom-readers/submissions.js` both read the id from the row's
   link for this reason.
 - **Difficulty is unbounded below.** 931 rated problems are negative; ABC471-A is
   −817. Nothing here may apply the Codeforces estimator's `Math.max(800, …)` floor
@@ -520,7 +531,7 @@ Four traps, all confirmed against the live API:
 
 Costs one request for the contest plus **one per problem** — difficulty and tags appear on no bulk or contest-level response, signed in or not. That is ~9 for a Starters division, still fewer than a Codeforces add. Tags mix real topics with the setter's handle and the contest code (`['combinatorics','raysh07_adm','start252','trees']`), so `cleanTags` strips both.
 
-`dom-parsers/page-globals.js` is the one place CodeChef's markup is read, extracting `window.codeChefUserData` from `/dashboard` by **balanced-brace slicing** — a non-greedy regex stops at the first `};` inside a nested object or a string. It returns `null`, never a default: a guessed handle would look like a signed-in session.
+`dom-readers/page-globals.js` is the one place CodeChef's markup is read, extracting `window.codeChefUserData` from `/dashboard` by **balanced-brace slicing** — a non-greedy regex stops at the first `};` inside a nested object or a string. It returns `null`, never a default: a guessed handle would look like a signed-in session.
 
 **It reads that global out of a `<script>` element, which is a DOM node like any other.** This file and AtCoder's namesake both used to regex the raw HTML *string* instead, which made them look like an exception to the folder they sit in — an exception this file spent a paragraph excusing. It was expedience, not necessity. Selecting the script is what made all six parsers uniform, and it removed the last consequence of the split: `atcoder/identity.js` had been fetching its page as a string and hand-building a `Document` from it *because the two parsers disagreed about their input*. One `getDocument` now, and **`new DOMParser` appears in exactly one file in the tree**, `services/site-client.js` — asserted by `module-boundaries.test.js`.
 
@@ -599,7 +610,7 @@ Three API methods each, disjoint. The user-visible consequence is that **an offi
 no codeforces.com tab open** — every call on that path is either the signed JSON API or the
 unsigned `contest.standings`, and neither is challenged. A gym add still needs one.
 **`codeforces-official/` carries no `http.js`,
-no `scraping.js` and no `dom-parsers/` at all**, which is asserted structurally in
+no `scraping.js` and no `dom-readers/` at all**, which is asserted structurally in
 `module-boundaries.test.js` as well as dynamically in the adapter tests.
 
 **What they share is an account, not code.** One handle, one key pair, one
@@ -661,7 +672,7 @@ search are two things free to disagree about what a team is worth.
 ### Data acquisition on Codeforces: two platforms, two channels
 
 1. **Signed API** (`core/platforms/codeforces-official/api.js`) — builds the `apiSig` (SHA-512 over `rand/method?sortedParams#secret`) via `crypto.subtle`. Used for `user.status`, `contest.ratingChanges`, `contest.standings`, `user.info`. **One method is deliberately unsigned**: `getPublicContestStandings`, because Codeforces serves a non-gym standings only to an anonymous request with no extra parameters, and signing appends two.
-2. **HTML scraping** (`core/platforms/codeforces-gyms/scraping.js` → `codeforces-gyms/http.js`, parsing in `codeforces-gyms/dom-parsers/problems-page.js`) — **one page, for one case.** A gym whose standings the setter hid answers `FAILED` to `contest.standings`, and the `/gym/<id>` problems page is the only page those contests still render. It is the definitive problem list, and cannot be replaced by deriving one from the submissions: a problem nobody attempted appears in none of them, so the contest would come out silently short.
+2. **HTML scraping** (`core/platforms/codeforces-gyms/scraping.js` → `codeforces-gyms/http.js`, reading in `codeforces-gyms/dom-readers/problems-page.js`) — **one page, for one case.** A gym whose standings the setter hid answers `FAILED` to `contest.standings`, and the `/gym/<id>` problems page is the only page those contests still render. It is the definitive problem list, and cannot be replaced by deriving one from the submissions: a problem nobody attempted appears in none of them, so the contest would come out silently short.
 
    **Everything else on Codeforces is now JSON.** Three scrapes went, in order. The official *roster*: `contest.standings` was fetched regardless, so reading the page for the same facts was paying twice — no bytes saved (~760 KB against 6.5–8.5 MB either way), but it removed the failure mode, since a Cloudflare challenge there broke official adds outright. The official *field sampling*: it walked ~32 paginated standings pages to stratify a rank-ordered list that was already in the response. And the gym *roster*, for the same reason as the official one — the next line fetched `contest.standings` anyway, and `populateSolveCountsFromApi` overwrote the counts the page had just been parsed for.
 
@@ -706,7 +717,7 @@ stay green.
 
 `site-client` answers three ways, and between them they cover what the consumers
 want: `get` a string, `getJson` an object, **`getDocument` a `Document`** —
-which is what everything in a `dom-parsers/` folder takes. That last one is why
+which is what everything in a `dom-readers/` folder takes. That last one is why
 `DOMParser` no longer appears in platform code, with one deliberate exception:
 `atcoder/identity.js` reads one fetched page both ways, as a string for the
 `userScreenName` global and as a DOM for the rating, so parsing there saves a
@@ -1002,13 +1013,13 @@ from the captured sidebar markup.
 
 The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/scraping.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live standings page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: an understated page count either takes the walk-every-page branch or trips the `hasPageLink` guard (slow but correct), a missing contest name falls back to `Contest <id>`, and an unreadable totals row refuses loudly. The residual risk is a slow add, not a wrong rating. Adding a just-finished contest in the real extension is the only way to confirm it.
 
-### Scraped markup is quarantined in `codeforces-gyms/dom-parsers/`
+### Scraped markup is quarantined in `codeforces-gyms/dom-readers/`
 
 Every CSS selector and parsing rule for Codeforces' HTML lives in that folder — today one file, `problems-page.js`, for the one page still read — with ordered fallback chains (contest name tries `.contest-name`, then `.caption`, then `<title>`). A CF layout change should be a one-file fix.
 
-**It was called `standings-dom.js` for a long time after the standings scrape was deleted**, holding no standings parsing at all, and nothing caught it because nothing tied a parser's name to the page it reads. That is the whole argument for naming a `dom-parsers/` file after its page (see the folder-shape table above): the name is what makes the next such drift visible.
+**It was called `standings-dom.js` for a long time after the standings scrape was deleted**, holding no standings parsing at all, and nothing caught it because nothing tied a reader's name to the page it reads. That is the whole argument for naming a `dom-readers/` file after its page (see the folder-shape table above): the name is what makes the next such drift visible.
 
-**Extractors return `null`, never a plausible default.** This is the important invariant. The old code left solve counts at `0` when the totals row went missing and `parseInt(...) || 0` turned an unparseable cell into a zero — so a markup change didn't break anything visibly, it produced *confidently wrong ratings* that were stored and sorted like real ones. Returning `null` forces the caller to decide.
+**A reader returns `null`, never a plausible default.** This is the important invariant. The old code left solve counts at `0` when the totals row went missing and `parseInt(...) || 0` turned an unparseable cell into a zero — so a markup change didn't break anything visibly, it produced *confidently wrong ratings* that were stored and sorted like real ones. Returning `null` forces the caller to decide.
 
 `contest-manager.js` makes that decision as late as possible: it only refuses when unreadable counts actually matter, i.e. when some problem has no published rating to fall back on. A rated official contest doesn't need the totals row at all.
 

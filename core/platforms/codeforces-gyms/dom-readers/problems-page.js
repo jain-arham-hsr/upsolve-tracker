@@ -7,15 +7,15 @@
  *
  * This file was called `standings-dom.js` long after the standings scrape was
  * deleted, holding no standings parsing at all, and nothing noticed — because
- * nothing tied a parser's name to the page it reads. Naming it for the page is
+ * nothing tied a reader's name to the page it reads. Naming it for the page is
  * what makes the next such drift visible.
  */
-import { PageParser } from "../../page-parser.js";
+import { DomReader } from "../../dom-reader.js";
 
 /** Shared by both problem readers so their fallbacks can't drift. */
 const UNKNOWN_PROBLEM = "Unknown Problem";
 
-export class ProblemsPage extends PageParser {
+export class ProblemsPage extends DomReader {
   static selectors = {
     problemsTable: "table.problems",
     problemRow: "tr",
@@ -51,7 +51,7 @@ export class ProblemsPage extends PageParser {
    *   a layout change, and the caller refuses loudly rather than storing a
    *   contest that merely looks short.
    */
-  static parse(doc, { contestPath = null } = {}) {
+  static read(doc, { contestPath = null } = {}) {
     const problems = this.#problems(doc);
     if (problems === null) return null;
 
@@ -64,7 +64,7 @@ export class ProblemsPage extends PageParser {
 
   /**
    * Null rather than `Contest <id>` when unreadable: a display fallback is the
-   * caller's to choose, and this folder's rule is that a parser never invents a
+   * caller's to choose, and this folder's rule is that a reader never invents a
    * plausible value. Note the name is read once at add time and never re-read,
    * so a contest added under the wrong name keeps it until removed and re-added.
    */

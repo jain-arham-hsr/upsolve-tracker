@@ -6,15 +6,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DOMParser } from "linkedom";
-import { ProblemsPage } from "../core/platforms/codeforces-gyms/dom-parsers/problems-page.js";
+import { ProblemsPage } from "../core/platforms/codeforces-gyms/dom-readers/problems-page.js";
 
 // One parse per page. `parse` is null exactly when the problems table is
 // unreadable, which is what extractProblemsFromList used to signal alone; the
 // name and phase are fields on the page it returns.
-const extractProblemsFromList = (doc) => ProblemsPage.parse(doc)?.problems ?? null;
+const extractProblemsFromList = (doc) => ProblemsPage.read(doc)?.problems ?? null;
 const findContestNameOnProblemsPage = (doc, contestPath) =>
-  ProblemsPage.parse(doc, { contestPath })?.contestName ?? null;
-const hasFinished = (doc) => ProblemsPage.parse(doc)?.finished ?? null;
+  ProblemsPage.read(doc, { contestPath })?.contestName ?? null;
+const hasFinished = (doc) => ProblemsPage.read(doc)?.finished ?? null;
 
 /**
  * The name and the phase are *fields* on a parsed page, so a fixture that

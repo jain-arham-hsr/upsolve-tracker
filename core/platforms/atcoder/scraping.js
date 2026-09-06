@@ -17,8 +17,8 @@
  * fallback here; it is the only interface.
  */
 import { getDocument, getJson } from "./http.js";
-import { TasksPage } from "./dom-parsers/tasks.js";
-import { SubmissionsPage } from "./dom-parsers/submissions.js";
+import { TasksPage } from "./dom-readers/tasks.js";
+import { SubmissionsPage } from "./dom-readers/submissions.js";
 
 const ORIGIN = "https://atcoder.jp";
 
@@ -41,10 +41,10 @@ const MAX_SUBMISSION_PAGES = 20;
 export async function fetchContestTasks(contestId) {
   const doc = await getDocument(`${ORIGIN}/contests/${encodeURIComponent(contestId)}/tasks`);
 
-  const page = TasksPage.parse(doc);
+  const page = TasksPage.read(doc);
   if (page === null) return null;
 
-  // Only the display fallback is left here: a parser returns null rather than
+  // Only the display fallback is left here: a reader returns null rather than
   // inventing a name, so choosing what to show instead is the caller's.
   return { ...page, name: page.name ?? `Contest ${contestId}` };
 }
@@ -58,7 +58,7 @@ export async function fetchContestTasks(contestId) {
  * caught a task solved in a *different* contest from the one being tracked.
  *
  * Filtered server-side to accepted submissions, but the verdict is re-read from
- * each row anyway; see `dom-parsers/submissions.js` for why that is not
+ * each row anyway; see `dom-readers/submissions.js` for why that is not
  * redundant.
  */
 export async function fetchAcceptedTaskIds(contestId, handle) {
@@ -66,7 +66,7 @@ export async function fetchAcceptedTaskIds(contestId, handle) {
     `${ORIGIN}/contests/${encodeURIComponent(contestId)}/submissions` +
     `?f.User=${encodeURIComponent(handle)}&f.Status=AC`;
 
-  const first = SubmissionsPage.parse(await getDocument(base));
+  const first = SubmissionsPage.read(await getDocument(base));
 
   // A missing table is a layout change, not an empty history. Refuse rather
   // than report "nothing solved", which `solved` being sticky would make
@@ -82,7 +82,7 @@ export async function fetchAcceptedTaskIds(contestId, handle) {
 
   for (let page = 2; page <= pages; page++) {
     // Only page one is asked how many pages there are; the rest contribute ids.
-    const next = SubmissionsPage.parse(await getDocument(`${base}&page=${page}`));
+    const next = SubmissionsPage.read(await getDocument(`${base}&page=${page}`));
     if (next === null) break;
     for (const id of next.acceptedTaskIds) accepted.add(id);
   }

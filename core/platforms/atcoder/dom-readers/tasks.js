@@ -9,9 +9,9 @@
  * daily-training rounds are mostly reruns — and a global list only records the
  * contest a problem debuted in. This page answers for exactly this contest.
  */
-import { PageParser } from "../../page-parser.js";
+import { DomReader } from "../../dom-reader.js";
 
-export class TasksPage extends PageParser {
+export class TasksPage extends DomReader {
   static selectors = {
     // The sidebar link first, `<title>` as the fallback: the title carries a
     // " - AtCoder" suffix and is localised differently.
@@ -34,7 +34,7 @@ export class TasksPage extends PageParser {
    *   `null` when there is no task table at all, which the caller reads as "not
    *   published yet" rather than as an empty contest.
    */
-  static parse(doc) {
+  static read(doc) {
     const problems = this.#tasks(doc);
     if (problems === null) return null;
 

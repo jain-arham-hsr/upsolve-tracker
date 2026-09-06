@@ -357,7 +357,7 @@ test("a folder under core/platforms/ has a descriptor iff it is registered", () 
   // was written but never wired into registry.js, which would simply never run.
   //
   // Note this reads **one level only**, which is deliberate rather than an
-  // oversight: `dom-parsers/` is a folder under a platform and has no
+  // oversight: `dom-readers/` is a folder under a platform and has no
   // descriptor, so a recursive walk would fail it.
   const registered = new Set(listPlatforms().map((platform) => platform.id));
   const folders = readdirSync(PLATFORMS, { withFileTypes: true })
@@ -390,7 +390,7 @@ test("the official Codeforces platform reaches no HTML at all", () => {
   // `tests/codeforces-adapter.test.js` asserts the same thing dynamically, by
   // failing if a request is issued while reaching the estimator. This one
   // catches the import before it can ever run.
-  const forbidden = ["http.js", "scraping.js", "dom-parsers", "DOMParser"];
+  const forbidden = ["http.js", "scraping.js", "dom-readers", "DOMParser"];
   const offenders = [];
 
   for (const file of sourceFiles(path.join(PLATFORMS, "codeforces-official"), [".js"])) {
@@ -478,30 +478,35 @@ test("a platform has estimator.js iff its descriptor claims canEstimate", () => 
   assert.deepEqual(offenders, [], "the capability and the file are one fact");
 });
 
-test("nothing in a dom-parsers/ folder fetches", () => {
+test("nothing in a dom-readers/ folder fetches", () => {
+  // This one carries more weight than it used to. "Read" is the verb of I/O,
+  // so the folder's name no longer says by itself that these never go and get
+  // anything — a `dom-readers/` file that opened a connection would read as
+  // doing exactly what it says. This assertion is what keeps it unambiguous,
+  // and it is the same objection that ruled out calling the folder scrapers/.
   // What the folder is for. Its files take a page the platform already has —
   // a `Document`, or the raw HTML string in the two `page-globals.js` — and
   // return values; the fetching lives one level up in `scraping.js` and
-  // `http.js`. That separation is what lets every parser be exercised in Node
+  // `http.js`. That separation is what lets every reader be exercised in Node
   // against `linkedom` with no network stack anywhere, which is most of the
   // coverage these platforms have.
   //
   // It is also the first thing a hurried change would break: reaching for the
-  // client from inside a parser is the shortest path to "just fetch page two
+  // client from inside a reader is the shortest path to "just fetch page two
   // here", and nothing else would notice, since the result is correct and only
   // the testability is gone.
   const clients = ["http.js", "api.js", "site-client.js", "scraping.js"];
   const offenders = [];
-  const parsers = [];
+  const readers = [];
 
   for (const platform of listPlatforms()) {
     const root = path.join(PLATFORMS, platform.id);
-    if (!readdirSync(root).includes("dom-parsers")) continue;
+    if (!readdirSync(root).includes("dom-readers")) continue;
 
-    for (const file of sourceFiles(path.join(root, "dom-parsers"), [".js"])) {
+    for (const file of sourceFiles(path.join(root, "dom-readers"), [".js"])) {
       const relative = path.relative(ROOT, file);
       const code = stripComments(readFileSync(file, "utf8"));
-      parsers.push(relative);
+      readers.push(relative);
 
       for (const spec of importsOf(code)) {
         if (clients.some((name) => spec.endsWith(name))) {
@@ -512,13 +517,13 @@ test("nothing in a dom-parsers/ folder fetches", () => {
     }
   }
 
-  assert.deepEqual(offenders, [], "a parser takes a page, it does not go and get one");
+  assert.deepEqual(offenders, [], "a reader takes a page, it does not go and get one");
 
   // Or the loop above proves nothing: a rename that emptied every folder would
   // pass it silently. Six files across three platforms, and codeforces-official
   // deliberately has none — it reads no HTML at all, which the test above pins
   // from the other direction.
-  assert.equal(parsers.length, 6, `expected six parsers, found ${parsers.join(", ")}`);
+  assert.equal(readers.length, 6, `expected six readers, found ${readers.join(", ")}`);
 });
 
 test("a site client routes through its own platform's descriptor", () => {
@@ -630,8 +635,8 @@ test("both Codeforces clients share one signing implementation", () => {
 /**
  * The root of a platform folder is a closed set.
  *
- * `dom-parsers/` was the first half of this idea and was left half-done: HTML
- * parsers got a folder, and everything else open-ended stayed loose at the
+ * `dom-readers/` was the first half of this idea and was left half-done: HTML
+ * readers got a folder, and everything else open-ended stayed loose at the
  * root, where you could not tell a contract file from that platform's own
  * invention. Nine names below are the contract. Anything a platform can have N
  * of belongs in a folder named for its kind, so `ls` answers which is which.
@@ -660,7 +665,7 @@ const PLATFORM_ROOT_FILES = new Set([
 ]);
 
 /** One file per page / pass / endpoint — a platform may have any number. */
-const PLATFORM_FOLDERS = new Set(["dom-parsers", "sync", "sources"]);
+const PLATFORM_FOLDERS = new Set(["dom-readers", "sync", "sources"]);
 
 test("a platform's root holds only contract names", () => {
   const offenders = [];
@@ -688,26 +693,26 @@ test("a platform's root holds only contract names", () => {
   assert.deepEqual(offenders, [], "the root of a platform folder is a closed set");
 });
 
-test("every parser is one, by the definition rather than by folder", async () => {
-  // `dom-parsers/` held six files that shared a folder and nothing else — some
+test("every reader is one, by the definition rather than by folder", async () => {
+  // `dom-readers/` held six files that shared a folder and nothing else — some
   // exporting one extractor, some three, one keeping its selectors in a block
   // and the rest scattering them. This is the definition, asserted: one class
-  // per page, `parse` overridden, selectors declared in one place.
+  // per page, `read` overridden, selectors declared in one place.
   //
-  // The base's `parse` throws rather than returning null on purpose, so a
+  // The base's `read` throws rather than returning null on purpose, so a
   // subclass that forgets to override it fails loudly here and at runtime,
   // rather than reading as "this page never matches".
-  const { PageParser } = await import("../core/platforms/page-parser.js");
+  const { DomReader } = await import("../core/platforms/dom-reader.js");
   const offenders = [];
-  let parsers = 0;
+  let readers = 0;
 
   for (const platform of listPlatforms()) {
     const root = path.join(PLATFORMS, platform.id);
-    if (!readdirSync(root).includes("dom-parsers")) continue;
+    if (!readdirSync(root).includes("dom-readers")) continue;
 
-    for (const file of sourceFiles(path.join(root, "dom-parsers"), [".js"])) {
+    for (const file of sourceFiles(path.join(root, "dom-readers"), [".js"])) {
       const relative = path.relative(ROOT, file);
-      parsers++;
+      readers++;
 
       const exported = Object.values(await import(file)).filter(
         (value) => typeof value === "function",
@@ -718,26 +723,26 @@ test("every parser is one, by the definition rather than by folder", async () =>
         continue;
       }
 
-      const parser = exported[0];
-      if (!(parser.prototype instanceof PageParser)) {
-        offenders.push(`${relative}'s ${parser.name} does not extend PageParser`);
+      const reader = exported[0];
+      if (!(reader.prototype instanceof DomReader)) {
+        offenders.push(`${relative}'s ${reader.name} does not extend DomReader`);
         continue;
       }
-      if (parser.parse === PageParser.parse) {
-        offenders.push(`${relative}'s ${parser.name} never overrides parse()`);
+      if (reader.read === DomReader.read) {
+        offenders.push(`${relative}'s ${reader.name} never overrides read()`);
       }
-      if (Object.keys(parser.selectors ?? {}).length === 0) {
-        offenders.push(`${relative}'s ${parser.name} declares no selectors`);
+      if (Object.keys(reader.selectors ?? {}).length === 0) {
+        offenders.push(`${relative}'s ${reader.name} declares no selectors`);
       }
     }
   }
 
-  assert.deepEqual(offenders, [], "a parser owns one page and says how it reads it");
-  assert.equal(parsers, 6, `expected six parsers, found ${parsers}`);
+  assert.deepEqual(offenders, [], "a reader owns one page and says how it reads it");
+  assert.equal(readers, 6, `expected six readers, found ${readers}`);
 });
 
 test("DOMParser is constructed in exactly one place", () => {
-  // What makes every parser testable in Node against linkedom: they take a
+  // What makes every reader testable in Node against linkedom: they take a
   // Document and never build one. It was three places until the two
   // `page-globals.js` stopped regexing raw HTML — those globals live in a
   // `<script>`, so they select it like anything else.

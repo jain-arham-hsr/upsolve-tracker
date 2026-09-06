@@ -13,7 +13,7 @@
  * parsed for.
  */
 import { CodeforcesHttp } from "./http.js";
-import { ProblemsPage } from "./dom-parsers/problems-page.js";
+import { ProblemsPage } from "./dom-readers/problems-page.js";
 
 /**
  * Problem metadata from a contest's own problems page.
@@ -31,12 +31,12 @@ export async function scrapeProblemsPage(contestId) {
   const path = `/gym/${contestId}`;
   const doc = await CodeforcesHttp.getDocument(`https://codeforces.com${path}`);
 
-  const page = ProblemsPage.parse(doc, { contestPath: path });
+  const page = ProblemsPage.read(doc, { contestPath: path });
   if (!page) return null;
 
-  // Which selector finds the name is the parser's business and now lives
+  // Which selector finds the name is the reader's business and now lives
   // there. What is left here is a *display* fallback and the stored shape,
-  // neither of which is a fact about the page — a parser that invented
+  // neither of which is a fact about the page — a reader that invented
   // "Contest 712373" would be doing the thing this folder forbids.
   return {
     contestName: page.contestName ?? `Contest ${contestId}`,

@@ -94,11 +94,11 @@ export function createSiteClient({ site = null, pacer, refusal, fetchImpl = null
      * @returns {Promise<Document>} the body, parsed.
      *
      * The third return type, beside `get` and `getJson`, and between them they
-     * cover exactly what the consumers want: a `Document` for everything in a
-     * platform's `dom-parsers/`, a raw string for the two `page-globals.js`
-     * that read embedded JavaScript rather than markup, an object for JSON.
-     * Having it here is what keeps `DOMParser` out of platform code, where it
-     * was being spelled out beside each fetch.
+     * cover what the consumers want: a `Document` for everything in a platform's
+     * `dom-readers/`, an object for JSON, a raw string for whatever wants neither.
+     * Having it here is what keeps `DOMParser` out of platform code, where it was
+     * once spelled out beside each fetch — `module-boundaries.test.js` asserts it
+     * is constructed in this file and nowhere else.
      */
     async getDocument(url, init = {}) {
       const { body } = await read(url, init);

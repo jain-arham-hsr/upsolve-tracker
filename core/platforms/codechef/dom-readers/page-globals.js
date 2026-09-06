@@ -6,20 +6,20 @@
  * signed-in handle and rating.
  *
  * **That global is a DOM node**, and this file used to pretend otherwise. It
- * lives inside a `<script>` element like any other markup, so the parser
+ * lives inside a `<script>` element like any other markup, so the reader
  * selects the script and reads its text. Slicing it out of the raw HTML string
  * was expedient, not necessary, and it was the only reason this file needed an
- * apology for sitting in `dom-parsers/`.
+ * apology for sitting in `dom-readers/`.
  *
  * Returns **null, never a plausible default**. A guessed handle would look like
  * a logged-in session and a guessed rating would silently mis-sort every
  * CodeChef problem in the queue.
  */
-import { PageParser } from "../../page-parser.js";
+import { DomReader } from "../../dom-reader.js";
 
 const MARKER = "window.codeChefUserData";
 
-export class DashboardPage extends PageParser {
+export class DashboardPage extends DomReader {
   static selectors = {
     // Every inline script; the one carrying the marker is picked by content,
     // since CodeChef gives it no id or class to select on.
@@ -32,7 +32,7 @@ export class DashboardPage extends PageParser {
    *   out **or** when the shell no longer carries the object. The caller must
    *   tell both of those from "you have solved nothing".
    */
-  static parse(doc) {
+  static read(doc) {
     const user = this.#userData(doc)?.user;
     if (!user?.username) return null;
 
