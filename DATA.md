@@ -107,15 +107,21 @@ Where each kind of data comes from, and what happens when that source fails. Thi
 | **Codeforces Official**<br>`/contest/<id>` | `contest.standings`<br><br>*Not published yet:* waits, and retries on every refresh | `contest.standings`<br><br>*Not yet rated by Codeforces:* stored as an estimate, then re-asked from the same endpoint at most weekly — and not at all once the round is six weeks old<br><br>*Never rated:* estimated here. Solve counts from the same standings rows; the field from `contest.ratingChanges`, or ~1,500 sampled rows resolved through `user.info` when that is empty | `user.status` — one call, whole history |
 | **Codeforces Gyms**<br>`/gym/<id>` | `contest.standings`, signed<br><br>*Standings hidden:* scraped from the `/gym/<id>` page — a problem nobody attempted is in no submission, so the list cannot be rebuilt from those | `contest.standings` — about a third of gym problems carry Codeforces' own rating<br><br>*The rest:* estimated here. Solve counts and field both from `contest.standings`; when the standings are hidden, from `contest.status` + `user.info` instead<br><br>*Field not visible at all:* refuses to add | `user.status` — the same call as official |
 | **AtCoder** | Scraped from `/contests/<id>/tasks`<br><br>*Unreadable:* waits and retries every refresh | **Always estimated here** — AtCoder publishes no difficulty. Fitted from `/contests/<id>/standings/json` 🔒<br><br>*Unreadable:* waits and retries | Scraped from `/contests/<id>/submissions?f.User=…&f.Status=AC` 🔒<br><br>Once per tracked contest |
-| **CodeChef** 🔒 | `/api/contests/<code>`, then `/api/contests/<code>/problems/<code>` — one request per problem<br><br>*Parent contest:* resolves to the division matching your rating; with no known rating it names the divisions rather than guessing | `difficulty_rating`, from that same per-problem call<br><br>*`-1` or `9999`:* stored as `???` | `/api/list/problems?group=attempted`, paged |
+| **CodeChef** | `/api/contests/<code>`, then `/api/contests/<code>/problems/<code>` — one request per problem<br><br>*Parent contest:* resolves to the division matching your rating; with no known rating it names the divisions rather than guessing | `difficulty_rating`, from that same per-problem call<br><br>*`-1` or `9999`:* stored as `???` | `/api/list/problems?group=attempted`, paged 🔒 |
 
 🔒 **needs you signed in to that site.** See the request diagram above: without a tab open
-the request goes out anonymously, and these refuse rather than returning an empty answer.
+the request goes out anonymously.
 
-The two sites need it differently. On **AtCoder** only the two marked routes are gated —
-problems and contest details are public. On **CodeChef** the session *is* the identity, so
-the whole platform is: it answers for whoever holds the cookie, which is why even adding a
-contest stops if you are not signed in as the handle you configured.
+AtCoder's two **refuse** — they redirect to a sign-in page, which is loud and safe.
+CodeChef's does something worse: signed out it still answers `success`, but silently ignores
+`group=attempted` and returns the whole 21,000-problem catalogue instead of your attempted
+ones. So that one is checked against the signed-in account before it is trusted, and the
+sync stops rather than reading a stranger's list as yours.
+
+Everything else on CodeChef is public — the contest payload, and the per-problem call
+carrying `difficulty_rating` and tags. **Adding a contest still needs you signed in**, but
+that is this extension's rule rather than CodeChef's: it will not read anything of yours
+until it has confirmed whose account it is reading.
 
 ### Everything else that gets fetched
 
@@ -165,9 +171,9 @@ Things that surprise people, with no bearing on where the data comes from.
 **CodeChef**
 
 - **Stay signed in at codechef.com.** Unlike the other two, CodeChef has no way to be asked
-  *about* an account — it only ever answers for whoever holds the session cookie. So nothing
-  works signed out, adding a contest included, and syncing stops outright if the signed-in
-  account is not the handle you configured.
+  *about* an account — it only answers for whoever holds the session cookie. So your solved
+  list cannot be read without one, and syncing stops outright if the signed-in account is not
+  the handle you configured, rather than writing someone else's solves onto your queue.
 - `/START252` is a parent contest; your rating picks the division you competed in, and it is
   stored as e.g. `START252D`. The same problem usually runs in all four, so solving it once
   clears it everywhere.
