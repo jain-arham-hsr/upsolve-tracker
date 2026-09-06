@@ -1,8 +1,8 @@
-import { scrapeProblemsPage } from "./scraping.js";
+import { scrapeProblemsPage } from "../scraping.js";
 import {
   summariseSubmissions,
   fetchContestSubmissions,
-} from "./contest-submissions.js";
+} from "./contest-status.js";
 
 /**
  * Fetches a gym's problem metadata and solve counts.

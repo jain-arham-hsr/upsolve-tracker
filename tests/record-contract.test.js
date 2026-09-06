@@ -131,11 +131,11 @@ test("some test actually reaches the code that applies published ratings", () =>
 
   const row = run.stdout
     .split("\n")
-    .find((line) => line.includes("codeforces-official/solve-stats.js"));
+    .find((line) => line.includes("codeforces-official/sources/standings.js"));
 
   // Without this, a changed coverage format would make the assertion below
   // vacuous — the same hollowness this test replaced.
-  assert.ok(row, "no coverage row for solve-stats.js; the format has changed");
+  assert.ok(row, "no coverage row for sources/standings.js; the format has changed");
 
   const uncovered = (row.split("|").pop() ?? "").trim();
   const ranges = uncovered.split(/\s+/).filter(Boolean).map((range) => {
@@ -148,7 +148,7 @@ test("some test actually reaches the code that applies published ratings", () =>
   // covered line and passes — silently, which is the failure this whole file
   // exists to prevent.
   const source = readFileSync(
-    path.join(PLATFORMS, "codeforces-official", "solve-stats.js"),
+    path.join(PLATFORMS, "codeforces-official", "sources", "standings.js"),
     "utf8",
   ).split("\n");
   const applyIndex = source.findIndex((line) =>
@@ -161,7 +161,7 @@ test("some test actually reaches the code that applies published ratings", () =>
   assert.equal(
     skipped,
     false,
-    `solve-stats.js:${APPLY_LINE} never executes in the Codeforces adapter ` +
+    `sources/standings.js:${APPLY_LINE} never executes in the Codeforces adapter ` +
       `tests, so nothing proves an official contest keeps its published ` +
       `ratings — this is exactly how the missing \`type\` bug shipped green`,
   );

@@ -12,7 +12,7 @@
  * running from `syncMetadata`: it has a different cadence, a different cost
  * argument and writes in both directions. See `practice-flags.js`.
  */
-import { getProblem } from "./api.js";
+import { getProblem } from "../api.js";
 
 /**
  * `difficulty_rating` arrives as a string and uses two out-of-band values:

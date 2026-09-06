@@ -96,7 +96,7 @@ test("a FAILED response becomes the comment Codeforces gave", async () => {
   });
 
   try {
-    // This exact string is what codeforces-gyms/solve-stats.js keys its
+    // This exact string is what codeforces-gyms/sources/standings.js keys its
     // hidden-standings fallback off, so it has to survive the round trip.
     // `contest.standings` is a gym-only endpoint — the official client dropped
     // it in the split — so this is the gym half of the client.

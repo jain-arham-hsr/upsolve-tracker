@@ -16,10 +16,10 @@
  * it, plus three more spread across the modules below. The folder answers that
  * question now, so neither pipeline asks it.
  */
-import { readSolveStats } from "./solve-stats.js";
-import { isInProblemset } from "./problemset-gate.js";
-import { syncPublishedProblemData } from "./published-sync.js";
-import { syncStartTimes } from "./start-times.js";
+import { readSolveStats } from "./sources/standings.js";
+import { isInProblemset } from "./sources/problemset.js";
+import { syncPublishedProblemData } from "./sync/published-data.js";
+import { syncStartTimes } from "./sync/start-times.js";
 import { notPublishedYet } from "../../contest-status.js";
 
 /**

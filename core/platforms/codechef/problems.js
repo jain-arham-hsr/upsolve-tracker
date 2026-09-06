@@ -10,8 +10,8 @@
  * ~9 for a Starters division, still fewer than a Codeforces add.
  */
 import { getContest, getProblem, ACCEPTED } from "./api.js";
-import { parseDifficulty, cleanTags, syncPublishedDifficulty } from "./published-sync.js";
-import { practiceFlag, refreshPracticeFlags } from "./practice-flags.js";
+import { parseDifficulty, cleanTags, syncPublishedDifficulty } from "./sync/published-data.js";
+import { practiceFlag, refreshPracticeFlags } from "./sync/practice-flags.js";
 import {
   notEndedYet,
   notPublishedYet,

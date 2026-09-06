@@ -1,6 +1,6 @@
 import { computeTeamRating } from "../../rating-models/team-rating.js";
 import { fullField } from "../../rating-models/rating-distribution.js";
-import { stratifyRows } from "./sampling.js";
+import { stratifyRows } from "./sources/sampling.js";
 
 /**
  * The official field: pre-contest ratings for everyone who entered.

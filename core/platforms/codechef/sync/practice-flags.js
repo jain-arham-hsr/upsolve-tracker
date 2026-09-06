@@ -10,7 +10,7 @@
  * Sharing a file invites sharing a gate, and the slower pass would then
  * suppress the faster.
  */
-import { getContest } from "./api.js";
+import { getContest } from "../api.js";
 
 /**
  * Some old problems were never mirrored into CodeChef's practice archive.

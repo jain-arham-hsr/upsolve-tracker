@@ -1,5 +1,5 @@
 /**
- * published-sync and start-times match on bare `contestId` values, so they are
+  * sync/published-data and sync/start-times match on bare `contestId` values, so they are
  * Codeforces-only and must be handed Codeforces contests exclusively.
  * These tests pin the filter that guarantees it — the failure it prevents is
  * silent: another platform's contest picking up a Codeforces start time
@@ -8,8 +8,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { contestsOnPlatform } from "../core/platforms/registry.js";
-import { syncStartTimes } from "../core/platforms/codeforces-official/start-times.js";
-import { syncPublishedProblemData } from "../core/platforms/codeforces-official/published-sync.js";
+import { syncStartTimes } from "../core/platforms/codeforces-official/sync/start-times.js";
+import { syncPublishedProblemData } from "../core/platforms/codeforces-official/sync/published-data.js";
 
 /**
  * `startTimeSeconds` defaults to *now* because the re-check stops asking about a

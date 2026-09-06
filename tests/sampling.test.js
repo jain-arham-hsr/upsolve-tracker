@@ -15,7 +15,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { spreadPages, stratifyRows } from "../core/platforms/codeforces-official/sampling.js";
+import { spreadPages, stratifyRows } from "../core/platforms/codeforces-official/sources/sampling.js";
 import { estimateProblemRating } from "../core/platforms/codeforces-official/estimator.js";
 
 const PER_PAGE = 50;

@@ -626,3 +626,124 @@ test("both Codeforces clients share one signing implementation", () => {
     );
   }
 });
+
+/**
+ * The root of a platform folder is a closed set.
+ *
+ * `dom-parsers/` was the first half of this idea and was left half-done: HTML
+ * parsers got a folder, and everything else open-ended stayed loose at the
+ * root, where you could not tell a contract file from that platform's own
+ * invention. Nine names below are the contract. Anything a platform can have N
+ * of belongs in a folder named for its kind, so `ls` answers which is which.
+ *
+ * It is not a style rule. A flat root let two names mislead for months, with
+ * nothing to contradict them: `contest-submissions.js` sat beside
+ * `submissions.js` doing something unrelated — everyone's submissions, to
+ * rebuild a hidden-standings gym, against yours, to clear the queue — and
+ * `solve-stats.js` returned a contest's name, problems, ratings, tags, start
+ * time and phase, of which counts were one field. Both are now named for the
+ * endpoint they read, inside `sources/`.
+ */
+const PLATFORM_ROOT_FILES = new Set([
+  // Always.
+  "descriptor.js",
+  "identity.js",
+  "problems.js",
+  "submissions.js",
+  // Where the platform estimates.
+  "estimator.js",
+  "field.js",
+  // How it reaches the site.
+  "api.js",
+  "http.js",
+  "scraping.js",
+]);
+
+/** One file per page / pass / endpoint — a platform may have any number. */
+const PLATFORM_FOLDERS = new Set(["dom-parsers", "sync", "sources"]);
+
+test("a platform's root holds only contract names", () => {
+  const offenders = [];
+
+  for (const platform of listPlatforms()) {
+    for (const entry of readdirSync(path.join(PLATFORMS, platform.id), {
+      withFileTypes: true,
+    })) {
+      if (entry.isDirectory()) {
+        if (!PLATFORM_FOLDERS.has(entry.name)) {
+          offenders.push(`${platform.id}/${entry.name}/ is not a known kind of folder`);
+        }
+        continue;
+      }
+
+      if (!PLATFORM_ROOT_FILES.has(entry.name)) {
+        offenders.push(
+          `${platform.id}/${entry.name} is not a contract name — put it in ` +
+            `${[...PLATFORM_FOLDERS].join("/, ")}/, or say why it is a tenth root name`,
+        );
+      }
+    }
+  }
+
+  assert.deepEqual(offenders, [], "the root of a platform folder is a closed set");
+});
+
+test("every parser is one, by the definition rather than by folder", async () => {
+  // `dom-parsers/` held six files that shared a folder and nothing else — some
+  // exporting one extractor, some three, one keeping its selectors in a block
+  // and the rest scattering them. This is the definition, asserted: one class
+  // per page, `parse` overridden, selectors declared in one place.
+  //
+  // The base's `parse` throws rather than returning null on purpose, so a
+  // subclass that forgets to override it fails loudly here and at runtime,
+  // rather than reading as "this page never matches".
+  const { PageParser } = await import("../core/platforms/page-parser.js");
+  const offenders = [];
+  let parsers = 0;
+
+  for (const platform of listPlatforms()) {
+    const root = path.join(PLATFORMS, platform.id);
+    if (!readdirSync(root).includes("dom-parsers")) continue;
+
+    for (const file of sourceFiles(path.join(root, "dom-parsers"), [".js"])) {
+      const relative = path.relative(ROOT, file);
+      parsers++;
+
+      const exported = Object.values(await import(file)).filter(
+        (value) => typeof value === "function",
+      );
+
+      if (exported.length !== 1) {
+        offenders.push(`${relative} exports ${exported.length} things, expected one class`);
+        continue;
+      }
+
+      const parser = exported[0];
+      if (!(parser.prototype instanceof PageParser)) {
+        offenders.push(`${relative}'s ${parser.name} does not extend PageParser`);
+        continue;
+      }
+      if (parser.parse === PageParser.parse) {
+        offenders.push(`${relative}'s ${parser.name} never overrides parse()`);
+      }
+      if (Object.keys(parser.selectors ?? {}).length === 0) {
+        offenders.push(`${relative}'s ${parser.name} declares no selectors`);
+      }
+    }
+  }
+
+  assert.deepEqual(offenders, [], "a parser owns one page and says how it reads it");
+  assert.equal(parsers, 6, `expected six parsers, found ${parsers}`);
+});
+
+test("DOMParser is constructed in exactly one place", () => {
+  // What makes every parser testable in Node against linkedom: they take a
+  // Document and never build one. It was three places until the two
+  // `page-globals.js` stopped regexing raw HTML — those globals live in a
+  // `<script>`, so they select it like anything else.
+  const built = sourceFiles(CORE, [".js"])
+    .filter((file) => stripComments(readFileSync(file, "utf8")).includes("new DOMParser"))
+    .map((file) => path.relative(ROOT, file));
+
+  assert.deepEqual(built, ["core/services/site-client.js"]);
+});
