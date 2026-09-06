@@ -104,7 +104,7 @@ The per-platform sections below explain *why*; this is the *where*.
 
 | | Problems | Difficulty | Submissions |
 |:--|:--|:--|:--|
-| **Codeforces Official**<br>`/contest/<id>` | `contest.standings` — no HTML at all<br><br>Not `problemset.problems`: that files a problem under the contest it *originated* in, so a Div. 2 round sharing problems with a Div. 1 one lists only its own — 2 of 7 for Round 1079. Filtering it by contest id would store a short contest | `contest.standings`, then `problemset.problems`<br><br>Standings first because it is the only thing that reports a *shared* problem's rating under this contest's own index; without it Round 1079's D stored as 1500 against a published 1600. The problemset then covers anything standings left unrated, and is what re-checks weekly<br><br>*Genuinely unrated:* estimated here — solve counts, and the field, from the same standings rows. The field prefers `contest.ratingChanges`; when that is empty it samples ~1,500 of the rows already in hand and resolves them through `user.info`. **No HTML on this path at all** | `user.status` — one call, whole history |
+| **Codeforces Official**<br>`/contest/<id>` | `contest.standings` — no HTML at all<br><br>Not `problemset.problems`: that files a problem under the contest it *originated* in, so a Div. 2 round sharing problems with a Div. 1 one lists only its own — 2 of 7 for Round 1079. Filtering it by contest id would store a short contest | `contest.standings`, and nothing else<br><br>It is the only source that reports a *shared* problem's rating under this contest's own index; without it Round 1079's D stored as 1500 against a published 1600. Not `problemset.problems`, which files those under the Div. 1 twin — for ~a third of Div. 2 rounds it can supply only two problems<br><br>*Added before Codeforces rated the round:* stored as estimates, then re-asked from the same endpoint at most weekly — and **not at all once the round is six weeks old**, since nothing more is coming and the check would otherwise run forever<br><br>*Genuinely unrated:* estimated here — solve counts, and the field, from the same standings rows. The field prefers `contest.ratingChanges`; when that is empty it samples ~1,500 of the rows already in hand and resolves them through `user.info`. **No HTML on this path at all** | `user.status` — one call, whole history |
 | **Codeforces Gyms**<br>`/gym/<id>` | Scraped from `/gym/<id>/standings`<br><br>*Standings hidden:* scraped from the `/gym/<id>` page instead — a problem nobody attempted appears in no submission, so it cannot be recovered from those | `contest.standings` — about a third of gym problems carry Codeforces' own rating<br><br>*The rest:* estimated here. Solve counts **and** field both from `contest.standings`; for a hidden gym, from `contest.status` + `user.info` instead. Never sampled — a gym's whole field arrives in one response<br><br>*Field not visible at all:* refuses to add, since it never becomes visible later | `user.status` — the same call as official |
 | **AtCoder** | Scraped from `/contests/<id>/tasks`<br><br>*Unreadable:* waits and retries every refresh — a contest that hasn't finished doesn't list them | **Always estimated here.** AtCoder publishes no difficulty at all. Fitted from `/contests/<id>/standings/json` 🔒<br><br>*Unreadable:* stores `???` and retries one contest per refresh | Scraped from `/contests/<id>/submissions?f.User=…&f.Status=AC` 🔒<br><br>Once per tracked contest — AtCoder publishes no per-user list |
 | **CodeChef** | `/api/contests/<code>`, then `/api/contests/<code>/problems/<code>` — one request per problem<br><br>*Parent contest:* resolves to the division matching your rating; with no known rating it names the divisions rather than guessing | `difficulty_rating`, from that same per-problem call<br><br>*`-1` or `9999`:* stored as `???`. No estimator — CodeChef rates promptly | `/api/list/problems?group=attempted`, paged |
@@ -151,9 +151,11 @@ Signed with your key and secret — which is the reason Codeforces is the one pl
 asks for more than a handle. Seven methods are used, all of them named in the two tables above.
 
 Two are worth knowing about beyond what that table says. `problemset.problems` returns all
-~11k problems in a single request, and doubles as the check for whether a contest has been
-published at all. And `contest.standings` is the only place a *gym* publishes its problems'
-tags and difficulties, which is why gyms need it even when nothing is being estimated.
+~11k problems in a single request, and is used for exactly one thing: checking whether
+Codeforces has published a contest at all. It is deliberately *not* where difficulty comes
+from — see the difficulty row above. And `contest.standings` is the only place either kind of
+contest publishes its problems' tags and difficulties, which is why it is fetched even when
+nothing is being estimated.
 
 ### The standings page (scraped)
 
@@ -193,10 +195,15 @@ Codeforces rates only *some* gym problems. For those it doesn't, difficulty is
 there's exactly one rating at which the Elo model predicts that many solves, and the code
 searches for it.
 
-**Official rounds are rarely estimated.** A contest is only added once it appears in
-`problemset.problems`, and until then it waits and is retried on every refresh — estimating
-a round Codeforces is about to rate itself would put a number ~100 points off into your queue
-and silently swap it later.
+**Official rounds are estimated only briefly.** A contest is not added at all until it
+appears in `problemset.problems`; until then it waits and is retried on every refresh. But
+appearing there does not mean rated — a round is often listed with every problem still
+unrated for a week or more — so a contest added soon after it runs *is* estimated, and those
+numbers are replaced from `contest.standings` on a later refresh.
+
+That re-check runs at most weekly, and stops six weeks after the round ran. By then anything
+still unrated never will be — an ICPC challenge, a Kotlin Heroes practice round — and
+without the cutoff those would be re-fetched every week forever.
 
 Appearing there is not the same as being *fully* rated, though. Two things can leave a
 problem unrated, and only one of them really is: a problem shared with the paired division is

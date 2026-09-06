@@ -17,7 +17,8 @@
  * question now, so neither pipeline asks it.
  */
 import { readSolveStats } from "./solve-stats.js";
-import { syncOfficialProblemData, isInProblemset } from "./problemset-sync.js";
+import { isInProblemset } from "./problemset-gate.js";
+import { syncPublishedProblemData } from "./published-sync.js";
 import { syncStartTimes } from "./start-times.js";
 import { notPublishedYet, sourceUnreachable } from "../../contest-status.js";
 
@@ -69,14 +70,15 @@ async function acquire({ contestId, session, onProgress = () => {} }) {
     id: contestId,
     name: contestName,
     problems,
-    publishedDataCheckedAt: null,
+    // Stamped, not null. `readSolveStats` has already applied every rating and
+    // tag the standings carry, so we genuinely did ask the site — and calling
+    // the re-check here would re-fetch the same ~6.5 MB response to learn
+    // nothing. A round Codeforces has not rated yet stores estimates and is
+    // settled later by `published-sync.js`.
+    publishedDataCheckedAt: Date.now(),
     startTimeSeconds,
   };
 
-  // Codeforces' own ratings are the same quantity the estimator approximates,
-  // so take them where they exist. For a rated round this leaves nothing to
-  // estimate, and the solve counts stop mattering.
-  await syncOfficialProblemData(service, [record], onProgress);
   await syncStartTimes(service, [record], onProgress);
 
   return {
@@ -98,6 +100,6 @@ async function acquire({ contestId, session, onProgress = () => {} }) {
  * both helpers match on bare contest ids.
  */
 export async function syncMetadata(session, contests, onProgress = () => {}) {
-  await syncOfficialProblemData(session.service, contests, onProgress);
+  await syncPublishedProblemData(session.service, contests, onProgress);
   await syncStartTimes(session.service, contests, onProgress);
 }

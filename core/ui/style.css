@@ -918,17 +918,6 @@ upsolve-stats-view {
   padding: 8px 0 4px;
 }
 
-.stats-hint {
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 18px;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-
 /* --- Rating Histogram --- */
 .hist-row {
   display: flex;

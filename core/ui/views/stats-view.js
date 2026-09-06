@@ -41,7 +41,6 @@ export class StatsView extends HTMLElement {
     this.histogram = this.querySelector("#stats-histogram");
     this.tagList = this.querySelector("#stats-tags");
     this.summary = this.querySelector("#stats-summary");
-    this.hint = this.querySelector("#stats-hint");
     this.coverage = this.querySelector("#tag-coverage");
     this.ring = this.querySelector("#stats-ring");
     this.ringSection = this.querySelector("#ring-section");
@@ -145,7 +144,6 @@ export class StatsView extends HTMLElement {
     const { ratings, unrated } = collectRatings(this.pending);
     this.ratings = ratings;
 
-    this.renderHint();
 
     // Tag vocabularies do not match between platforms — Codeforces says
     // "dfs and similar" where CodeChef says "graphs", and AtCoder publishes
@@ -218,26 +216,6 @@ export class StatsView extends HTMLElement {
       totals.size > 1
         ? `Tags cover ${overall}% of these problems — ${breakdown}`
         : `Tags cover ${overall}% of these problems`;
-  }
-
-  renderHint() {
-    const untagged = this.contests.filter(
-      (contest) =>
-        // The `contest.type === "OFFICIAL"` half of this condition is gone:
-        // official is a platform now, so the id says it. Note the id itself had
-        // to change — it read "codeforces", which after the split matched
-        // nothing, so the hint could never have fired again.
-        platformOf(contest).id === "codeforces-official" &&
-        contest.publishedDataCheckedAt == null,
-    ).length;
-
-    if (untagged === 0) {
-      this.hint.classList.add("hidden");
-      return;
-    }
-
-    this.hint.textContent = `${untagged} contest${untagged === 1 ? "" : "s"} queued before tags were tracked. Hit ↻ to fetch them.`;
-    this.hint.classList.remove("hidden");
   }
 
   /** Overview: unitless, so every platform belongs on the same axis. */

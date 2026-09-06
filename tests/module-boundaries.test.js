@@ -56,19 +56,21 @@ const PLATFORMS = path.join(CORE, "platforms");
  * to write down is a debt this test keeps visible, whereas the version being
  * replaced hid an entire subtree by accident.
  */
+/**
+ * Named exceptions, each with the reason it is one.
+ *
+ * A single named entry rather than a directory-wide skip: an exception you have
+ * to write down is a debt this test keeps visible, whereas the version this
+ * replaced hid an entire subtree by accident.
+ *
+ * **`stats-view.js` used to be the second entry and no longer is.** Its
+ * `renderHint` counted Codeforces official contests with no
+ * `publishedDataCheckedAt` and told you to press ↻ to fetch them. The add now
+ * stamps that field, so the condition could never be true again and the advice
+ * was false besides — the weekly re-check moved to `published-sync.js`, which
+ * finds those contests on its own. It went, and the exception went with it.
+ */
 const ALLOWED = {
-  "core/ui/views/stats-view.js":
-    "renderHint gates a tag-backfill hint on the codeforces-official platform. " +
-    "It looks dead — 0 of 68 tracked contests match — but pipeline.js still " +
-    "stores publishedDataCheckedAt: null when a problemset sync does not " +
-    "complete, so it can fire. Making it agnostic is not free: the honest " +
-    "condition is 'this platform publishes bulk problem data', and simply " +
-    "dropping the id test would catch Codeforces gyms, whose tags come from the " +
-    "standings instead — so the hint's advice would be wrong for them. Note the " +
-    "id here went stale once already: it read \"codeforces\" after that platform " +
-    "was split in two, matching nothing, and this exception kept passing because " +
-    "the *subtype* half of the condition still satisfied the staleness check.",
-
   "core/settings/schema.js":
     "The settings page is declared by hand, and verify.adapter has to name the " +
     "platform that runs each section's check. This is the third allowed " +

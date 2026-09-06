@@ -90,7 +90,7 @@ export async function readSolveStats(contestId, cfService) {
  * @returns {boolean} whether the API answered with problems at all, which is
  *   what `publishedDataCheckedAt` records.
  */
-function applyStandingsProblemData(standings, problems) {
+export function applyStandingsProblemData(standings, problems) {
   const apiProblems = standings?.problems;
   if (!apiProblems?.length) return false;
 

@@ -27,6 +27,10 @@ const STORED = [
   "problems",
   "startTimeSeconds",
   "publishedDataCheckedAt",
+  // Written by the trunk since the beginning and unread until recently, which
+  // is why it was missing here. `published-sync.js` uses it to date a contest
+  // whose `startTimeSeconds` is null, so the six-week cutoff still bounds one.
+  "addedAt",
 ];
 
 /**

@@ -60,7 +60,7 @@ Confirmed the usual way: renaming a descriptor's `api_secret` key reports *"the 
 
 The residue is not reweightable: fed data from its own model at those field sizes the estimator has an irreducible error of 87 against an actual 213, so ~126 points is model misfit — most likely because the two numbers measure different things, difficulty for a two-hour CF round versus for a handful of teams sharing a machine over five ICPC hours. The response is honesty rather than accuracy: `ui/problem-row.js` marks an estimated rating with `~`, so a ±200 number does not read as exact.
 
-It matters less than it did, because published ratings are now preferred wherever they exist — official contests via `problemset-sync.js`, and the ~32% of gym problems CF recognises via `solve-stats.js`.
+It matters less than it did, because published ratings are now preferred wherever they exist — official contests and the ~32% of gym problems CF recognises, both via `solve-stats.js#applyStandingsProblemData`.
 
 The build is still target-parameterized (`TARGET` selects `targets/<name>/manifest.json` and `dist/<name>`), but only `chrome` exists — the previous `dev:firefox` / `build:firefox` scripts were removed because they failed at config load. A real Firefox target needs more than a manifest: `targets/chrome/` depends on `chrome.sidePanel`, which Firefox answers with `sidebar_action`, and CRXJS emits a Chrome-style service-worker loader. Everything under `core/` already sticks to APIs both browsers implement.
 
@@ -90,7 +90,7 @@ The test step is the gate: before it existed the workflow would happily build an
 boundary between platforms but between *modules*: a record handed on without a field
 the receiver gates on. `codeforces-official/problems.js` once passed the metadata syncs a
 record built before the trunk had stamped `type` on it, and
-`problemset-sync.js#needsSync` reads `contest.type !== "OFFICIAL"` — so it answered
+the sync's `needsSync` read `contest.type !== "OFFICIAL"` — so it answered
 "not official", every official add skipped its published ratings, the estimator ran
 on problems Codeforces had already rated, and estimates with a mean error of ~211
 were stored in their place. 358 tests passed the whole time.
@@ -451,7 +451,7 @@ Note the expansion's opt-in is the one part of this **no unit test reaches** —
 
 They were one platform with two subtypes, and six modules independently asked
 which one they had — `problems.js`, `solve-stats.js`, `estimator.js`,
-`problemset-sync.js`, `start-times.js` and `scraping.js`, six conditions that had
+`problemset-sync.js` (now `published-sync.js`), `start-times.js` and `scraping.js` — six conditions that had
 to agree with nothing checking that they did. One of them had already failed
 that way: `needsSync` read `contest.type !== "OFFICIAL"` on a record built before
 `type` was stamped on it, so every official add silently skipped its published
@@ -598,7 +598,7 @@ with one of the five statuses above. Given a `/contest/<id>` or `/gym/<id>` URL:
    - *Official*: is the contest in `problemset.problems`? Codeforces publishes problems there
      already rated, so present-and-rated arrive together and absence is the whole question. Absent →
      `notPublishedYet`, and **nothing is scraped** — the alternative was tens of throttled requests
-     spent producing an estimate that `problemset-sync` would overwrite. The response is cached for
+     spent producing an estimate the re-check would overwrite. The response is cached for
      60 s so the check and step 3 don't fetch ~2 MB twice.
    - *Gym*: has it finished? Gyms are never in the problemset, so they skip that check entirely —
      applying it would make every gym unaddable. Phase comes from `contest.standings`' own `contest`
@@ -609,7 +609,7 @@ with one of the five statuses above. Given a `/contest/<id>` or `/gym/<id>` URL:
    contests read solve counts from the "Accepted" totals row; gyms instead count
    `bestSubmissionTimeSeconds` in `contest.standings`, excluding ghost parties. Returns
    `solveCountsRead`, false when the totals row wouldn't parse.
-3. `platforms/codeforces-official/problemset-sync.js` — apply Codeforces' published ratings and tags.
+3. `platforms/codeforces-official/solve-stats.js#applyStandingsProblemData` — apply Codeforces' published ratings and tags, off the standings response already in hand.
    Anything rated here needs no estimate, which is why it runs *before* the expensive steps.
 4. `platforms/codeforces-gyms/field.js` — produce the participant rating distribution, as
    **strata**: `{ strata: [{ ratings, scale }] }`, where `scale` is how many real competitors one
@@ -797,18 +797,27 @@ Every CSS selector and parsing rule for Codeforces' HTML lives in that one file,
 
 ### Tags and published ratings
 
-Both come from `problemset.problems` via `problemset-sync.js` (`tag-service.js` now only counts tags for the stats view). Ratings are preferred over estimates — same quantity, measured rather than inferred — and `problem.ratingSource` records `"official"` or `"estimated"`. Because CF publishes ratings days after a round, the weekly re-check means estimates converge to real ratings over time; a contest added right after it ends starts estimated and settles.
+Both come from **`contest.standings`**, applied by `solve-stats.js#applyStandingsProblemData` (`tag-service.js` now only counts tags for the stats view). Ratings are preferred over estimates — same quantity, measured rather than inferred — and `problem.ratingSource` records `"official"` or `"estimated"`. Because CF publishes ratings days after a round, a contest added right after it ends starts estimated and settles on a later refresh.
 
-**`problemset.problems` alone is not enough, and the reason is easy to miss.** It lists each
+**`problemset.problems` is not the source, and the reason is easy to miss.** It lists each
 problem *once*, under the contest it originated in — so a shared Div. 1 / Div. 2 problem is
 filed under Div. 1 only. Round 1079's Div. 2 (2197) lists just A and B; C–F live under 2196
-with Div. 1 indices. `syncOfficialProblemData` matches on `contestId-index`, finds nothing,
-and the estimator then rates problems Codeforces has already rated — measured on 2197, D
-stored 1500 against a published 1600 and E2 stored 2100 against 2000.
+with Div. 1 indices. Matching on `contestId-index` finds nothing for them, so the estimator
+rates problems Codeforces has already rated — measured on 2197, D stored 1500 against a
+published 1600 and E2 stored 2100 against 2000.
 
-`solve-stats.js` therefore also reads `contest.standings` for official contests, which
-reports a shared problem's rating under *this* contest's index, because a rating belongs to
-the problem rather than the contest. Four things about that call:
+**It is not rare.** Of 936 finished Div. 2 rounds, 282 have exactly two problems in the
+problemset and 330 have three or fewer, against five to seven for a standalone round — a
+bimodal distribution whose spike at two is the paired-round signature. So for roughly a third
+of Div. 2 rounds the problemset can never supply most of the ratings, and a re-check reading
+it would leave those estimated permanently while re-fetching them every week forever.
+
+The two sources do **not** differ in timing, which is worth recording so it is not re-tested:
+sampled at the same moment, a round unrated in one is unrated in the other, and a rated one
+carries identical values in both. The difference is coverage alone.
+
+`contest.standings` reports a shared problem's rating under *this* contest's index, because a
+rating belongs to the problem rather than the contest. Four things about that call:
 
 - **It must not be signed.** Codeforces serves a non-gym standings only to *"anonymous GET
   requests with no extra parameters"*, and `_callMethod` always appends `apiKey` and `time`.
@@ -825,9 +834,10 @@ the problem rather than the contest. Four things about that call:
   mention the twin's id. Matching on start time is unsound — 13% of same-start groups are
   unrelated contests, including ICPC problem sets — and matching on problem name is unsound
   too, since contest 100 also has a "Friendly Numbers".
-- **Failure is soft.** `problemset-sync` still runs and covers everything filed under the
-  contest's own id, which is most of a round. Losing the call costs the shared problems an
-  estimate, not the add.
+- **Failure is soft on the add.** The estimator covers whatever the call did not, so losing
+  it costs accuracy rather than the contest. On the re-check it is softer still: the stamp is
+  written only on success, so a failed call is retried on the next refresh instead of waiting
+  out another week.
 
 The same rule had left a dead fallback: `estimator.js` answered an empty `ratingChanges` by
 calling `getGymRatingDist` on an official contest, which signs — so it was refused every
@@ -835,7 +845,7 @@ time, leaving the field empty. It now fetches unsigned and hands the payload ove
 
 The tag source differs by contest type:
 
-- **Official** — `problemset.problems`, one ~2 MB request covering all ~11k problems, keyed by `contestId-index`. The per-contest alternative (`contest.standings`) also returns tags but embeds every participant row — ~12 MB for one Div. 3 — so it must not be used in a loop. Note this endpoint rejects `from`/`count` for non-gym contests; it only answers anonymous parameter-less GETs.
+- **Official** — the same `contest.standings` response the roster comes from, so tags and ratings arrive together and the add pays for one call rather than two. `problemset.problems` is still fetched, but only as the readiness gate (`problemset-gate.js`), where one ~2 MB request memoised for 60 s answers "has Codeforces published this contest at all" for every contest at once.
 - **Gym** — absent from the problemset entirely. Tags *and the published rating* are lifted from the `problems` array of the standings response that adding a gym already fetches (`solve-stats.js#applyStandingsProblemData`). Tags are usually empty, since gyms sit outside CF's taxonomy — but **about a third of gym problems carry a `rating`**, and taking it is not optional decoration.
 
   Those are problems the setter picked from the CF archive rather than preparing in Polygon, so CF still recognises them and serves its own number; problems written for the contest have none and are estimated as before. Measured over the 62 stored gym problems CF also rates, the estimate was a mean **211** off with 14 out by 400+, so ignoring the published value — which this code did until it was noticed — actively mis-sorted the queue. A one-time correction of the affected install was applied through Import rather than left as a normaliser, per the no-back-compat rule at the top of this file.
@@ -847,6 +857,45 @@ The tag source differs by contest type:
   **That duplicate `contest.standings` fetch is gone.** `solve-stats.js` fetches the response to count gym solves and now returns it; `problems.js` carries it in `acquired.context` and `estimator.js` hands it to `getGymRatingDist`, which takes an optional pre-fetched payload. It is passed, never stored — the built contest is what reaches `chrome.storage`, and a whole gym's field has no business there. Two things worth knowing before assuming it applied more widely: it was **gym-only**, since `readSolveStats` scrapes HTML for official rounds and `getOfficialRatingDist` reads `ratingChanges` instead; and the hidden-standings path has no such response to pass, so it still fetches. `codeforces-adapter.test.js` counts the calls, because nothing about a correct rating says how many requests produced it — this could otherwise regress silently forever.
 
   Worth knowing before trusting the number: a setter *can* keep the rating and replace the statement — CF supports it directly ([Rewrite Statements in Mashups](https://codeforces.com/blog/entry/84795)), to stop trainees googling the editorial. The official test set is unchanged and the form warns when the formulas differ, so the rating still describes the problem being judged; the residual risk is a rewrite that quietly strips a hint. Of the 62, 55 match exactly one archive problem by name with an identical rating and zero disagreements, and a re-*upload* of a rated contest inherits nothing at all (gym 100001 has no ratings and its problem name drifted to "Spreadsheets").
+
+#### The re-check stops after six weeks
+
+`published-sync.js` re-asks `contest.standings` for a contest that still has a
+problem without an official rating or without tags — at most weekly, and **only
+until six weeks after the round ran**.
+
+The cutoff is what makes it terminate, and it is the part worth not undoing. A
+round Codeforces will never rate — an ICPC challenge, a Kotlin Heroes practice
+round, the H-series of a marathon — stays incomplete by definition, so without a
+cutoff it is re-fetched every week for the life of the queue at ~6.5 MB a time.
+That is the same sweep the CodeChef practice-flag and gym-recheck sections argue
+against, arrived at from a different direction.
+
+Three details are deliberate:
+
+- **It is measured from `contest.startTimeSeconds`, not from the last check or
+  the add.** A stamp that moves every time we look can never bound anything; the
+  run date is fixed, so a contest provably leaves the rotation and never
+  re-enters it. `addedAt` is the fallback when the start time is null, since a
+  contest that cannot be dated is better bounded by something than by nothing.
+- **`startTimeSeconds` is epoch *seconds* while every other stamp on a record is
+  milliseconds.** Comparing them directly is off by a factor of 1000 and dates
+  every contest to 1970, which silently puts the whole queue past the cutoff and
+  disables the re-check entirely — a failure with no symptom except ratings that
+  quietly stop converging. `tests/platform-sync-isolation.test.js` pins it.
+- **There is no per-refresh cap**, unlike `atcoder/problems.js`, and that is a
+  decision rather than an omission. A cap interacts badly with the cutoff: with
+  several stale contests and an infrequent refresher, a capped rotation gives
+  each contest one look every few refreshes, and one that loses that race ages
+  past six weeks *before* it ever converged — causing the exact failure the
+  re-check exists to prevent. The weekly gate and the six-week window bound the
+  work between them, and the steady state is small, since only a round added
+  within days of running is stale at all.
+
+The add does **not** run this pass. `readSolveStats` has already applied every
+rating and tag the standings carry, so calling it again would re-fetch the same
+~6.5 MB response to learn nothing — which is why the add stamps
+`publishedDataCheckedAt: Date.now()` rather than `null`.
 
 `contest.publishedDataCheckedAt` records *when* the platform was last asked for what it publishes, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever.
 
