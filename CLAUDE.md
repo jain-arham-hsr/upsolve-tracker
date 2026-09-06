@@ -54,7 +54,16 @@ Confirmed the usual way: renaming a descriptor's `api_secret` key reports *"the 
 
 `tests/sampling.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
 
-`tests/estimator-accuracy.test.js` records a **known bias**: estimates run below Codeforces' published ratings, by up to ~300 on the hardest problems. The Elo model assumes everyone attempted every problem, when most never open the hard ones — non-attempts read as difficulty-driven failures, so the model over-predicts solves and the search settles too low.
+`tests/estimator-accuracy.test.js` records a **known bias**: estimates run below Codeforces' published ratings, by up to ~300 on the hardest problems.
+
+**Do not confuse two different 14-of-15 figures.** The one in *Sampling the field* is
+**sampling fidelity** — the ~1,500-competitor sample reproduces what reading the whole field
+would have produced, for 14 of 15 problems. It says nothing about whether the model agrees
+with Codeforces. Measured directly against the 15 published ratings in
+`fixtures/real-contest-fields.json`, the estimator scores **mean |error| 100, mean signed
+error −73, 6 of 15 exact, none out by 400**. Good, and visibly biased low — which is the
+bias this file records, not an absence of one. An earlier version of `DATA.md` had merged the
+two and claimed the model reproduced 14 of 15 *published* ratings; it does not. The Elo model assumes everyone attempted every problem, when most never open the hard ones — non-attempts read as difficulty-driven failures, so the model over-predicts solves and the search settles too low.
 
 **"Model attempts, not ability" was the suggested fix, and it is wrong.** It was measured against 62 gym problems where CF publishes a rating — a real labelled set — and fitting only the parties that actually submitted took mean absolute error from 213 to **374**, with the bias swinging to −310. CF's own ratings are calibrated over everyone who *entered* the round, not everyone who opened the problem, so conditioning on attempters leaves the definition rather than correcting for it. Six other levers were tried and all were neutral or worse (attempt blending, shrinkage to the contest mean, the zero-solve target, the 800 floor, team collapsing by max/mean, Elo divisors 200–1000); the file lists the numbers so none is retried. Enforcing difficulty order across a contest was rejected before measuring — only 2 of 8 contests are actually sorted.
 
@@ -399,6 +408,17 @@ Four traps, all confirmed against the live API:
 - **Signed out looks identical to "solved nothing."** `fetchSolvedKeys` therefore refuses outright when `signedIn` is false, so `progress-manager` isolates the failure and leaves existing flags alone. This is the case the stickiness invariant exists for.
 - **`problemsstats` cannot see an upsolve, and neither can the per-problem endpoint.** Both report only what happened *during* the contest. A contest closes to submissions when it ends, so upsolving happens in practice — see the section below, which is why solved status is no longer read per contest at all.
 - **Two out-of-band difficulty values**, both arriving as strings: `-1` for unrated (74% of the catalogue) and `9999`. Both become null. `9999` is the dangerous one — it is also the queue's own sort-last sentinel, so passing it through would read as a legitimate, very hard problem.
+- **A failed per-problem fetch is not evidence that CodeChef has no rating.** Difficulty
+  costs one request per problem, and conflating a failure with an absence stored `???` for
+  problems CodeChef *had* rated. The contest waits and retries instead — the general rule at
+  the top of this file (`???` means the site says unrated, never "we could not find out"),
+  with the instance that produced it.
+- **Whether a contest is still running is decided by CodeChef's clock, not yours.** The
+  payload lists the problems *during* a contest, so nothing about the problem list says the
+  contest has finished — adding mid-flight would record in-contest results as if they were
+  final. CodeChef reports its own server time beside the contest's end time, and that pair is
+  what the check reads. A local clock that is wrong, or merely in a different timezone, would
+  otherwise decide it.
 - **`/START252` is a parent contest** with an empty problem list and no error. Divisions are rating-banded, so the user's own rating (from `codeChefUserData`) selects the one they competed in; with no known rating it names the divisions rather than guessing.
 
 Costs one request for the contest plus **one per problem** — difficulty and tags appear on no bulk or contest-level response, signed in or not. That is ~9 for a Starters division, still fewer than a Codeforces add. Tags mix real topics with the setter's handle and the contest code (`['combinatorics','raysh07_adm','start252','trees']`), so `cleanTags` strips both.
@@ -468,7 +488,10 @@ They are genuinely different pipelines, not two flavours of one:
 | API methods | `getPublicContestStandings`, `getContestRatingChanges`, `getProblemsetProblems` | `getContestStandings`, `getContestStatus` |
 | HTML | **none at all** | the whole roster path |
 
-Three API methods each, disjoint. **`codeforces-official/` carries no `http.js`,
+Three API methods each, disjoint. The user-visible consequence is that **an official add needs
+no codeforces.com tab open** — every call on that path is either the signed JSON API or the
+unsigned `contest.standings`, and neither is challenged. A gym add still needs one.
+**`codeforces-official/` carries no `http.js`,
 no `scraping.js` and no `standings-dom.js`**, which is asserted structurally in
 `module-boundaries.test.js` as well as dynamically in the adapter tests.
 
@@ -596,7 +619,10 @@ with one of the five statuses above. Given a `/contest/<id>` or `/gym/<id>` URL:
 1. **Is it ready at all?** — asked before any work, because the answer is usually cheap and the
    work is not.
    - *Official*: is the contest in `problemset.problems`? Codeforces publishes problems there
-     already rated, so present-and-rated arrive together and absence is the whole question. Absent →
+     problems there, but **not necessarily rated ones** — 41 of 2,007 listed contests have no
+     rated problem at all, and the newest of those are ordinary recent rounds. So presence is
+     the whole question this gate asks, and a listed-but-unrated round is added with estimates
+     that `published-sync.js` settles later. Absent →
      `notPublishedYet`, and **nothing is scraped** — the alternative was tens of throttled requests
      spent producing an estimate the re-check would overwrite. The response is cached for
      60 s so the check and step 3 don't fetch ~2 MB twice.
@@ -706,6 +732,11 @@ What works, and what's implemented, is two strata:
 
 Verified against **real** rounds captured in `tests/fixtures/real-contest-fields.json` (rank order, pre-contest ratings and in-contest solve counts, all from the API): 14 of 15 problems reproduce the full-field rating exactly, one is 100 off. Real rank/rating correlation is about -0.65, not -1, so blocks cluster less than a synthetic sorted field suggests — don't re-verify this with simulated data. Fields of 30 blocks or fewer are taken whole, since sampling would save nothing worth the precision.
 
+**Gyms never sample, and never need to.** A gym's whole field arrives in one
+`contest.standings` response and is 5–76 parties — small enough to rate outright, and far too
+small to sample from. That size is also why a gym estimate is so much noisier than an official
+one: the model is fitting tens of people where an official round gives it thousands.
+
 **`tests/sampling.test.js` measures a *model* of the sample, not the code** — `stratifiedSample`, written in that file — because that is what makes the accuracy claim checkable against a captured field. So it also asserts that `stratifyRows` reproduces that model, including *positionally*: a head that sampled the bottom 500 would match on every count and be the exact mistake this design exists to avoid. Without that, the two could drift and every accuracy test would still pass — which is precisely what was possible while production read HTML and the test sliced an array.
 
 #### Gyms whose standings Codeforces has hidden
@@ -799,12 +830,17 @@ Every CSS selector and parsing rule for Codeforces' HTML lives in that one file,
 
 Both come from **`contest.standings`**, applied by `solve-stats.js#applyStandingsProblemData` (`tag-service.js` now only counts tags for the stats view). Ratings are preferred over estimates — same quantity, measured rather than inferred — and `problem.ratingSource` records `"official"` or `"estimated"`. Because CF publishes ratings days after a round, a contest added right after it ends starts estimated and settles on a later refresh.
 
+`problemset.problems` returns all **~11k problems in one request** (~2 MB, memoised 60 s),
+which is what makes it a cheap readiness gate and a tempting difficulty source.
+
 **`problemset.problems` is not the source, and the reason is easy to miss.** It lists each
 problem *once*, under the contest it originated in — so a shared Div. 1 / Div. 2 problem is
 filed under Div. 1 only. Round 1079's Div. 2 (2197) lists just A and B; C–F live under 2196
 with Div. 1 indices. Matching on `contestId-index` finds nothing for them, so the estimator
 rates problems Codeforces has already rated — measured on 2197, D stored 1500 against a
-published 1600 and E2 stored 2100 against 2000.
+published 1600 and E2 stored 2100 against 2000. It is not usable as a *roster* either, for the
+same reason: filtering it by contest id would store a contest several problems short, and a
+short contest reads as a small contest rather than as a fault.
 
 **It is not rare.** Of 936 finished Div. 2 rounds, 282 have exactly two problems in the
 problemset and 330 have three or fewer, against five to seven for a standalone round — a
@@ -867,7 +903,9 @@ until six weeks after the round ran**.
 The cutoff is what makes it terminate, and it is the part worth not undoing. A
 round Codeforces will never rate — an ICPC challenge, a Kotlin Heroes practice
 round, the H-series of a marathon — stays incomplete by definition, so without a
-cutoff it is re-fetched every week for the life of the queue at ~6.5 MB a time.
+cutoff it is re-fetched every week for the life of the queue, at 6.5–8.5 MB a time —
+the response scales with turnout, so the figure quoted elsewhere in this file varies for
+that reason rather than through disagreement.
 That is the same sweep the CodeChef practice-flag and gym-recheck sections argue
 against, arrived at from a different direction.
 
@@ -898,6 +936,13 @@ rating and tag the standings carry, so calling it again would re-fetch the same
 `publishedDataCheckedAt: Date.now()` rather than `null`.
 
 `contest.publishedDataCheckedAt` records *when* the platform was last asked for what it publishes, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever.
+
+**Two different things leave a problem unrated, and only one of them is real.** A problem
+shared with the paired division is filed under *that* division and simply is not listed under
+this contest — its rating exists, and `contest.standings` reports it under this contest's own
+index. Separately, **283 of the ~11k problemset entries (about 2.5%) are listed with no rating
+at all**, which is the genuine case and the only one the estimator should ever see. Conflating
+them is what made the old problemset-based re-check look like it was doing something.
 
 CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `published-sync.js#syncPublishedProblemData` therefore re-checks a contest that still has bare problems, but only once a week, and only until the round is six weeks old; a contest where every problem is tagged and officially rated is never re-requested. It runs from the refresh only — the add has already applied whatever the standings carry — and costs one `contest.standings` (~6.5 MB) per stale contest, which the weekly gate and the cutoff bound between them.
 
@@ -1031,6 +1076,18 @@ is the loudest thing on a near-black panel. Codeforces' tinted ratings are the e
 because there the colour carries the site's own meaning rather than emphasis. Nothing
 inverts to signal a selected state either — the tab bar brightens its label and underlines
 it, which is what a large near-white fill was doing wrong.
+
+### Nothing is fetched but the three sites
+
+There is no server, no CDN, no analytics, no telemetry and no runtime font fetch. The only
+remote addresses in the built bundle are the platform APIs, which is why `host_permissions`
+is composed from the descriptors and diffed against the previous build — that diff is the
+check on this invariant, not a formality.
+
+It constrains ordinary-looking changes. A web font, an icon set from a CDN, an error
+reporter, a "check for updates" ping: each would be individually reasonable and would each
+break the claim `DATA.md` makes to the user in its opening lines. The fonts are bundled and
+every platform mark is inline SVG for this reason, not for load time.
 
 ### Fonts are bundled, and that is load-bearing
 
