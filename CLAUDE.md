@@ -274,7 +274,7 @@ something too. `codeforces-official/` having no `http.js`, no `scraping.js` and 
 | `estimator.js` | `fill` — fit the difficulties the site did not publish | **iff `canEstimate`** |
 | `field.js` | standings → the data the estimator fits against | where it estimates |
 | `api.js` | the site's structured API client | where one exists |
-| `http.js` | paced client for HTML pages | where it scrapes |
+| `http.js` | names its `site` to `createSiteClient`, and says what a refusal looks like | where it scrapes |
 | `scraping.js` | fetch a page and hand it on parsed | where it scrapes |
 | `dom-parsers/<page>.js` | parse one page — no fetching | where it scrapes |
 | `dom-parsers/page-globals.js` | read the page's embedded JS globals | where the site uses them |
@@ -630,6 +630,27 @@ So requests route through a content script on the target site, declared from the
 same `hostPermissions` the manifest already composes. That is not a way around a
 site's defences — it is how an extension acts as the user on a site they are
 already signed in to, and the resulting request is the one their own tab makes.
+
+**A client names its `site` and the routing follows.** `createSiteClient({ site:
+descriptor })` derives the match patterns from that descriptor's
+`hostPermissions`, and defaults `credentials: "include"`; the three platforms
+each used to spell out `createPageFetch({ matchPatterns: X.hostPermissions })`.
+Naming **no** site throws at construction, since the alternative is a direct
+cookie-less fetch. Naming the **wrong** one is the failure worth pinning, and
+`module-boundaries.test.js` does: there is no matching tab, so every request
+falls back to a direct fetch and still succeeds — it just stops carrying the
+session, and the session-gated routes then fail exactly the way they do when the
+user has no tab open, which is a supported state that reports itself politely.
+Confirmed by pointing AtCoder's client at Codeforces and watching all 420 tests
+stay green.
+
+`site-client` answers three ways, and between them they cover what the consumers
+want: `get` a string, `getJson` an object, **`getDocument` a `Document`** —
+which is what everything in a `dom-parsers/` folder takes. That last one is why
+`DOMParser` no longer appears in platform code, with one deliberate exception:
+`atcoder/identity.js` reads one fetched page both ways, as a string for the
+`userScreenName` global and as a DOM for the rating, so parsing there saves a
+second request.
 
 Four things about it are load-bearing:
 

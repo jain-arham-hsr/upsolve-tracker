@@ -22,6 +22,16 @@ const { CodeforcesHttp } = await import("../core/platforms/codeforces-gyms/http.
 const { getAdapter } = await import("../core/platforms/adapters.js");
 
 /**
+ * These cases stub the page the way Codeforces serves it — as HTML — while
+ * production's `getDocument` hands back a parsed `Document`. This bridges the
+ * two so each stub below stays a readable page rather than a constructed DOM.
+ * The real `getDocument`, parse included, is covered by
+ * `tests/codeforces-http.test.js`.
+ */
+CodeforcesHttp.getDocument = async (...args) =>
+  new DOMParser().parseFromString(await CodeforcesHttp.get(...args), "text/html");
+
+/**
  * Codeforces is two platforms now, and the subtype is what picks between them —
  * so this routes the way `matchContestUrl` does, and every case below keeps
  * naming the subtype it is about.

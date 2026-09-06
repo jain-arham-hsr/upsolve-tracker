@@ -13,7 +13,6 @@
  * is collapsed.
  */
 import { createSiteClient } from "../../services/site-client.js";
-import { createPageFetch } from "../../services/page-transport.js";
 import { codeforcesGyms } from "./descriptor.js";
 
 const BLOCKED =
@@ -23,16 +22,11 @@ const client = createSiteClient({
   // Routed through a Codeforces tab when one is open, so the request carries the
   // session and Cloudflare sees the user rather than a stranger. Falls back to a
   // direct fetch otherwise, which still reads anything public.
-  fetchImpl: createPageFetch({ matchPatterns: codeforcesGyms.hostPermissions }),
+  site: codeforcesGyms,
   pacer: {
     gapMs: [1000, 2500],
     measureFrom: "end",
     cooldown: { everyNth: 15, gapMs: [6000, 12000] },
-    // Sent, though measurement showed they do not arrive: a cross-site request
-    // from the extension's origin drops cookies whose SameSite is unset, which
-    // is the default. Kept because it is correct, and because it becomes true
-    // the moment the request is issued from inside a page on the site.
-    credentials: "include",
     onWait: ({ count, ms, isCooldown }) => {
       const seconds = (ms / 1000).toFixed(2);
       if (isCooldown) {
@@ -66,9 +60,9 @@ export const CodeforcesHttp = {
   /**
    * @param {string} url
    * @param {RequestInit} [options]
-   * @returns {Promise<string>} the response body as text
+   * @returns {Promise<Document>} the parsed page, ready for `dom-parsers/`
    */
-  get: (url, options = {}) => client.get(url, options),
+  getDocument: (url, options = {}) => client.getDocument(url, options),
 };
 
 /**

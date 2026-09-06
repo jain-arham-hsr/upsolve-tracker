@@ -34,8 +34,10 @@ beforeEach(() => {
   globalThis.fetch = async () => served;
 });
 
+// Names the seam rather than a `site`, so these cases exercise the refusal hook
+// against the stubbed `globalThis.fetch` without page-transport in the way.
 const client = (refusal = never) =>
-  createSiteClient({ pacer: { gapMs: 0 }, refusal });
+  createSiteClient({ pacer: { gapMs: 0 }, refusal, fetchImpl: (...args) => fetch(...args) });
 
 test("a body the site actually answered comes back untouched", async () => {
   assert.equal(await client().get("https://example.com/x"), "hello");

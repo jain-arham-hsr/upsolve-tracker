@@ -33,8 +33,7 @@ import {
  */
 export async function scrapeProblemsPage(contestId) {
   const path = `/gym/${contestId}`;
-  const rawHtml = await CodeforcesHttp.get(`https://codeforces.com${path}`);
-  const doc = new DOMParser().parseFromString(rawHtml, "text/html");
+  const doc = await CodeforcesHttp.getDocument(`https://codeforces.com${path}`);
 
   const parsed = extractProblemsFromList(doc);
   if (!parsed) return null;

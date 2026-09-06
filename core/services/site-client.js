@@ -29,22 +29,48 @@
  * succeeds. Routing through a page is therefore the difference between reading
  * a private gym and not, on every platform at once — which is precisely why it
  * must not be implemented three times.
+ *
+ * **A caller names its `site` and the routing follows**, rather than assembling
+ * `createPageFetch({ matchPatterns: descriptor.hostPermissions })` itself. Three
+ * platforms wrote that line identically, and the mistake it invites is quiet:
+ * hand it the *wrong* descriptor and every request still succeeds, because a
+ * site with no matching tab falls back to a direct fetch. It just stops carrying
+ * the session, so only the session-gated routes fail — and they fail the same
+ * way they do when the user simply has no tab open, which is a supported state
+ * that reports itself politely. Deriving it from the one descriptor the client
+ * already belongs to removes the chance.
  */
 import { createPacer } from "./request-pacer.js";
+import { createPageFetch } from "./page-transport.js";
 
 /**
  * @param {object} options
- * @param {object} options.pacer - passed straight to `createPacer`.
+ * @param {{hostPermissions: string[]}} [options.site] - the platform descriptor
+ *   this client speaks to. Its `hostPermissions` are already match patterns, so
+ *   they are what routes a request through a tab on that site.
+ * @param {object} options.pacer - passed straight to `createPacer`. Defaults
+ *   `credentials: "include"`, since a client routed through a page is there to
+ *   act as the signed-in user; a caller may still override it.
  * @param {(context: {response: Response, body: string, url: string}) => Error|null} options.refusal
  *   Returns the error to throw when the site refused, or null when it answered.
  *   **Throwing rather than returning empty is the point**; see above.
  * @param {(url: string, init: object) => Promise<Response>} [options.fetchImpl]
- *   How the request is issued; passed straight through to the pacer so the
- *   delays apply either way. Defaults to a direct fetch. See `page-transport.js`
- *   for the routed one, and why it is needed.
+ *   How the request is issued, in place of `site`'s routing. This is the test
+ *   seam; production names a `site`.
  */
-export function createSiteClient({ pacer, refusal, fetchImpl = null }) {
-  const send = createPacer({ ...pacer, fetchImpl });
+export function createSiteClient({ site = null, pacer, refusal, fetchImpl = null }) {
+  // Neither means a direct, cookie-less fetch — which works for every public
+  // route and quietly fails only the session-gated ones. Refusing here is what
+  // keeps that from being something you discover from a user report.
+  if (!site && !fetchImpl) {
+    throw new Error("createSiteClient needs a `site` to route through, or a `fetchImpl` to stand in for one.");
+  }
+
+  const send = createPacer({
+    credentials: "include",
+    ...pacer,
+    fetchImpl: fetchImpl ?? createPageFetch({ matchPatterns: site.hostPermissions }),
+  });
 
   async function read(url, init) {
     const response = await send(url, init);
@@ -62,6 +88,21 @@ export function createSiteClient({ pacer, refusal, fetchImpl = null }) {
     /** @returns {Promise<string>} the response body. */
     async get(url, init = {}) {
       return (await read(url, init)).body;
+    },
+
+    /**
+     * @returns {Promise<Document>} the body, parsed.
+     *
+     * The third return type, beside `get` and `getJson`, and between them they
+     * cover exactly what the consumers want: a `Document` for everything in a
+     * platform's `dom-parsers/`, a raw string for the two `page-globals.js`
+     * that read embedded JavaScript rather than markup, an object for JSON.
+     * Having it here is what keeps `DOMParser` out of platform code, where it
+     * was being spelled out beside each fetch.
+     */
+    async getDocument(url, init = {}) {
+      const { body } = await read(url, init);
+      return new DOMParser().parseFromString(body, "text/html");
     },
 
     /** @returns {Promise<any>} the parsed body. */

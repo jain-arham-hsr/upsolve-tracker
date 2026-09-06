@@ -20,6 +20,16 @@ const { readSolveStats: readOfficialStats } = await import(
   "../core/platforms/codeforces-official/solve-stats.js"
 );
 
+/**
+ * These cases stub the page the way Codeforces serves it — as HTML — while
+ * production's `getDocument` hands back a parsed `Document`. This bridges the
+ * two so each stub below stays a readable page rather than a constructed DOM.
+ * The real `getDocument`, parse included, is covered by
+ * `tests/codeforces-http.test.js`.
+ */
+CodeforcesHttp.getDocument = async (...args) =>
+  new DOMParser().parseFromString(await CodeforcesHttp.get(...args), "text/html");
+
 const PROBLEMS = [
   ["A", "Everything Everywhere All But One"],
   ["B", "JOE is on TV!"],

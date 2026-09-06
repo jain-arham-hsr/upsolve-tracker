@@ -16,7 +16,7 @@
  * submissions. It is a server-rendered Java application, so HTML is not a
  * fallback here; it is the only interface.
  */
-import { getPage, getJson } from "./http.js";
+import { getDocument, getJson } from "./http.js";
 import { findContestName, findContestTimes, findTasks } from "./dom-parsers/tasks.js";
 import { parseAcceptedTaskIds, parsePageCount } from "./dom-parsers/submissions.js";
 
@@ -24,8 +24,6 @@ const ORIGIN = "https://atcoder.jp";
 
 /** Guards a runaway loop if pagination is ever misread. */
 const MAX_SUBMISSION_PAGES = 20;
-
-const parse = (html) => new DOMParser().parseFromString(html, "text/html");
 
 /**
  * A contest's name, schedule and problem list — from one public page.
@@ -41,8 +39,7 @@ const parse = (html) => new DOMParser().parseFromString(html, "text/html");
  *   means "not published yet" or something worse.
  */
 export async function fetchContestTasks(contestId) {
-  const html = await getPage(`${ORIGIN}/contests/${encodeURIComponent(contestId)}/tasks`);
-  const doc = parse(html);
+  const doc = await getDocument(`${ORIGIN}/contests/${encodeURIComponent(contestId)}/tasks`);
 
   const problems = findTasks(doc);
   if (problems === null) return null;
@@ -73,7 +70,7 @@ export async function fetchAcceptedTaskIds(contestId, handle) {
     `${ORIGIN}/contests/${encodeURIComponent(contestId)}/submissions` +
     `?f.User=${encodeURIComponent(handle)}&f.Status=AC`;
 
-  const first = parse(await getPage(base));
+  const first = await getDocument(base);
   const accepted = parseAcceptedTaskIds(first);
 
   // A missing table is a layout change, not an empty history. Refuse rather
@@ -87,7 +84,7 @@ export async function fetchAcceptedTaskIds(contestId, handle) {
 
   const pages = Math.min(parsePageCount(first), MAX_SUBMISSION_PAGES);
   for (let page = 2; page <= pages; page++) {
-    const next = parseAcceptedTaskIds(parse(await getPage(`${base}&page=${page}`)));
+    const next = parseAcceptedTaskIds(await getDocument(`${base}&page=${page}`));
     if (next === null) break;
     for (const id of next) accepted.add(id);
   }

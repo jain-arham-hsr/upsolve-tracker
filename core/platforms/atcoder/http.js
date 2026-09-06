@@ -14,7 +14,6 @@
  * actually landed rather than what the status says.
  */
 import { createSiteClient } from "../../services/site-client.js";
-import { createPageFetch } from "../../services/page-transport.js";
 import { atcoder } from "./descriptor.js";
 
 const MIN_GAP_MS = 1500;
@@ -36,16 +35,8 @@ const client = createSiteClient({
   // Both the submissions list and standings/json are login-gated, and a
   // cross-site request carries no cookies — so without a tab open on atcoder.jp
   // those two answer with a sign-in form, and the refusal hook says so.
-  fetchImpl: createPageFetch({ matchPatterns: atcoder.hostPermissions }),
-  pacer: {
-    gapMs: MIN_GAP_MS,
-    // Needed for the submissions and standings routes, which are login-gated.
-    // Note these do not survive a cross-site request from the extension's own
-    // origin — cookies without an explicit SameSite are withheld — so those two
-    // routes only work when the request is issued from inside a page on the
-    // site. See services/site-client.js.
-    credentials: "include",
-  },
+  site: atcoder,
+  pacer: { gapMs: MIN_GAP_MS },
 
   refusal({ response, url }) {
     if (new URL(response.url).pathname === "/login") return new NotSignedInError(url);
@@ -62,6 +53,7 @@ const client = createSiteClient({
 });
 
 export const getPage = (url) => client.get(url);
+export const getDocument = (url) => client.getDocument(url);
 export const getJson = (url) => client.getJson(url);
 
 /** Test seam. Production always uses MIN_GAP_MS. */

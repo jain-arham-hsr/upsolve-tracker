@@ -434,7 +434,11 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   // be `./standings-dom.js`, which read as a standings fetch and is half the
   // reason that file was renamed; keep measuring the URLs regardless, since the
   // next stale name will not announce itself either.
-  const fetched = [...stripComments(scraping).matchAll(/CodeforcesHttp\.get\(([^)]*)\)/g)]
+  // Any method on the client, not `get` specifically. Pinning the method name
+  // is how this goes vacuous without failing: it was `.get` until the client
+  // started answering with a parsed Document, at which point a name-specific
+  // regex matches nothing and "exactly one page fetch" reads as zero.
+  const fetched = [...stripComments(scraping).matchAll(/CodeforcesHttp\.\w+\(([^)]*)\)/g)]
     .map((m) => m[1].trim());
 
   assert.equal(fetched.length, 1, `expected one page fetch, got ${fetched.length}`);
@@ -515,4 +519,47 @@ test("nothing in a dom-parsers/ folder fetches", () => {
   // deliberately has none — it reads no HTML at all, which the test above pins
   // from the other direction.
   assert.equal(parsers.length, 6, `expected six parsers, found ${parsers.join(", ")}`);
+});
+
+test("a site client routes through its own platform's descriptor", () => {
+  // `createSiteClient({ site })` derives the tab-routing match patterns from the
+  // descriptor's `hostPermissions`, which replaced three platforms each spelling
+  // out `createPageFetch({ matchPatterns: X.hostPermissions })`.
+  //
+  // Naming the *wrong* descriptor is the failure worth pinning, because nothing
+  // else notices it. There is no matching tab, so every request falls back to a
+  // direct fetch and still succeeds — it just stops carrying the session, so
+  // only the session-gated routes break, and they break exactly the way they do
+  // when the user has no tab open, which is a supported state that reports
+  // itself politely. Confirmed by pointing AtCoder's client at Codeforces:
+  // all 420 tests stayed green.
+  //
+  // A missing `site` throws from `createSiteClient` itself, so that half needs
+  // no test here.
+  const offenders = [];
+  const clients = [];
+
+  for (const platform of listPlatforms()) {
+    for (const file of sourceFiles(path.join(PLATFORMS, platform.id), [".js"])) {
+      const code = stripComments(readFileSync(file, "utf8"));
+      if (!code.includes("createSiteClient(")) continue;
+
+      const relative = path.relative(ROOT, file);
+      clients.push(relative);
+
+      const routed = /\bsite:\s*(\w+)/.exec(code)?.[1] ?? null;
+      const own = /import\s*\{\s*(\w+)\s*\}\s*from\s*"\.\/descriptor\.js"/.exec(code)?.[1] ?? null;
+
+      if (!routed) offenders.push(`${relative} builds a site client naming no site`);
+      else if (routed !== own) {
+        offenders.push(`${relative} routes through \`${routed}\`, not its own \`${own}\``);
+      }
+    }
+  }
+
+  assert.deepEqual(offenders, [], "a client must speak to the site it belongs to");
+
+  // Or a rename could empty the loop and pass. Three: AtCoder, CodeChef, gyms —
+  // codeforces-official has no site client, being pure signed JSON API.
+  assert.equal(clients.length, 3, `expected three site clients, found ${clients.join(", ")}`);
 });

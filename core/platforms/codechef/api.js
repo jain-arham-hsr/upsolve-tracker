@@ -21,7 +21,6 @@
  * endpoints return is public.
  */
 import { createSiteClient } from "../../services/site-client.js";
-import { createPageFetch } from "../../services/page-transport.js";
 import { codechef } from "./descriptor.js";
 
 const BASE = "https://www.codechef.com";
@@ -49,8 +48,8 @@ const CONTEST_TTL_MS = 60 * 1000;
 const client = createSiteClient({
   // CodeChef answers for whoever holds the session cookie, so routing through a
   // tab is what makes the signed-in account visible at all.
-  fetchImpl: createPageFetch({ matchPatterns: codechef.hostPermissions }),
-  pacer: { gapMs: MIN_GAP_MS, credentials: "include" },
+  site: codechef,
+  pacer: { gapMs: MIN_GAP_MS },
 
   /**
    * CodeChef's refusal is a 403 — its `/api/` routes are CSRF-gated, and an

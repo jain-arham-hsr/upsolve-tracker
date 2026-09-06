@@ -91,6 +91,11 @@ export async function verifyIdentity(session) {
     throw error;
   }
 
+  // The one place a platform still parses for itself, deliberately. This page
+  // is read twice from one fetch: `extractSignedInUser` wants the raw string,
+  // since the marker is a JavaScript global rather than markup, and
+  // `extractRating` wants a Document. Reaching for `getDocument` here would
+  // cost a second request for a page already in hand.
   const doc = new DOMParser().parseFromString(html, "text/html");
 
   // extractRating returns null rather than a default when the page shape
