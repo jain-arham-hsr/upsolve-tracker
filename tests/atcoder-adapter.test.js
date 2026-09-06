@@ -183,3 +183,59 @@ test("an unrated contest is retried, but only one per refresh", async () => {
   const standingsCalls = requested.filter((u) => u.includes("/standings/json"));
   assert.equal(standingsCalls.length, 1);
 });
+
+test("the one retry per refresh rotates, so nothing starves behind it", async () => {
+  // The cap is safe only if the slot moves. This used to slice the filtered
+  // array in stored order, so the first unrated contest was retried on every
+  // refresh and the rest were never tried at all — and the case the cap exists
+  // for, a contest too old for AtCoder to hold a usable field, is precisely a
+  // contest that sits at the front forever.
+  routes = [["/standings/json", "LOGIN"]]; // never resolves anything
+
+  // Distinct stamps, because that is what real records have — contests are
+  // added minutes or days apart, and a refresh takes network time, so the stamp
+  // written after an attempt is always strictly later than the others. Giving
+  // all three the same millisecond would make the sort stable and hide the very
+  // thing this test is for.
+  const stuck = (id, checkedAt) => ({
+    id,
+    problems: [{ problemId: `${id}_a`, rating: null }],
+    publishedDataCheckedAt: checkedAt,
+  });
+  const contests = [stuck("abc001", 1), stuck("abc002", 2), stuck("abc003", 3)];
+
+  for (let refresh = 0; refresh < 3; refresh++) {
+    await syncMetadata(SESSION, contests);
+  }
+
+  const asked = requested
+    .filter((url) => url.includes("/standings/json"))
+    .map((url) => url.match(/contests\/(\w+)\//)[1]);
+
+  assert.equal(asked.length, 3, "one contest per refresh, three refreshes");
+  assert.deepEqual(
+    [...new Set(asked)].sort(),
+    ["abc001", "abc002", "abc003"],
+    `every contest should get a turn, but only ${[...new Set(asked)].join(", ")} did`,
+  );
+});
+
+test("a retry is stamped even when it resolves nothing", async () => {
+  // What makes the rotation move. `fill` swallows its own failures, so a
+  // contest that can never be rated looks exactly like one that simply has not
+  // been asked — unless the attempt itself is recorded.
+  routes = [["/standings/json", "LOGIN"]];
+
+  const contest = {
+    id: "abc432",
+    problems: [{ problemId: "abc432_a", rating: null }],
+    publishedDataCheckedAt: 0,
+  };
+  await syncMetadata(SESSION, [contest]);
+
+  assert.equal(contest.problems[0].rating, null, "the fixture must not resolve");
+  assert.ok(
+    contest.publishedDataCheckedAt > 0,
+    "an unstamped failure would monopolise the single retry slot forever",
+  );
+});

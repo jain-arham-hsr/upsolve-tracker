@@ -38,7 +38,10 @@ export async function fetchContest({ contestId, onProgress = () => {} }) {
     id: contestId,
     name: tasks.name,
     startTimeSeconds: tasks.startTimeSeconds,
-    // AtCoder publishes no tags at all, so there is nothing to come back for.
+    // Means what it does on the other platforms: when this contest was last
+    // asked about. AtCoder publishes no tags, so nothing comes back for those —
+    // but `syncMetadata` retries an unrated contest and orders its rotation by
+    // this field, so it is stamped here and again on every attempt.
     publishedDataCheckedAt: Date.now(),
     problems: tasks.problems.map((task) => ({
       index: task.index,
@@ -62,19 +65,44 @@ export async function fetchContest({ contestId, onProgress = () => {} }) {
  *
  * **Capped at one contest per refresh.** A standings payload is around a
  * megabyte, and a contest that can never be rated — one too old for AtCoder to
- * hold a usable field — would otherwise levy that cost forever. The same
- * reasoning caps the Codeforces tag sync at one request per sync.
+ * hold a usable field — would otherwise levy that cost forever.
+ *
+ * The Codeforces re-check deliberately has **no** such cap, which is worth not
+ * copying back. It stops asking about a contest six weeks after the round ran,
+ * and a cap on top of a cutoff starves: a contest that keeps losing its turn
+ * ages out before it ever converges. AtCoder has no cutoff — a contest stays
+ * eligible for as long as it has an unrated problem — so here the cap is what
+ * bounds the cost, and rotation is what keeps it fair.
  */
 export async function syncMetadata(session, contests, onProgress = () => {}) {
-  const unrated = contests.filter((contest) =>
-    contest.problems.some((problem) => problem.rating === null),
-  );
+  // **Longest-unasked first**, and that ordering is what makes the cap safe.
+  // This used to slice the filtered array in stored order, so `unrated[0]` was
+  // retried on every refresh and everything behind it was never tried at all —
+  // and the case the cap exists for, a contest too old for AtCoder to hold a
+  // usable field, is exactly a contest that sits at index 0 forever.
+  const unrated = contests
+    .filter((contest) => contest.problems.some((problem) => problem.rating === null))
+    .sort((a, b) => (a.publishedDataCheckedAt ?? 0) - (b.publishedDataCheckedAt ?? 0));
+
   if (unrated.length === 0) return 0;
 
   let resolved = 0;
   for (const contest of unrated.slice(0, MAX_RETRIES_PER_SYNC)) {
     const before = contest.problems.filter((p) => p.rating !== null).length;
     await fill({ contest, session, onProgress });
+
+    // Stamped on the **attempt**, not on success — `fill` swallows its own
+    // failures and returns, so there is no throw to distinguish them by anyway.
+    // Stamping only on success would leave a contest that can never be rated
+    // holding its original timestamp, first in the sort forever, which is the
+    // starvation this ordering fixes.
+    //
+    // `published-sync.js` does the opposite and stamps only on success. The rule
+    // follows from whether the platform rations its attempts: Codeforces has no
+    // cap, so an unstamped failure merely retries sooner and costs nothing;
+    // here it would monopolise the single slot.
+    contest.publishedDataCheckedAt = Date.now();
+
     resolved += contest.problems.filter((p) => p.rating !== null).length - before;
   }
 

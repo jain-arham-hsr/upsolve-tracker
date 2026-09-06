@@ -899,7 +899,7 @@ rating and tag the standings carry, so calling it again would re-fetch the same
 
 `contest.publishedDataCheckedAt` records *when* the platform was last asked for what it publishes, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever.
 
-CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `syncOfficialProblemData` therefore re-checks a contest that still has bare problems, but only once a week; contests where every problem is tagged are never re-requested. It runs at add time and from the refresh, and costs at most one request per sync regardless of how many contests are stale.
+CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `published-sync.js#syncPublishedProblemData` therefore re-checks a contest that still has bare problems, but only once a week, and only until the round is six weeks old; a contest where every problem is tagged and officially rated is never re-requested. It runs from the refresh only — the add has already applied whatever the standings carry — and costs one `contest.standings` (~6.5 MB) per stale contest, which the weekly gate and the cutoff bound between them.
 
 ### Start times
 
