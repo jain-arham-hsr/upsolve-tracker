@@ -3,11 +3,17 @@
  *
  * CodeChef is an SPA — its pages are a ~4 KB shell with no content — so the
  * only thing worth extracting is the bootstrap object the shell carries:
- * `window.codeChefUserData`, which holds the signed-in handle and rating.
+ * `window.codeChefUserData` on `/dashboard`, which holds the signed-in handle
+ * and rating.
  *
- * As in standings-dom.js, extractors return **null, never a plausible
- * default**. A guessed handle would look like a logged-in session and a
- * guessed rating would silently mis-sort every CodeChef problem in the queue.
+ * **Not a DOM parser, despite the folder**, and the same is true of AtCoder's
+ * file of this name: there is no DOM worth walking here, so this takes the raw
+ * HTML string and slices the global out of it. It is named for the globals
+ * rather than for `/dashboard` to keep the two platforms' copies matching.
+ *
+ * Extractors return **null, never a plausible default**. A guessed handle would
+ * look like a logged-in session and a guessed rating would silently mis-sort
+ * every CodeChef problem in the queue.
  */
 
 const MARKER = "window.codeChefUserData";

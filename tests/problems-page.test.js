@@ -10,7 +10,7 @@ import {
   extractProblemsFromList,
   findContestNameOnProblemsPage,
   hasFinished,
-} from "../core/platforms/codeforces-gyms/standings-dom.js";
+} from "../core/platforms/codeforces-gyms/dom-parsers/problems-page.js";
 
 const parse = (body) =>
   new DOMParser().parseFromString(`<html><body>${body}</body></html>`, "text/html");

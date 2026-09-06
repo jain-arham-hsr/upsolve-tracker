@@ -12,8 +12,8 @@
  * platform's flags rather than merging them, so the mistake is recoverable.
  */
 import { getSettings } from "../../settings/store.js";
-import { extractRating } from "./profile.js";
-import { extractSignedInUser } from "./page-data.js";
+import { extractRating } from "./dom-parsers/profile.js";
+import { extractSignedInUser } from "./dom-parsers/page-globals.js";
 import { getPage } from "./http.js";
 
 const HANDLE_KEY = "upsolve_tracker.atcoder_handle";

@@ -6,7 +6,7 @@
  * cell. `robots.txt` disallows `/users/*​/history/`, but not the profile page
  * itself, so this uses the permitted path.
  *
- * Same contract as standings-dom.js: **return null, never a plausible
+ * Same contract as everything else in this folder: **return null, never a plausible
  * default.** A substituted rating would not fail visibly; it would silently
  * mis-sort every AtCoder problem in the queue, because one rating shifts a
  * whole platform's block at once.

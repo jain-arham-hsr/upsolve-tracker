@@ -1,8 +1,8 @@
 /**
  * Every selector and parsing rule for AtCoder's submissions list.
  *
- * Quarantined for the same reason as `tasks-dom.js` and
- * `codeforces/standings-dom.js`: a layout change should be a one-file fix.
+ * Quarantined for the same reason as its neighbour `tasks.js`: a layout change
+ * should be a one-file fix.
  * Takes a `Document`, never a string, so nothing here parses.
  *
  * ## Why the verdict is re-read rather than trusted
@@ -23,7 +23,7 @@ const ACCEPTED = "AC";
  * Task ids with an accepted submission on this page.
  *
  * Identity is the task id from the row's link, never the displayed index — the
- * same rule `tasks-dom.js` follows, and what lets one solve clear a problem from
+ * same rule `tasks.js` follows, and what lets one solve clear a problem from
  * every contest that reruns it.
  *
  * @returns {Set<string>|null} `null` when no submissions table can be found —

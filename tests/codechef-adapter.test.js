@@ -7,7 +7,7 @@
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { extractSession, extractUserData } from "../core/platforms/codechef/page-data.js";
+import { extractSession, extractUserData } from "../core/platforms/codechef/dom-parsers/page-globals.js";
 import { resetApiState } from "../core/platforms/codechef/api.js";
 import { getAdapter } from "../core/platforms/adapters.js";
 

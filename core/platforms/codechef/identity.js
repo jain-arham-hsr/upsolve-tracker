@@ -9,7 +9,7 @@
  * another account permanently corrupts the queue *and* overwrites the backup.
  */
 import { getDashboardHtml } from "./api.js";
-import { extractSession } from "./page-data.js";
+import { extractSession } from "./dom-parsers/page-globals.js";
 import { getSettings } from "../../settings/store.js";
 
 const HANDLE_KEY = "upsolve_tracker.codechef_handle";

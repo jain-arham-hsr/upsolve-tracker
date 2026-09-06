@@ -1,9 +1,16 @@
 /**
  * The one place AtCoder's page globals are read.
  *
- * The AtCoder counterpart to `codechef/page-data.js`, and it exists for the
- * same reason: a site's embedded state is markup, and markup belongs in exactly
- * one file so a layout change is a one-file fix.
+ * The AtCoder counterpart to `codechef/dom-parsers/page-globals.js`, and it
+ * exists for the same reason: a site's embedded state is markup, and markup
+ * belongs in exactly one file so a layout change is a one-file fix.
+ *
+ * **This is the one file in the folder that is not a DOM parser.** It takes the
+ * raw HTML *string* and reads the page's JavaScript globals by regex, where its
+ * neighbours take a parsed `Document` and use CSS selectors. It sits here
+ * because it is still page-in, value-out with nothing fetched — and it is named
+ * for the globals rather than for a page because AtCoder emits this marker on
+ * every page it serves, so there is no one page to name it after.
  *
  * AtCoder renders `var userScreenName = "…"` into every page it serves — the
  * site's own scripts read it, alongside `contestScreenName` — which makes it a

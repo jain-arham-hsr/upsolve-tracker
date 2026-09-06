@@ -18,7 +18,7 @@ import {
   findContestName,
   findContestTimes,
   findTasks,
-} from "../core/platforms/atcoder/tasks-dom.js";
+} from "../core/platforms/atcoder/dom-parsers/tasks.js";
 
 const html = readFileSync(new URL("./fixtures/atcoder-tasks.html", import.meta.url), "utf8");
 const doc = () => parseHTML(html).document;

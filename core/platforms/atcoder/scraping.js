@@ -17,8 +17,8 @@
  * fallback here; it is the only interface.
  */
 import { getPage, getJson } from "./http.js";
-import { findContestName, findContestTimes, findTasks } from "./tasks-dom.js";
-import { parseAcceptedTaskIds, parsePageCount } from "./submissions-dom.js";
+import { findContestName, findContestTimes, findTasks } from "./dom-parsers/tasks.js";
+import { parseAcceptedTaskIds, parsePageCount } from "./dom-parsers/submissions.js";
 
 const ORIGIN = "https://atcoder.jp";
 
@@ -65,7 +65,8 @@ export async function fetchContestTasks(contestId) {
  * caught a task solved in a *different* contest from the one being tracked.
  *
  * Filtered server-side to accepted submissions, but the verdict is re-read from
- * each row anyway; see `submissions-dom.js` for why that is not redundant.
+ * each row anyway; see `dom-parsers/submissions.js` for why that is not
+ * redundant.
  */
 export async function fetchAcceptedTaskIds(contestId, handle) {
   const base =

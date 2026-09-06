@@ -355,6 +355,10 @@ test("a folder under core/platforms/ has a descriptor iff it is registered", () 
   // two: a folder with no descriptor is not a platform, and there is nowhere
   // else for one to sit. It also catches the opposite — a platform folder that
   // was written but never wired into registry.js, which would simply never run.
+  //
+  // Note this reads **one level only**, which is deliberate rather than an
+  // oversight: `dom-parsers/` is a folder under a platform and has no
+  // descriptor, so a recursive walk would fail it.
   const registered = new Set(listPlatforms().map((platform) => platform.id));
   const folders = readdirSync(PLATFORMS, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
@@ -386,7 +390,7 @@ test("the official Codeforces platform reaches no HTML at all", () => {
   // `tests/codeforces-adapter.test.js` asserts the same thing dynamically, by
   // failing if a request is issued while reaching the estimator. This one
   // catches the import before it can ever run.
-  const forbidden = ["http.js", "scraping.js", "standings-dom.js", "DOMParser"];
+  const forbidden = ["http.js", "scraping.js", "dom-parsers", "DOMParser"];
   const offenders = [];
 
   for (const file of sourceFiles(path.join(PLATFORMS, "codeforces-official"), [".js"])) {
@@ -426,8 +430,10 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
     path.join(PLATFORMS, "codeforces-gyms", "scraping.js"),
     "utf8",
   );
-  // Inspect the fetched URLs themselves, not the file: `./standings-dom.js` is
-  // an import path and would otherwise read as a standings fetch.
+  // Inspect the fetched URLs themselves, not the file. The import path used to
+  // be `./standings-dom.js`, which read as a standings fetch and is half the
+  // reason that file was renamed; keep measuring the URLs regardless, since the
+  // next stale name will not announce itself either.
   const fetched = [...stripComments(scraping).matchAll(/CodeforcesHttp\.get\(([^)]*)\)/g)]
     .map((m) => m[1].trim());
 
@@ -436,4 +442,77 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
     !fetched[0].includes("standings"),
     `a standings page is being fetched again — a visible gym is read from the API: ${fetched[0]}`,
   );
+});
+
+test("a platform has estimator.js iff its descriptor claims canEstimate", () => {
+  // These are two declarations of one fact, in two files, and nothing made them
+  // agree. `contest-manager.js` reads `canEstimate` in exactly one place to
+  // decide what a *gap* means: true, and a problem left unrated after the
+  // estimator ran is a bug it refuses loudly on; false, and the same gap is
+  // simply a problem the site has not rated, stored as `rating: null` and shown
+  // as `???`. So a platform claiming the capability with no estimator to run
+  // would refuse every add, and one estimating without the claim would quietly
+  // store `???` beside numbers it had already worked out.
+  //
+  // It holds on all four today, but only since AtCoder flipped — before that
+  // AtCoder shipped an estimator and declared `false`, which is exactly the
+  // half-migrated state this catches.
+  const offenders = [];
+
+  for (const platform of listPlatforms()) {
+    const hasEstimator = readdirSync(path.join(PLATFORMS, platform.id)).includes("estimator.js");
+    const claimed = platform.capabilities.canEstimate === true;
+    if (hasEstimator === claimed) continue;
+
+    offenders.push(
+      hasEstimator
+        ? `${platform.id} ships estimator.js but declares canEstimate: false`
+        : `${platform.id} declares canEstimate: true but has no estimator.js`,
+    );
+  }
+
+  assert.deepEqual(offenders, [], "the capability and the file are one fact");
+});
+
+test("nothing in a dom-parsers/ folder fetches", () => {
+  // What the folder is for. Its files take a page the platform already has —
+  // a `Document`, or the raw HTML string in the two `page-globals.js` — and
+  // return values; the fetching lives one level up in `scraping.js` and
+  // `http.js`. That separation is what lets every parser be exercised in Node
+  // against `linkedom` with no network stack anywhere, which is most of the
+  // coverage these platforms have.
+  //
+  // It is also the first thing a hurried change would break: reaching for the
+  // client from inside a parser is the shortest path to "just fetch page two
+  // here", and nothing else would notice, since the result is correct and only
+  // the testability is gone.
+  const clients = ["http.js", "api.js", "site-client.js", "scraping.js"];
+  const offenders = [];
+  const parsers = [];
+
+  for (const platform of listPlatforms()) {
+    const root = path.join(PLATFORMS, platform.id);
+    if (!readdirSync(root).includes("dom-parsers")) continue;
+
+    for (const file of sourceFiles(path.join(root, "dom-parsers"), [".js"])) {
+      const relative = path.relative(ROOT, file);
+      const code = stripComments(readFileSync(file, "utf8"));
+      parsers.push(relative);
+
+      for (const spec of importsOf(code)) {
+        if (clients.some((name) => spec.endsWith(name))) {
+          offenders.push(`${relative} imports ${spec}`);
+        }
+      }
+      if (/\bfetch\s*\(/.test(code)) offenders.push(`${relative} calls fetch()`);
+    }
+  }
+
+  assert.deepEqual(offenders, [], "a parser takes a page, it does not go and get one");
+
+  // Or the loop above proves nothing: a rename that emptied every folder would
+  // pass it silently. Six files across three platforms, and codeforces-official
+  // deliberately has none — it reads no HTML at all, which the test above pins
+  // from the other direction.
+  assert.equal(parsers.length, 6, `expected six parsers, found ${parsers.join(", ")}`);
 });

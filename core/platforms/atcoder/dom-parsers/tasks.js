@@ -1,9 +1,9 @@
 /**
  * Every selector and parsing rule for AtCoder's `/contests/<id>/tasks` page.
  *
- * The AtCoder counterpart to `codeforces/standings-dom.js`, and it exists for
- * the same reason: a layout change should be a one-file fix, and markup must not
- * be read from three places that can disagree.
+ * The AtCoder counterpart to `codeforces-gyms/dom-parsers/problems-page.js`,
+ * and it exists for the same reason: a layout change should be a one-file fix,
+ * and markup must not be read from three places that can disagree.
  *
  * ## Extractors return `null`, never a plausible default
  *

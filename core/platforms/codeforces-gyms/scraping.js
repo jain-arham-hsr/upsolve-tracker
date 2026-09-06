@@ -17,7 +17,7 @@ import {
   extractProblemsFromList,
   hasFinished,
   findContestNameOnProblemsPage,
-} from "./standings-dom.js";
+} from "./dom-parsers/problems-page.js";
 
 /**
  * Problem metadata from a contest's own problems page.

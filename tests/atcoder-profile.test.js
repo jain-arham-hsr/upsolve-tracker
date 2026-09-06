@@ -6,7 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DOMParser } from "linkedom";
-import { extractRating } from "../core/platforms/atcoder/profile.js";
+import { extractRating } from "../core/platforms/atcoder/dom-parsers/profile.js";
 
 const doc = (body) =>
   new DOMParser().parseFromString(`<html><body>${body}</body></html>`, "text/html");

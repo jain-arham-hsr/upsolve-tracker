@@ -1,10 +1,17 @@
 /**
- * Every assumption this extension makes about Codeforces' HTML lives here.
+ * Every assumption this extension makes about Codeforces' HTML lives here —
+ * and it is now exactly one page, `/gym/<id>`.
  *
- * Problem names and official solve counts aren't in the API, so they're read
- * off the standings page. That page is not a contract — when Codeforces
- * changes its markup, this is the file that needs updating, and ideally the
- * only one.
+ * That page is read for one kind of contest only: a gym whose standings the
+ * setter hid, which answers `FAILED` to `contest.standings` and renders no
+ * standings table. Everything else Codeforces serves comes from the JSON API.
+ *
+ * This file was called `standings-dom.js` long after the standings scrape was
+ * deleted, and nothing noticed, because nothing tied a parser's name to the
+ * page it reads. Naming it for the page is what makes the next such drift
+ * visible; keep that property when adding to it.
+ *
+ * Takes a `Document`, never a string, so nothing here parses or fetches.
  *
  * Extractors return null rather than a plausible default when they can't find
  * what they're looking for. A missing solve count that reads as zero produces
