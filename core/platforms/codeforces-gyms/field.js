@@ -1,25 +1,5 @@
 import { computeTeamRating } from "../../rating-models/team-rating.js";
-
-/**
- * A rating distribution the estimator can work from, as one or more strata.
- *
- * Each stratum's `scale` is how many real competitors one of its members
- * stands for: 1 where the whole group was read, higher where it was sampled.
- * Expected solve counts are weighted by it, so a partially-read field answers
- * as if it had been read whole.
- *
- * @typedef {{ strata: Array<{ratings: number[], scale: number}> }} RatingDistribution
- */
-
-const FULL_FIELD = (ratings) => ({ strata: [{ ratings, scale: 1 }] });
-
-/** Total competitors represented, sampled or not. */
-export function distributionSize(distribution) {
-  return (distribution?.strata ?? []).reduce(
-    (sum, { ratings }) => sum + ratings.length,
-    0,
-  );
-}
+import { fullField } from "../../rating-models/rating-distribution.js";
 
 export async function getGymRatingDist(cfService, contestId, standings = null) {
   // Gym standings arrive whole from the API, so there's nothing to sample.
@@ -30,7 +10,7 @@ export async function getGymRatingDist(cfService, contestId, standings = null) {
   // per gym add, for bytes already in memory. Optional rather than required:
   // the hidden-standings path has no such response to pass, and neither does a
   // caller that only wants the field.
-  return FULL_FIELD(await getRatingsFromStandings(cfService, contestId, standings));
+  return fullField(await getRatingsFromStandings(cfService, contestId, standings));
 }
 
 /**
@@ -49,16 +29,16 @@ export async function getGymRatingDist(cfService, contestId, standings = null) {
  * @param {string[][]} partyHandles - member handles, one array per party
  */
 export async function getGymRatingDistFromParties(cfService, partyHandles) {
-  if (!partyHandles?.length) return FULL_FIELD([]);
+  if (!partyHandles?.length) return fullField([]);
 
   try {
-    return FULL_FIELD(await ratePartyList(cfService, partyHandles));
+    return fullField(await ratePartyList(cfService, partyHandles));
   } catch (error) {
     console.warn(
       `[Rating Dist] Submission-derived field failed:`,
       error.message,
     );
-    return FULL_FIELD([]);
+    return fullField([]);
   }
 }
 

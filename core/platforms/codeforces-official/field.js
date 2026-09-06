@@ -1,26 +1,6 @@
 import { computeTeamRating } from "../../rating-models/team-rating.js";
+import { fullField } from "../../rating-models/rating-distribution.js";
 import { stratifyRows } from "./sampling.js";
-
-/**
- * A rating distribution the estimator can work from, as one or more strata.
- *
- * Each stratum's `scale` is how many real competitors one of its members
- * stands for: 1 where the whole group was read, higher where it was sampled.
- * Expected solve counts are weighted by it, so a partially-read field answers
- * as if it had been read whole.
- *
- * @typedef {{ strata: Array<{ratings: number[], scale: number}> }} RatingDistribution
- */
-
-const FULL_FIELD = (ratings) => ({ strata: [{ ratings, scale: 1 }] });
-
-/** Total competitors represented, sampled or not. */
-export function distributionSize(distribution) {
-  return (distribution?.strata ?? []).reduce(
-    (sum, { ratings }) => sum + ratings.length,
-    0,
-  );
-}
 
 /**
  * The official field: pre-contest ratings for everyone who entered.
@@ -50,7 +30,7 @@ export async function getOfficialRatingDist(
   try {
     const ratingChanges = await cfService.getContestRatingChanges(contestId);
     if (ratingChanges?.length > 0) {
-      return FULL_FIELD(ratingChanges.map((user) => user.oldRating));
+      return fullField(ratingChanges.map((user) => user.oldRating));
     }
   } catch (error) {
     console.warn(
@@ -70,7 +50,7 @@ async function sampleOfficialStandings(cfService, standings, onProgress) {
     const { groups, total } = stratifyRows(standings?.rows);
     if (groups.length === 0) {
       console.warn("[Rating Dist] Standings carried no rows to sample.");
-      return FULL_FIELD([]);
+      return fullField([]);
     }
 
     onProgress("Looking up competitor ratings…");
@@ -95,10 +75,10 @@ async function sampleOfficialStandings(cfService, standings, onProgress) {
         `across ${strata.length} stratum/strata.`,
     );
 
-    return strata.length > 0 ? { strata } : FULL_FIELD([]);
+    return strata.length > 0 ? { strata } : fullField([]);
   } catch (error) {
     console.warn(`[Rating Dist] Standings sampling failed:`, error.message);
-    return FULL_FIELD([]);
+    return fullField([]);
   }
 }
 

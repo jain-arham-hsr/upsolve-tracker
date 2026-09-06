@@ -21,6 +21,7 @@
  * endpoints return is public.
  */
 import { createSiteClient } from "../../services/site-client.js";
+import { withTtlCache } from "../../services/ttl-cache.js";
 import { codechef } from "./descriptor.js";
 
 const BASE = "https://www.codechef.com";
@@ -72,22 +73,16 @@ const client = createSiteClient({
     return new Error(`CodeChef returned ${response.status} for ${new URL(url).pathname}.`);
   },
 });
-const contestCache = new Map();
-
 async function getJson(path) {
   return client.getJson(`${BASE}${path}`, {
     headers: { Accept: "application/json" },
   });
 }
 
-export async function getContest(code) {
-  const cached = contestCache.get(code);
-  if (cached && Date.now() - cached.at < CONTEST_TTL_MS) return cached.body;
-
-  const body = await getJson(`/api/contests/${encodeURIComponent(code)}`);
-  contestCache.set(code, { body, at: Date.now() });
-  return body;
-}
+export const getContest = withTtlCache(
+  (code) => getJson(`/api/contests/${encodeURIComponent(code)}`),
+  { ttlMs: CONTEST_TTL_MS },
+);
 
 /**
  * Difficulty and tags live only here — absent from the contest payload and
@@ -162,7 +157,7 @@ export async function getDashboardHtml() {
 
 /** Test seam. */
 export function resetApiState() {
-  contestCache.clear();
+  getContest.clear();
   client.reset(0);
 }
 

@@ -23,11 +23,8 @@
  * where the field comes from, and what a remaining gap means.
  */
 import { fitDifficulty } from "../../rating-models/rasch.js";
-import {
-  getGymRatingDist,
-  getGymRatingDistFromParties,
-  distributionSize,
-} from "./field.js";
+import { getGymRatingDist, getGymRatingDistFromParties } from "./field.js";
+import { distributionSize } from "../../rating-models/rating-distribution.js";
 import { unavailable } from "../../contest-status.js";
 
 /**

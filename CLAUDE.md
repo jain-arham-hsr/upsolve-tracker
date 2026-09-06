@@ -202,7 +202,7 @@ The guarantee rests on three independent layers, each confirmed by removing it a
 
 1. `adapter.verifyIdentity` runs before any user-specific read, on the refresh (`progress-manager.js`) *and* the add (`contest-manager.js#establishIdentity`).
 2. `classifyIdentity` throws on a blank username, so an identity that was swallowed rather than verified still cannot get through.
-3. CodeChef's `fetchSolvedKeys` verifies again on its own — the layer that survives when the first two are both defeated, and the reason a caller cannot accidentally read another account's solves.
+3. CodeChef's `fetchSolvedKeys` verifies again on its own — the layer that survives when the first two are both defeated, and the reason a caller cannot accidentally read another account's solves. **It is the only platform that checks twice, so it reads like an oversight**; the comment beside it now says it is not. It makes reading the wrong account's solves impossible from *that function* rather than merely unlikely from its callers, and it costs nothing extra, reading the session object the add already built.
 
 `services/platform-identity.js` answers the one remaining question: **has that handle changed since the solved flags were derived?** If so they belong to the previous account and are cleared, for that platform only, so the next sync re-derives them. That restores what this file already claims — solved state derived fresh each sync rather than cached — which the stickiness had quietly made false. Contests already deleted for being fully solved cannot come back.
 
@@ -231,6 +231,18 @@ or it is too coarse*: the stored contest shape, the per-problem defaults, the
 estimator hand-off, and mapping accepted problems through `descriptor.solvedKey`.
 Before it, all three were triplicated — each platform's adapter wrote
 `platform: "codeforces"` as a literal beside a descriptor that knew its own id.
+
+**One more thing moved into the trunk since: the `isSourceUnreachable`
+translation.** Three platforms each turned that flag into `sourceUnreachable`
+themselves, and two of the three were the same six lines. The platform's job is
+to *flag* the error at the point that knows — a Cloudflare challenge in
+`codeforces-gyms/http.js`, a failed problem fetch in `codechef/api.js` — not to
+remember which of the five statuses a flag maps to. `pipeline.js` reads it, and
+anything unflagged still escapes, which is what keeps an unrecognised exception
+a bug rather than a case. A platform may still return the status itself where it
+has something better to say: CodeChef does, naming the contest it gave up on and
+abandoning the remaining per-problem requests rather than spending them on an
+add that is going to be discarded.
 
 **Every gate stays inside `problems.fetchContest`**, returned as one of the five
 `contest-status.js` values. Codeforces has five decision points, AtCoder two, and
@@ -316,6 +328,7 @@ Two invariants there:
 
 - **`solved` is only ever set true, never cleared.** That stickiness is load-bearing. CodeChef answers a logged-out request with an *empty* solved list rather than an error, and clearing on that would resurrect every finished problem.
 - **`solvedKey` is namespaced by platform** (`codeforces:2193-A`). One `Set` holds solved history from every site, so a bare `contestId-index` would let two platforms sharing a contest number mark each other's problems solved.
+- **An accepted pair's `contest` is always an object, never a bare `null`.** `fetchAccepted` returns `{contest, problem}` and the trunk hands both to `solvedKey`. The three platforms once had three encodings for "this problem needs no contest" — `{id: contestId}`, `{id: null}`, and `null` — which was harmless only because neither AtCoder's `solvedKey` nor CodeChef's reads `contest`. The day one starts to, it would work on AtCoder and throw on CodeChef from a line naming neither. `record-contract.test.js` pins the one shape.
 
 Note every relative import must carry its `.js` extension. Vite resolves extensionless paths, Node does not — three of them had been sitting in what are now `solve-stats.js`, `rating-distribution.js` and `options.js`, invisible until a test imported that part of the graph.
 
@@ -570,12 +583,38 @@ no `scraping.js` and no `dom-parsers/` at all**, which is asserted structurally 
 
 **What they share is an account, not code.** One handle, one key pair, one
 settings section — which is what `core/settings/schema.js` exists for. There is
-deliberately **no shared folder between them**: `identity.js`, `submissions.js`
-and the signing half of `api.js` are duplicated, ~180 lines each way.
-`module-boundaries.test.js` asserts they never import each other, and that a
-folder under `core/platforms/` has a `descriptor.js` **iff** it is registered —
-which is what stops a `codeforces-common/` reappearing, since a folder without a
-descriptor is not a platform and there is nowhere else for one to sit.
+deliberately **no shared folder between them**. `module-boundaries.test.js`
+asserts they never import each other, and that a folder under `core/platforms/`
+has a `descriptor.js` **iff** it is registered — which is what stops a
+`codeforces-common/` reappearing, since a folder without a descriptor is not a
+platform and there is nowhere else for one to sit.
+
+**The duplication is larger than this file used to claim, and now measured.** It
+said "`identity.js`, `submissions.js` and the signing half of `api.js`, ~180
+lines each way" — right about those three (96 + 33 + 55 = 184) and wrong about
+the total, which is **744 identical lines, ~245 of them substantive code**:
+
+| duplicated verbatim | lines |
+|---|---|
+| `identity.js` — whole file, same md5 | 96 |
+| `descriptor.js` — `ratingBands`, `ratingBandClass`, `hostPermissions`, icon | 60 |
+| `api.js` — `_callMethod` + `_sha512` | 55 |
+| `estimator.js` — `estimateProblemRating` | 49 |
+| `field.js` — `ratePartyList` | 42 |
+| `solve-stats.js` — `populateSolveCountsFromApi` + tail of the applier | 39 |
+| `submissions.js` — whole file, same md5 | 33 |
+
+Almost none of it can move: it reads the Codeforces API shape or signs its
+requests, so `core/` cannot hold it either. **So the copies are pinned instead
+of removed.** `module-boundaries.test.js` asserts `identity.js` and
+`submissions.js` stay *byte*-identical across the two folders, and that
+`_callMethod` and `_sha512` match — scoped to those two methods, since the
+endpoint halves genuinely differ. A file that ever *ought* to diverge is a sign
+it has taken on something belonging to one platform alone.
+
+Three comments used to say `tests/codeforces-signing.test.js` already did this.
+**No such file has ever existed**, and the claim outlived several readings —
+which is the argument for the pin, not against it.
 
 Three consequences worth knowing before changing anything here:
 
@@ -672,6 +711,23 @@ Four things about it are load-bearing:
 `codeforces-official/api.js` deliberately stays on `createPacer` directly: it is the
 signed JSON API, which is not challenged, needs no session, and expresses
 failure in the payload (`status: "FAILED"`) rather than the transport.
+
+**`services/ttl-cache.js` is the only short-lived cache.** Two platforms had
+grown the same eleven lines independently — the same `{body, at}` entry, the same
+`Date.now() - at < ttl` predicate, the same `60 * 1000`, the same
+clear-for-tests seam. CodeChef keyed its by contest code, Codeforces held one
+slot, which is that with a single key. Both are deliberately *short*: one add
+reads a payload two or three times and should not pay twice, while a stale
+answer outliving the add is worse than a second request — Codeforces' is a
+publication check, where holding "not published yet" strands a contest for the
+length of the window. It does **not** dedupe in-flight requests, which is what
+the copies it replaced also did not do. Arguments after the key are forwarded to
+the loader and take no part in the keying; that is how one problemset is cached
+across every `CodeforcesService` while the instance that asked still signs the
+call. Neither copy had any test at all — a cache that never hits is invisible in
+the result and visible only in the request count — so `tests/ttl-cache.test.js`
+drives a stubbed clock and was confirmed by breaking it both ways, never hitting
+and never expiring.
 
 **`services/request-pacer.js` is the only pacing mechanism**, and every caller configures it. An earlier version of this file claimed each platform already paced through it; that was false for Codeforces, which had two paths and used neither. The scrape carried its own `HttpClient` with a hard-coded jitter range and cooldown, and **the signed API was paced by nothing at all** — the tell being three hand-rolled `await delay(2000)` calls standing in for it at the call sites that had noticed.
 
@@ -775,7 +831,16 @@ exactly one importer while naming no platform, so `module-boundaries.test.js` co
 not see it: the same shape as the old `start-time-service.js`, except that one at
 least had a genuinely shared export.
 
-`team-rating.js` is the third thing here, and the least model-like: it collapses an ICPC team into the single rating a lone competitor would need to be as likely to fail as the team is — `∏ 1/(1 + 10^((rᵢ − R)/400)) = 0.5`, by binary search. It is pure maths over ratings, which is why it sits here, but it also *has* to be in one place: Codeforces' two platforms build their fields with separate code — a gym's from `contest.standings` or from who submitted, an official round's from sampled standings rows — and team collapsing is the one step they genuinely share. Two copies of that search are two things free to disagree about what a team is worth. Note it lands **above** the strongest member, which is the point; `mean` and `max` were both tried and measured worse.
+`rating-distribution.js` holds the *shape* a fitted field arrives in — the
+`RatingDistribution` typedef, `fullField`, `distributionSize` — for the same
+reason `team-rating.js` is here: Codeforces' two platforms build their fields
+with separate code in folders that deliberately do not import each other, so a
+definition either one owned is a definition the other must copy. It was copied,
+byte for byte, until this file existed. AtCoder does not import it: its
+estimator fits abilities directly and has no strata, because a field that is
+always read whole has nothing to scale up from.
+
+`team-rating.js` is the least model-like thing here: it collapses an ICPC team into the single rating a lone competitor would need to be as likely to fail as the team is — `∏ 1/(1 + 10^((rᵢ − R)/400)) = 0.5`, by binary search. It is pure maths over ratings, which is why it sits here, but it also *has* to be in one place: Codeforces' two platforms build their fields with separate code — a gym's from `contest.standings` or from who submitted, an official round's from sampled standings rows — and team collapsing is the one step they genuinely share. Two copies of that search are two things free to disagree about what a team is worth. Note it lands **above** the strongest member, which is the point; `mean` and `max` were both tried and measured worse.
 
 `rasch-upper-asymptote.js` is the second model, `P = (1 − r) · σ(a(θ − b))`, used
 only for AGC's first problem where non-attempts are otherwise read as failures.

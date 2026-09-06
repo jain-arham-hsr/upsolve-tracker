@@ -36,7 +36,7 @@
  * keep the shape honest. `estimator` really is optional: CodeChef publishes
  * `difficulty_rating` and passes none.
  */
-import { ready } from "../contest-status.js";
+import { ready, sourceUnreachable } from "../contest-status.js";
 
 /**
  * Fill the fields every stored problem carries, without inventing any.
@@ -112,12 +112,20 @@ export function buildAdapter(descriptor, { problems, submissions, identity, esti
     describeIdentity: identity.describeIdentity,
 
     async fetchContestRecord({ contestId, subtype, session, onProgress = () => {} }) {
-      const acquired = await problems.fetchContest({
-        contestId,
-        subtype,
-        session,
-        onProgress,
-      });
+      // A failure to *ask* — a network fault, a Cloudflare 403 — is not an
+      // answer, so it becomes the status that waits and retries rather than
+      // failing the add and making the user notice and click again.
+      // `unavailable` would be wrong: these clear on their own.
+      //
+      // Here rather than per-platform because the translation is identical
+      // wherever it appears, and it is one line that is easy to simply forget
+      // — the platform's job is to *flag* the error (`isSourceUnreachable`, the
+      // flag-not-message idiom), not to know what status a flag maps to. A
+      // platform may still return the status itself where it has something
+      // better to say; CodeChef does, naming the contest it gave up on.
+      const acquired = await withSourceUnreachable(() =>
+        problems.fetchContest({ contestId, subtype, session, onProgress }),
+      );
 
       // A gate fired inside the platform — it already speaks the shared
       // vocabulary, so pass it straight through rather than re-classifying.
@@ -155,4 +163,22 @@ export function buildAdapter(descriptor, { problems, submissions, identity, esti
 
     syncMetadata: problems.syncMetadata,
   };
+}
+
+/**
+ * Turns a flagged "we could not ask" into the status that waits for it.
+ *
+ * The flag is set at the point that knows — `codeforces-gyms/http.js` for a
+ * Cloudflare challenge, `codechef/api.js` for a failed problem fetch — and read
+ * here, so no platform has to remember which of the five statuses a transport
+ * failure maps to. Anything unflagged still escapes, which is what keeps an
+ * unrecognised exception a bug rather than a case.
+ */
+async function withSourceUnreachable(run) {
+  try {
+    return await run();
+  } catch (error) {
+    if (error?.isSourceUnreachable) return sourceUnreachable(error.message);
+    throw error;
+  }
 }

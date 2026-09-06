@@ -20,6 +20,7 @@
  * gap would serve one request per second to codeforces.com.
  */
 import { createPacer } from "../../services/request-pacer.js";
+import { withTtlCache } from "../../services/ttl-cache.js";
 
 /**
  * problemset.problems is ~2MB and an add now reads it twice: once to ask
@@ -51,7 +52,13 @@ const PROBLEMSET_TTL_MS = 60 * 1000;
 const paced = createPacer({ gapMs: 2000, budget: "codeforces-api" });
 
 export class CodeforcesService {
-  static #problemsetCache = null;
+  // One slot, not one per instance: the problemset is the same ~2 MB response
+  // whoever asks, and Settings builds a second service to check typed
+  // credentials.
+  static #problemset = withTtlCache(
+    (_key, service) => service._callMethod("problemset.problems", {}),
+    { ttlMs: PROBLEMSET_TTL_MS },
+  );
 
   /**
    * @param {string} apiKey - Your CF API Key
@@ -153,17 +160,12 @@ export class CodeforcesService {
    * a single Div. 3).
    */
   async getProblemsetProblems() {
-    const cached = CodeforcesService.#problemsetCache;
-    if (cached && Date.now() - cached.at < PROBLEMSET_TTL_MS) return cached.body;
-
-    const body = await this._callMethod("problemset.problems", {});
-    CodeforcesService.#problemsetCache = { body, at: Date.now() };
-    return body;
+    return CodeforcesService.#problemset("", this);
   }
 
   /** Test seam, and the way a retry gets a genuinely fresh read. */
   static clearProblemsetCache() {
-    CodeforcesService.#problemsetCache = null;
+    CodeforcesService.#problemset.clear();
   }
 
   /**

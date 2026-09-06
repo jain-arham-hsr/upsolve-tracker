@@ -23,7 +23,8 @@
  * where the field comes from, and what a remaining gap means.
  */
 import { fitDifficulty } from "../../rating-models/rasch.js";
-import { getOfficialRatingDist, distributionSize } from "./field.js";
+import { getOfficialRatingDist } from "./field.js";
+import { distributionSize } from "../../rating-models/rating-distribution.js";
 
 /**
  * Binary-search the rating whose Elo-expected solve count matches the actual

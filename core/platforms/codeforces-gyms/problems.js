@@ -18,27 +18,14 @@
  */
 import { readSolveStats } from "./solve-stats.js";
 import { syncStartTimes } from "./start-times.js";
-import { notEndedYet, sourceUnreachable } from "../../contest-status.js";
+import { notEndedYet } from "../../contest-status.js";
 
 /**
  * @returns a contest-status when a gate fires, otherwise the raw record plus a
  *   `context` the estimator needs — which is also how the standings response
  *   reaches it without being fetched twice.
  */
-export async function fetchContest(options) {
-  try {
-    return await acquire(options);
-  } catch (error) {
-    // Cloudflare challenged us. That is a failure to *ask*, not an answer — so
-    // it waits and retries on the next refresh rather than failing the add and
-    // making the user notice and click again. `unavailable` would be wrong:
-    // the challenge clears on its own.
-    if (error?.isSourceUnreachable) return sourceUnreachable(error.message);
-    throw error;
-  }
-}
-
-async function acquire({ contestId, session, onProgress = () => {} }) {
+export async function fetchContest({ contestId, session, onProgress = () => {} }) {
   const { service } = session;
 
   onProgress("Reading the standings…");

@@ -166,3 +166,34 @@ test("some test actually reaches the code that applies published ratings", () =>
       `ratings — this is exactly how the missing \`type\` bug shipped green`,
   );
 });
+
+test("every platform expresses an accepted submission the same way", () => {
+  // The same class as the `type` bug above, caught before it costs anything.
+  //
+  // `fetchAccepted` returns `{contest, problem}` pairs and `pipeline.js` hands
+  // both to `descriptor.solvedKey`. The three platforms had three encodings for
+  // "this problem needs no contest": `{id: contestId}`, `{id: null}`, and a bare
+  // `null`. That was harmless only by accident — neither AtCoder's `solvedKey`
+  // nor CodeChef's reads `contest`, so nothing dereferenced the null.
+  //
+  // The day a descriptor starts reading `contest.id` — to disambiguate a rerun,
+  // say — it works on AtCoder and throws on CodeChef, from a line that mentions
+  // neither. So: always an object, never a bare null.
+  const offenders = [];
+
+  for (const id of readdirSync(PLATFORMS, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)) {
+    const file = path.join(PLATFORMS, id, "submissions.js");
+    const code = read(file);
+
+    if (/contest:\s*null\b/.test(code)) {
+      offenders.push(`${id}/submissions.js returns a bare null contest`);
+    }
+    if (!/contest:\s*\{/.test(code)) {
+      offenders.push(`${id}/submissions.js never builds a contest object`);
+    }
+  }
+
+  assert.deepEqual(offenders, [], "an accepted pair's contest is always an object");
+});
