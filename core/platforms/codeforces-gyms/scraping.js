@@ -1,92 +1,31 @@
+/**
+ * The last HTML the extension reads on Codeforces, and only for one case.
+ *
+ * A gym whose standings the setter hid answers `FAILED` to `contest.standings`,
+ * so the roster has to come from somewhere — and the `/gym/<id>` problems page
+ * is the one page those contests still render. Every other Codeforces path,
+ * official and gym alike, is now pure JSON API.
+ *
+ * `scrapeContestProblems` used to live here and read a visible gym's standings
+ * page for its roster, name and solve counts. It was redundant: the very next
+ * call fetched `contest.standings`, which carries all three, and
+ * `populateSolveCountsFromApi` overwrote the counts the page had just been
+ * parsed for.
+ */
 import { CodeforcesHttp } from "./http.js";
 import {
-  extractProblems,
   extractProblemsFromList,
-  extractSolveCounts,
   hasFinished,
-  findContestName,
   findContestNameOnProblemsPage,
-  findStandingsTable,
 } from "./standings-dom.js";
-
-/**
- * Fetches and parses the standings page for a contest.
- * @param {string} contestId
- * @returns {{ contestName: string, standingsTable: Element, doc: Document }}
- */
-async function fetchStandingsPage(contestId) {
-  // `showUnofficial=true` always: a gym's field includes out-of-competition
-  // entrants, and the official platform — which passed false here — no longer
-  // reads HTML at all.
-  const rawHtml = await CodeforcesHttp.get(
-    `https://codeforces.com/gym/${contestId}/standings?showUnofficial=true`,
-  );
-  const doc = new DOMParser().parseFromString(rawHtml, "text/html");
-  return doc;
-}
-
-/**
- * Extracts problem metadata and solve counts from a contest standings page.
- *
- * @param {string} contestId
- * @returns {{ contestName: string, problems: object[], solveCountsRead: boolean }}
- *   solveCountsRead is false when the totals row couldn't be parsed. The
- *   counts are left at 0, which is only safe if nothing goes on to estimate
- *   ratings from them — so the caller has to check.
- */
-export async function scrapeContestProblems(contestId) {
-  const doc = await fetchStandingsPage(contestId);
-
-  const standingsTable = findStandingsTable(doc);
-  if (!standingsTable) {
-    const error = new Error(
-      `Couldn't read the standings for gym ${contestId} — the page didn't contain a standings table. ` +
-        `Codeforces may have changed its layout, or the contest may be private.`,
-    );
-    // A flag rather than a message match, the same idiom as isNotPublishedYet
-    // and isIdentityMismatch: a copy edit to the sentence above must not
-    // silently change which contests take the fallback. solve-stats.js
-    // reads this to rebuild a gym from contest.status instead of giving up.
-    error.isStandingsHidden = true;
-    throw error;
-  }
-
-  const parsed = extractProblems(standingsTable);
-  if (!parsed) {
-    throw new Error(
-      `Couldn't read the problem list for gym ${contestId} from the standings header. ` +
-        `Codeforces may have changed its layout.`,
-    );
-  }
-
-  // Tags are filled from the API; the standings page doesn't carry them.
-  const problems = parsed.map(blankProblem);
-
-  const counts = extractSolveCounts(standingsTable, problems.length);
-  if (counts) {
-    counts.forEach((count, i) => {
-      problems[i].officialSolves = count;
-    });
-  } else {
-    console.warn(
-      `[Scraping Service] Solve counts unreadable for gym ${contestId}.`,
-    );
-  }
-
-  return {
-    contestName: findContestName(doc) ?? `Contest ${contestId}`,
-    problems,
-    solveCountsRead: counts !== null,
-  };
-}
 
 /**
  * Problem metadata from a contest's own problems page.
  *
- * Only used when the standings are hidden — see scrapeContestProblems above.
- * The page carries no solve counts and no field, so the caller has to source
- * those elsewhere; what it does carry is the definitive problem list,
- * including problems nobody submitted to.
+ * The page carries no solve counts and no field, so the caller sources those
+ * from `contest.status` instead; what it does carry is the definitive problem
+ * list, **including problems nobody submitted to** — which is why the list
+ * cannot be derived from the submissions themselves.
  *
  * @param {string} contestId
  * @returns {{ contestName: string, problems: object[] }|null}

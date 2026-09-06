@@ -1,7 +1,4 @@
-import {
-  scrapeContestProblems,
-  scrapeProblemsPage,
-} from "./scraping.js";
+import { scrapeProblemsPage } from "./scraping.js";
 import {
   summariseSubmissions,
   fetchContestSubmissions,
@@ -10,16 +7,28 @@ import {
 /**
  * Fetches a gym's problem metadata and solve counts.
  *
- * **The only Codeforces path that scrapes**, and the reason this platform
- * carries `http.js`, `scraping.js` and `standings-dom.js` while the official
- * one carries none of them. A gym's roster has no API source: `contest.standings`
- * needs signing, and a gym whose standings Codeforces has hidden answers
- * `FAILED` to that call outright.
+ * **One signed `contest.standings` call carries all of it** — the contest name,
+ * the problems in order with their published ratings and tags, the start time,
+ * the phase, and rows enough to count in-contest solves.
  *
- * Two paths, then: the standings page for the roster and name, with
- * `contest.standings` supplying counts, tags, published ratings, start time and
- * phase — or, when that response is gone, the `/gym/<id>` problems page plus
- * `contest.status`.
+ * ## This used to scrape the standings page first
+ *
+ * It fetched and parsed `/gym/<id>/standings` for the roster and the name, then
+ * made this call anyway for everything else — and `populateSolveCountsFromApi`
+ * *overwrote* the counts the page had just been parsed for. The scrape's only
+ * surviving contribution was the contest name and the problem index/name list,
+ * both of which are in this response. Verified against real gyms: 100001, 102253
+ * and 702859 all return `contest.name` and a `problems[]` where every entry has
+ * an index and a name.
+ *
+ * The recorded reason for scraping was that "a gym's roster has no API source:
+ * its standings need signing". Needing a key is not an obstacle when the key is
+ * in hand — this call is signed and works. The genuine obstacle applies only to
+ * a gym whose standings the setter has hidden, which is the branch below.
+ *
+ * So a gym add now makes **no HTML request** unless the standings are hidden,
+ * and therefore needs no codeforces.com tab: this is the signed JSON API, which
+ * is not challenged and goes through the pacer rather than the page transport.
  *
  * @param {string} contestId
  * @param {CodeforcesService} cfService
@@ -30,62 +39,69 @@ import {
  *   the field the estimator would otherwise read from standings.
  */
 export async function readSolveStats(contestId, cfService) {
-  let scraped;
+  let standings;
   try {
-    scraped = await scrapeContestProblems(contestId);
+    standings = await cfService.getContestStandings(contestId);
   } catch (error) {
     // Opens only where the add would otherwise fail outright: a gym whose
-    // standings Codeforces has hidden. Anything else — a layout change, say —
-    // rethrows untouched, and must, since routing around one would turn a
-    // broken parser into a silently shorter contest.
-    //
-    // This used to also test `type !== "gym"`, guarding against an official
-    // contest reaching the fallback. The folder is that guard now.
+    // standings Codeforces has hidden. Anything else — a network fault, a bad
+    // key — rethrows untouched, since routing around one would turn a broken
+    // request into a silently shorter contest.
     if (!error.isStandingsHidden) throw error;
     return statsFromContestStatus(contestId, cfService, error);
   }
 
-  const { contestName, problems, solveCountsRead } = scraped;
+  const problems = (standings?.problems ?? []).map((problem) => ({
+    index: problem.index,
+    name: problem.name,
+    rating: null,
+    ratingSource: null,
+    officialSolves: 0,
+    solved: false,
+    tags: [],
+  }));
 
-  const standings = await cfService.getContestStandings(contestId);
+  if (problems.length === 0) {
+    throw Object.assign(
+      new Error(
+        `Codeforces returned no problems for gym ${contestId}, so there is ` +
+          `nothing to store.`,
+      ),
+      { isSourceUnreachable: true },
+    );
+  }
+
   populateSolveCountsFromApi(standings, problems);
 
   // The same response is the only source gyms have for tags *and* for the
-  // difficulty Codeforces publishes, so take both while we're here rather than
-  // paying for the call twice. It also carries the start time, which matters
-  // for private gyms and mashups: those never appear in contest.list, so this
-  // is the only place to get it.
+  // difficulty Codeforces publishes, so take both while we are here.
   const tagsSynced = applyStandingsProblemData(standings, problems);
-  const startTimeSeconds = standings?.contest?.startTimeSeconds ?? null;
 
-  // `solveCountsRead: true` unconditionally, which looks like a hole and is
-  // deliberate. Gym counts come from the API rather than the scraped totals
-  // row, and `populateSolveCountsFromApi` does bail without deriving any when
-  // `standings.rows` is empty — so this can claim counts it never read, and
-  // the guard at adapter.js's `!solveCountsRead` is unreachable for a gym.
-  //
-  // Empty rows also means an empty field, since rating-distribution.js
-  // gates on the same array: the estimator sets nothing, and contest-manager
-  // refuses for missing ratings. The add fails either way, and it fails with
-  // the *better* sentence — "returned no participant ratings … private or
-  // unrated standings can't be measured" is exactly what happened, where the
-  // solve-count message would blame a standings layout change that did not
-  // occur. Making the flag honest here has been proposed three times; it only
-  // swaps an accurate message for a misleading one.
   return {
-    contestName,
+    contestName: standings?.contest?.name ?? `Gym ${contestId}`,
     problems,
     tagsSynced,
-    startTimeSeconds,
+    // Matters for private gyms and mashups: those never appear in
+    // contest.list, so this is the only place to get a start time for them.
+    startTimeSeconds: standings?.contest?.startTimeSeconds ?? null,
+    // `solveCountsRead: true` unconditionally, which looks like a hole and is
+    // deliberate. Counts come from the API rather than a parsed totals row, and
+    // `populateSolveCountsFromApi` does bail without deriving any when
+    // `standings.rows` is empty — so this can claim counts it never read, and
+    // the `!solveCountsRead` guard in estimator.js is unreachable.
+    //
+    // Empty rows also means an empty field, since field.js gates on the same
+    // array: the estimator sets nothing and contest-manager refuses for missing
+    // ratings. The add fails either way, and it fails with the *better*
+    // sentence — "participants aren't visible" is exactly what happened, where a
+    // solve-count message would blame a layout change that did not occur.
     solveCountsRead: true,
     partyHandles: null,
-    // The same response the solve counts came from carries the phase.
     finished: standings?.contest?.phase
       ? standings.contest.phase === "FINISHED"
       : null,
-    // And it is the same response the estimator needs to measure the field, so
-    // it travels rather than being fetched again. Gym only — the official path
-    // never fetches this, and reads `ratingChanges` instead.
+    // Carried, never stored. `field.js` measures the field from these rows, and
+    // this is the response it would otherwise fetch a second time.
     standings,
   };
 }

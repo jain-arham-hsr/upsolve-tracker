@@ -86,6 +86,29 @@ function serve({ standings, problems }) {
   return seen;
 }
 
+/**
+ * The error the real client raises for a gym whose standings the setter hid.
+ *
+ * `api.js#getContestStandings` matches Codeforces' comment once and converts it
+ * to this flag, so nothing downstream reads prose. These stubs bypass the real
+ * client, so they have to raise the flag themselves — and the test that pins
+ * the translation lives next to the others below.
+ */
+const standingsHidden = () =>
+  Object.assign(new Error("contestId: Standings are not available"), {
+    isStandingsHidden: true,
+  });
+
+/** A service whose standings are hidden, so the fallback is what runs. */
+function hiddenService(extra = {}) {
+  return {
+    getContestStandings: async () => {
+      throw standingsHidden();
+    },
+    ...extra,
+  };
+}
+
 /** A service that fails loudly if the fallback touches it. */
 function forbiddenService(allow = {}) {
   return {
@@ -137,20 +160,22 @@ test("the official reader is a different module, and it reaches no page at all",
   assert.equal(stats.problems[0].ratingSource, "official");
 });
 
-test("a gym whose standings are readable never calls contest.status", async () => {
-  serve({ standings: standingsPage(702859), problems: problemsPage(702859) });
+test("a visible gym is read from the API alone — no page, no contest.status", async () => {
+  // The roster used to be scraped off /gym/<id>/standings while this same call
+  // was made anyway for everything else. `seen` staying empty is the point.
+  const seen = serve({ standings: standingsPage(702859), problems: problemsPage(702859) });
 
   const stats = await readSolveStats(
     "702859",
     forbiddenService({
       getContestStandings: async () => ({
-        contest: { startTimeSeconds: 1234 },
+        contest: { name: "AlgoSSTorm - #1", startTimeSeconds: 1234 },
         // A and C carry Codeforces' own rating, B does not — the usual shape,
         // since a gym mixes archive picks with the setter's own problems.
         problems: [
-          { index: "A", tags: ["dp"], rating: 1300 },
-          { index: "B", tags: ["dp"] },
-          { index: "C", tags: ["dp"], rating: 900 },
+          { index: "A", name: "Alpha", tags: ["dp"], rating: 1300 },
+          { index: "B", name: "Beta", tags: ["dp"] },
+          { index: "C", name: "Gamma", tags: ["dp"], rating: 900 },
         ],
         rows: [
           {
@@ -166,6 +191,9 @@ test("a gym whose standings are readable never calls contest.status", async () =
     }),
   );
 
+  assert.deepEqual(seen, [], "a visible gym must make no HTML request");
+  assert.equal(stats.contestName, "AlgoSSTorm - #1", "the name comes off the API now");
+  assert.deepEqual(stats.problems.map((p) => p.name), ["Alpha", "Beta", "Gamma"]);
   assert.equal(stats.partyHandles, null);
   assert.equal(stats.startTimeSeconds, 1234);
   assert.equal(stats.solveCountsRead, true);
@@ -187,15 +215,21 @@ test("a gym whose standings are readable never calls contest.status", async () =
 });
 
 test("a gym failing for any other reason rethrows rather than falling back", async () => {
-  const blocked = new Error(
-    "Codeforces is blocking requests. Please visit codeforces.com in your browser and try again.",
-  );
-  serve({ standings: blocked, problems: problemsPage(712373) });
+  // Unflagged, so it is not the hidden-standings case: a network fault or a bad
+  // key must not be routed into a rebuild that would store a shorter contest.
+  serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
   await assert.rejects(
-    () => readSolveStats(
-    "712373", forbiddenService()),
-    /blocking requests/,
+    () =>
+      readSolveStats("712373", {
+        getContestStandings: async () => {
+          throw new Error("Codeforces API Error");
+        },
+        getContestStatus: async () => {
+          throw new Error("getContestStatus should not have been called");
+        },
+      }),
+    /Codeforces API Error/,
   );
 });
 
@@ -205,7 +239,7 @@ test("a gym with hidden standings is rebuilt from contest.status", async () => {
   const stats = await readSolveStats(
     "712373", {
     getContestStandings: async () => {
-      throw new Error("contestId: Standings are not available");
+      throw standingsHidden();
     },
     getContestStatus: async () => [
       submission("A", 1),
@@ -235,9 +269,9 @@ test("a problem nobody submitted to still reaches the queue", async () => {
   serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
   const stats = await readSolveStats(
-    "712373", {
-    getContestStatus: async () => [submission("A", 1)],
-  });
+    "712373",
+    hiddenService({ getContestStatus: async () => [submission("A", 1)] }),
+  );
 
   assert.equal(stats.problems.length, 3);
   const c = stats.problems.find((p) => p.index === "C");
@@ -250,8 +284,7 @@ test("refuses loudly when the problems page can't be read either", async () => {
   serve({ standings: NO_TABLE, problems: "<html><body>nothing here</body></html>" });
 
   await assert.rejects(
-    () => readSolveStats(
-    "712373", forbiddenService()),
+    () => readSolveStats("712373", hiddenService()),
     /standings hidden.*problems page couldn't be read/s,
   );
 });
@@ -260,11 +293,13 @@ test("no official submissions means the solve counts are unusable, not zero", as
   serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
   const stats = await readSolveStats(
-    "712373", {
-    getContestStatus: async () => [
-      { ...submission("A", 1), author: { ...submission("A", 1).author, participantType: "PRACTICE" } },
-    ],
-  });
+    "712373",
+    hiddenService({
+      getContestStatus: async () => [
+        { ...submission("A", 1), author: { ...submission("A", 1).author, participantType: "PRACTICE" } },
+      ],
+    }),
+  );
 
   // solveCountsRead false is what makes the adapter refuse instead of handing
   // the estimator all-zero counts, which floor every problem at 800.
@@ -301,9 +336,9 @@ test("gym 712373 end to end, against its real submissions", () => {
          <table class="problems"><tr><th>#</th></tr>${rows}</table></body></html>`;
 
   return readSolveStats(
-    "712373", {
-    getContestStatus: async () => structuredClone(fixture.submissions),
-  }).then((stats) => {
+    "712373",
+    hiddenService({ getContestStatus: async () => structuredClone(fixture.submissions) }),
+  ).then((stats) => {
     assert.deepEqual(
       stats.problems.map((p) => [p.index, p.name, p.rating, p.officialSolves]),
       REAL,

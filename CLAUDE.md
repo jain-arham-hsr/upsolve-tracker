@@ -482,11 +482,11 @@ They are genuinely different pipelines, not two flavours of one:
 
 | | official | gym |
 |---|---|---|
-| roster | `contest.standings` (unsigned) | scraped HTML, + the problems page when standings are hidden |
+| roster | `contest.standings` (unsigned) | `contest.standings` (signed), or the problems page when standings are hidden |
 | ratings/tags | `problemset.problems` + standings | standings only |
 | field | `ratingChanges`, else sampled standings rows | standings rows, or `contest.status` parties |
 | API methods | `getPublicContestStandings`, `getContestRatingChanges`, `getProblemsetProblems` | `getContestStandings`, `getContestStatus` |
-| HTML | **none at all** | the whole roster path |
+| HTML | **none at all** | none, unless the standings are hidden |
 
 Three API methods each, disjoint. The user-visible consequence is that **an official add needs
 no codeforces.com tab open** — every call on that path is either the signed JSON API or the
@@ -528,9 +528,13 @@ search are two things free to disagree about what a team is worth.
 ### Data acquisition on Codeforces: two platforms, two channels
 
 1. **Signed API** (`core/platforms/codeforces-official/api.js`) — builds the `apiSig` (SHA-512 over `rand/method?sortedParams#secret`) via `crypto.subtle`. Used for `user.status`, `contest.ratingChanges`, `contest.standings`, `user.info`. **One method is deliberately unsigned**: `getPublicContestStandings`, because Codeforces serves a non-gym standings only to an anonymous request with no extra parameters, and signing appends two.
-2. **HTML scraping** (`core/platforms/codeforces-gyms/scraping.js` → `core/platforms/codeforces-gyms/http.js`, parsing in `core/platforms/codeforces-gyms/standings-dom.js`) — **gyms only, and now nothing else.** A gym's roster has no API source: its standings need signing, and a hidden-standings gym answers `FAILED` to that call. An **official** contest is read entirely from `contest.standings`, which carries its name, problems, published ratings, start time and rows enough to count in-contest solves. `problemStatistics.solvedCount` is *not* a substitute: it counts all-time solves including practice, which the estimator can't use.
+2. **HTML scraping** (`core/platforms/codeforces-gyms/scraping.js` → `codeforces-gyms/http.js`, parsing in `codeforces-gyms/standings-dom.js`) — **one page, for one case.** A gym whose standings the setter hid answers `FAILED` to `contest.standings`, and the `/gym/<id>` problems page is the only page those contests still render. It is the definitive problem list, and cannot be replaced by deriving one from the submissions: a problem nobody attempted appears in none of them, so the contest would come out silently short.
 
-   The official path lost its last two HTML requests in turn. The **roster** scrape went first: that call is made regardless, so scraping the page for the same facts was paying twice. It saved no bytes (~760 KB against ~8.5 MB either way); what it removed was the failure mode, since a Cloudflare challenge there broke official adds outright. The **field sampling** followed — see below. `tests/codeforces-adapter.test.js` now asserts an official add makes no HTML request *while reaching the estimator*, which is the only form of that assertion worth having: the previous one stubbed an empty problemset, so the add returned `notPublishedYet` before acquiring anything and passed just as happily while the path was still scraping.
+   **Everything else on Codeforces is now JSON.** Three scrapes went, in order. The official *roster*: `contest.standings` was fetched regardless, so reading the page for the same facts was paying twice — no bytes saved (~760 KB against 6.5–8.5 MB either way), but it removed the failure mode, since a Cloudflare challenge there broke official adds outright. The official *field sampling*: it walked ~32 paginated standings pages to stratify a rank-ordered list that was already in the response. And the gym *roster*, for the same reason as the official one — the next line fetched `contest.standings` anyway, and `populateSolveCountsFromApi` overwrote the counts the page had just been parsed for.
+
+   **The recorded reason for the gym scrape did not survive checking.** It said "a gym's roster has no API source: its standings need signing". Needing a key is not an obstacle when the key is in hand, and that call is signed and works. Verified against real gyms — 100001, 102253, 702859 — `contest.standings` returns `contest.name` and a `problems[]` where every entry carries an index and a name. A hidden gym (712373) returns `FAILED — contestId: Standings are not available`, which `api.js#getContestStandings` matches **once** and converts to `isStandingsHidden`, so nothing downstream reads prose. That match is the one place a message comparison is unavoidable: Codeforces gives no distinct status code for it.
+
+   The consequence worth knowing: **an add needs no codeforces.com tab** unless the gym's standings are hidden. `tests/module-boundaries.test.js` pins it structurally — `http.js` must have exactly one importer, which must fetch exactly one page, and that page must not be a standings page.
 
 ### Requests go through a page, not from the panel
 

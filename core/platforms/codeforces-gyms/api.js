@@ -71,11 +71,27 @@ export class CodeforcesService {
    * @param {string|number} contestId
    */
   async getContestStandings(contestId) {
-    return this._callMethod("contest.standings", {
-      contestId: contestId,
-      showUnofficial: true,
-      participantTypes: "CONTESTANT,VIRTUAL",
-    });
+    try {
+      return await this._callMethod("contest.standings", {
+        contestId: contestId,
+        showUnofficial: true,
+        participantTypes: "CONTESTANT,VIRTUAL",
+      });
+    } catch (error) {
+      // **The one place a message match is unavoidable**, and it is converted to
+      // a flag here so that nothing downstream ever matches on prose. A setter
+      // who hides a gym's standings gets this exact comment and no distinct
+      // status code, so Codeforces' wording is the only signal there is.
+      //
+      // `solve-stats.js` reads the flag to rebuild the contest from
+      // `contest.status` instead. That used to be triggered by the standings
+      // *page* failing to parse, which meant a hidden gym fetched and parsed
+      // HTML purely to discover the fetch was pointless.
+      if (/standings are not available/i.test(error.message)) {
+        error.isStandingsHidden = true;
+      }
+      throw error;
+    }
   }
 
   /**

@@ -402,3 +402,38 @@ test("the official Codeforces platform reaches no HTML at all", () => {
 
   assert.deepEqual(offenders, [], "the official path must stay pure JSON API");
 });
+
+test("only the hidden-standings path reads HTML on Codeforces", () => {
+  // Officially there is no HTML left at all, which the test above pins. On the
+  // gym side one page survives: a gym whose standings the setter hid answers
+  // FAILED to `contest.standings`, and the `/gym/<id>` problems page is the one
+  // page those contests still render.
+  //
+  // So `http.js` must have exactly one importer, and it must be the module that
+  // reads that page. A second importer would mean a visible gym had started
+  // scraping again — which is what this change removed, and which no unit test
+  // would otherwise notice, since the result is correct either way and only the
+  // request count differs.
+  // Scoped to the gym folder's own client: AtCoder has an `http.js` too, and
+  // it is none of this test's business.
+  const importers = sourceFiles(path.join(PLATFORMS, "codeforces-gyms"), [".js"])
+    .filter((file) => importsOf(readFileSync(file, "utf8")).some((s) => s.endsWith("http.js")))
+    .map((file) => path.relative(ROOT, file));
+
+  assert.deepEqual(importers, ["core/platforms/codeforces-gyms/scraping.js"]);
+
+  const scraping = readFileSync(
+    path.join(PLATFORMS, "codeforces-gyms", "scraping.js"),
+    "utf8",
+  );
+  // Inspect the fetched URLs themselves, not the file: `./standings-dom.js` is
+  // an import path and would otherwise read as a standings fetch.
+  const fetched = [...stripComments(scraping).matchAll(/CodeforcesHttp\.get\(([^)]*)\)/g)]
+    .map((m) => m[1].trim());
+
+  assert.equal(fetched.length, 1, `expected one page fetch, got ${fetched.length}`);
+  assert.ok(
+    !fetched[0].includes("standings"),
+    `a standings page is being fetched again — a visible gym is read from the API: ${fetched[0]}`,
+  );
+});

@@ -174,7 +174,11 @@ test("a hidden-standings gym recovers its field from who submitted", async () =>
   const asked = [];
   const contest = await record({
     getContestStandings: async () => {
-      throw new Error("contestId: Standings are not available");
+      // The flag `api.js#getContestStandings` sets from Codeforces' comment;
+      // these stubs bypass the real client, so they raise it themselves.
+      throw Object.assign(new Error("contestId: Standings are not available"), {
+        isStandingsHidden: true,
+      });
     },
     getContestStatus: async () => [
       submission("A", 1, 1300), submission("A", 2, 1300),
@@ -204,7 +208,11 @@ test("a hidden-standings gym with nothing to estimate never asks for the field",
 
   const contest = await record({
     getContestStandings: async () => {
-      throw new Error("contestId: Standings are not available");
+      // The flag `api.js#getContestStandings` sets from Codeforces' comment;
+      // these stubs bypass the real client, so they raise it themselves.
+      throw Object.assign(new Error("contestId: Standings are not available"), {
+        isStandingsHidden: true,
+      });
     },
     getContestStatus: async () =>
       INDEXES.map((index, i) => ({
@@ -323,6 +331,10 @@ test("a blocked scrape answers sourceUnreachable, and that status waits", async 
   // The other half of the fix: the flag has to become a status, or nothing
   // upstream can act on it. `shouldWait` is asserted here rather than assumed,
   // because "returns a status" and "actually retries" are different claims.
+  //
+  // Driven through the **hidden-standings** gym, which is now the only path
+  // that reads HTML at all — a visible gym is read entirely from the API and
+  // has no scrape left to block.
   CodeforcesHttp.get = async () => {
     throw Object.assign(new Error("Codeforces is blocking requests."), {
       isSourceUnreachable: true,
@@ -332,7 +344,15 @@ test("a blocked scrape answers sourceUnreachable, and that status waits", async 
   const result = await fetchContestRecord({
     contestId: "702859",
     subtype: "GYM",
-    session: { service: { getContestStandings: async () => standingsApi([1300, 900, 2100]) } },
+    session: {
+      service: {
+        getContestStandings: async () => {
+          throw Object.assign(new Error("contestId: Standings are not available"), {
+            isStandingsHidden: true,
+          });
+        },
+      },
+    },
   });
 
   assert.equal(result.status, "sourceUnreachable");
@@ -347,7 +367,20 @@ test("a scrape failure that is not a block still escapes", async () => {
   };
 
   await assert.rejects(
-    () => fetchContestRecord({ contestId: "702859", subtype: "GYM", session: { service: {} } }),
+    () =>
+      fetchContestRecord({
+        contestId: "702859",
+        subtype: "GYM",
+        session: {
+          service: {
+            getContestStandings: async () => {
+              throw Object.assign(new Error("contestId: Standings are not available"), {
+                isStandingsHidden: true,
+              });
+            },
+          },
+        },
+      }),
     /something else went wrong/,
   );
 });
