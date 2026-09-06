@@ -106,7 +106,7 @@ Where each kind of data comes from, and what happens when that source fails. Thi
 |:--|:--|:--|:--|
 | **Codeforces Official**<br>`/contest/<id>` | `contest.standings`<br><br>*Not published yet:* waits, and retries on every refresh | `contest.standings`<br><br>*Not yet rated by Codeforces:* stored as an estimate, then re-asked from the same endpoint at most weekly — and not at all once the round is six weeks old<br><br>*Never rated:* estimated here. Solve counts from the same standings rows; the field from `contest.ratingChanges`, or ~1,500 sampled rows resolved through `user.info` when that is empty | `user.status` — one call, whole history |
 | **Codeforces Gyms**<br>`/gym/<id>` | `contest.standings`, signed<br><br>*Standings hidden:* scraped from the `/gym/<id>` page — a problem nobody attempted is in no submission, so the list cannot be rebuilt from those | `contest.standings` — about a third of gym problems carry Codeforces' own rating<br><br>*The rest:* estimated here. Solve counts and field both from `contest.standings`; when the standings are hidden, from `contest.status` + `user.info` instead<br><br>*Field not visible at all:* refuses to add | `user.status` — the same call as official |
-| **AtCoder** | Scraped from `/contests/<id>/tasks`<br><br>*Unreadable:* waits and retries every refresh | **Always estimated here** — AtCoder publishes no difficulty. Fitted from `/contests/<id>/standings/json` 🔒<br><br>*Unreadable:* stores `???` and retries one contest per refresh | Scraped from `/contests/<id>/submissions?f.User=…&f.Status=AC` 🔒<br><br>Once per tracked contest |
+| **AtCoder** | Scraped from `/contests/<id>/tasks`<br><br>*Unreadable:* waits and retries every refresh | **Always estimated here** — AtCoder publishes no difficulty. Fitted from `/contests/<id>/standings/json` 🔒<br><br>*Unreadable:* waits and retries, rather than storing `???` a tab would have filled | Scraped from `/contests/<id>/submissions?f.User=…&f.Status=AC` 🔒<br><br>Once per tracked contest |
 | **CodeChef** | `/api/contests/<code>`, then `/api/contests/<code>/problems/<code>` — one request per problem<br><br>*Parent contest:* resolves to the division matching your rating; with no known rating it names the divisions rather than guessing | `difficulty_rating`, from that same per-problem call<br><br>*`-1` or `9999`:* stored as `???` | `/api/list/problems?group=attempted`, paged |
 
 🔒 **needs you signed in to that site.** See the request diagram above: without a tab open
@@ -151,6 +151,8 @@ Things that surprise people, with no bearing on where the data comes from.
   and without a tab the request goes out anonymously and is refused.
 - Every difficulty here is an estimate — AtCoder publishes none — and it can be **negative**.
   ABC 471's A is −817. That is real.
+- You will never see `???` on AtCoder. If the standings can't be read, the contest waits for
+  a refresh with a tab open rather than filling the queue with blanks.
 - A problem is identified by its task id, not its position, so solving it clears it from
   every contest that reuses it. 1,906 of 9,383 problems appear in more than one.
 - Solved status is read per contest, so solving something through a contest you *don't*
@@ -222,7 +224,7 @@ in an exported backup:
 |:--|:--|
 | A solved problem won't leave the queue | Is the handle for that site right? Settings shows the account it resolved to. On CodeChef, are you signed in as that account? |
 | Nothing syncs at all for one site | The refresh reports per-site failures at the end. A site being down or a handle being wrong fails that site alone; the others still sync. |
-| A rating shows `???` | The site published the contest but says that problem has no rating, and that site has no estimator. It's rare: in practice difficulties arrive with the problem list. A problem the extension merely *failed to fetch* never shows `???` — that contest waits instead. |
+| A rating shows `???` | Only CodeChef does this. It means CodeChef itself lists the problem as unrated — Codeforces and AtCoder both work a difficulty out instead, so neither ever shows one. A problem the extension merely *failed to fetch* never shows `???` on any site: that contest waits and retries. |
 | A Codeforces difficulty looks off | If it's underlined with a dotted line it's an estimate, not a published number — which on an official round means Codeforces lists the problem but never rated it. On gyms estimates are noisy in both directions, a mean 211 out and occasionally 400+, because the model has only the handful of people who entered to work from. |
 | The chance column shows `—` | Either the problem has no difficulty, or your rating for that site is unknown. Those are different problems and the queue shows them differently on purpose. |
 | Adding a contest is slow | Expected. Requests are spaced deliberately; a CodeChef division costs about one request per problem. |

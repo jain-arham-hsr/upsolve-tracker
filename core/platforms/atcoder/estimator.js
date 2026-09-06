@@ -24,6 +24,7 @@
  * dataset, the 40-row guard fires, and no estimate is produced. Those are
  * precisely the problems AtCoder Problems itself flags as experimental.
  */
+import { sourceUnreachable } from "../../contest-status.js";
 import { fitDifficulty } from "../../rating-models/rasch.js";
 import { fitWithUpperAsymptote } from "../../rating-models/rasch-upper-asymptote.js";
 import { fetchStandings } from "./scraping.js";
@@ -31,10 +32,7 @@ import { fetchStandings } from "./scraping.js";
 /** AtCoder's own scale: base 6 over 400, the same constants its ratings use. */
 const SCALE = { base: 6, divisor: 400, lo: -10000, hi: 10000 };
 
-/** Below this the fit is noise; the source refuses rather than guessing. */
-const MIN_ROWS = 40;
-
-/** A fit above this is not a hard problem, it is a failed fit. */
+/** A fit above this is clamped: past here the scale stops meaning anything. */
 const MAX_DIFFICULTY = 6000;
 
 /**
@@ -53,16 +51,27 @@ export async function fill({ contest, onProgress = () => {} }) {
     onProgress("Reading the standings…");
     standings = await fetchStandings(contest.id);
   } catch (error) {
-    console.info(
-      `[AtCoder] Couldn't read standings for ${contest.id}, so its problems stay ` +
-        `unrated for now: ${error.message}`,
+    // **Not the same as "this problem has no difficulty".** Signed out, the
+    // refusal hook turns AtCoder's `/login` redirect into a throw; a network
+    // fault lands here too. Either way we failed to *ask*, so the contest waits
+    // and retries rather than storing a queue of `???` that a tab would have
+    // filled — which is what `sourceUnreachable` is defined for.
+    //
+    // This became load-bearing when `canEstimate` went true: without it an
+    // unread contest reaches contest-manager's null check and fails the add
+    // outright, when the honest answer is "come back with a session".
+    return sourceUnreachable(
+      `Couldn't read AtCoder's standings for ${contest.id}: ${error.message}. ` +
+        `Open atcoder.jp in a tab and refresh — difficulty is worked out from ` +
+        `the standings, which need you signed in.`,
     );
-    return;
   }
 
   if (standings === null) {
-    console.info(`[AtCoder] Standings for ${contest.id} were not in the expected shape.`);
-    return;
+    return sourceUnreachable(
+      `AtCoder's standings for ${contest.id} were not in the expected shape, so ` +
+        `there is no field to fit against yet.`,
+    );
   }
 
   onProgress("Estimating problem difficulty…");
@@ -136,12 +145,37 @@ function buildRows(standings) {
   });
 }
 
-/** @returns {number|null} null wherever the source refuses to estimate. */
+/**
+ * Fit one task, and **always answer where there is anyone to answer from**.
+ *
+ * ## Why this diverges from the source
+ *
+ * AtCoder Problems refuses in four situations: nobody solved it, everyone solved
+ * it, fewer than forty usable rows, or a fit above the ceiling. Ported
+ * faithfully, that meant AtCoder problems could render `???` while the identical
+ * situation on Codeforces produced a number — `codeforces-official/estimator.js`
+ * targets 0.5 expected solves when nobody solved a problem and lets the search
+ * run to its ceiling, and floors the result rather than declining.
+ *
+ * Same maths, opposite policy, and the refusal is the weaker half: a `???` says
+ * less than a bound does, cannot be acted on, and is indistinguishable from
+ * "we never read the standings". So each refusal becomes the bound Codeforces
+ * already gives.
+ *
+ * **The port guarantee is untouched.** What was ported is the *model* —
+ * `rating-models/rasch.js` and `rasch-upper-asymptote.js` — and that is pinned
+ * against the Python's own output by `tests/rating-models.test.js`, which must
+ * keep passing unchanged. What changes here is the policy wrapped around it,
+ * which was always ours.
+ *
+ * @returns {number|null} null only when the standings contain nobody usable to
+ *   fit against at all, which `canEstimate: true` then turns into a loud
+ *   refusal rather than a silent `???`.
+ */
 function fitTask(rows, taskId) {
   // The best score anyone actually achieved — not a declared maximum from
   // TaskInfo, which is a different number and would change every answer.
   const maxScore = Math.max(...rows.map((row) => row.scores.get(taskId) ?? 0), 0);
-  if (maxScore === 0) return null;
 
   const isAccepted = (row) =>
     (row.accepted.get(taskId) ?? 0) === 1 && (row.scores.get(taskId) ?? 0) === maxScore
@@ -151,25 +185,39 @@ function fitTask(rows, taskId) {
   // First-timers have no meaningful rating to fit against.
   const recurring = rows.filter((row) => row.previousContests > 0 && row.rating > 0);
 
-  const dataset = selectDataset(recurring, taskId);
-  if (dataset.length < MIN_ROWS) return null;
+  // `selectDataset` narrows further for ABC's easy pair — to rated entrants
+  // only — which an *unrated* contest empties completely. Fall back to the
+  // wider set rather than refusing: a noisier fit still beats no answer.
+  const narrowed = selectDataset(recurring, taskId);
+  const dataset = narrowed.length > 0 ? narrowed : recurring;
+  if (dataset.length === 0) return null;
 
   const responses = dataset.map(isAccepted);
   const solved = responses.reduce((sum, y) => sum + y, 0);
-  // Everyone solving it, or nobody, leaves the fit unconstrained in one
-  // direction — there is no difficulty that explains it.
-  if (solved === 0 || solved === responses.length) return null;
+
+  // **Nobody solved it, or everyone did.** The likelihood is then monotonic —
+  // no difficulty explains the data better than any other beyond some point —
+  // so the honest answer is a bound rather than a value. Aiming half a solve
+  // inside the range picks that bound out, which is exactly what Codeforces
+  // does for its own zero-solve case.
+  const degenerate = solved === 0 || solved === responses.length;
+  const target = solved === 0 ? 0.5 : solved === responses.length ? solved - 0.5 : solved;
 
   const abilities = dataset.map((row) => ({
     rating: inverseAdjustRating(row.rating, row.previousContests),
     weight: 1,
   }));
 
-  const difficulty = isAgcFirstProblem(taskId)
-    ? fitWithUpperAsymptote({ abilities, responses, ...SCALE }).difficulty
-    : fitDifficulty({ abilities, solveCount: solved, ...SCALE, integer: true });
+  // The upper-asymptote model fits a non-attempt rate from the spread of
+  // responses, so it has nothing to work with when they are all identical.
+  const difficulty =
+    isAgcFirstProblem(taskId) && !degenerate
+      ? fitWithUpperAsymptote({ abilities, responses, ...SCALE }).difficulty
+      : fitDifficulty({ abilities, solveCount: target, ...SCALE, integer: true });
 
-  return difficulty > MAX_DIFFICULTY ? null : difficulty;
+  // Clamped, not discarded: a fit above the ceiling still means "harder than
+  // anything on this scale", which orders correctly.
+  return Math.min(difficulty, MAX_DIFFICULTY);
 }
 
 /**

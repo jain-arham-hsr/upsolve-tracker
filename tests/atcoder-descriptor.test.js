@@ -73,11 +73,16 @@ test("a problem with no task id degrades to the contest link, not a wrong one", 
   );
 });
 
-test("no estimator here, which is what permits a \"???\"", () => {
+test("AtCoder estimates, so a leftover null is a fault and not a \"???\"", () => {
   // One declared fact rather than two that must agree. It used to be
   // `allowsPartialRatings`, separately declared and the exact inverse of this
   // on all three platforms — so a fourth could have set them inconsistently
   // and made every partly-rated contest silently unaddable.
-  assert.equal(atcoder.capabilities.canEstimate, false);
+  //
+  // This asserted `false` for as long as AtCoder had no estimator of its own.
+  // It has one now — the same one Codeforces uses — so a problem it cannot rate
+  // is a fault rather than a fact about the problem, judged in the single place
+  // that judges it for every platform.
+  assert.equal(atcoder.capabilities.canEstimate, true);
   assert.equal(getPlatform("codeforces-official").capabilities.canEstimate, true);
 });

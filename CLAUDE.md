@@ -171,12 +171,17 @@ per-platform policy creeps back.
 
 `capabilities.canEstimate` decides what a *gap* means once a contest is fetched. Codeforces is the
 only platform whose participant field is readable, so it is the only one that can estimate: a hole
-left after the estimator has run is a bug and `contest-manager` refuses loudly. AtCoder and CodeChef
-cannot estimate, so a gap is simply a problem the site hasn't rated — it stores `rating: null` and
-renders "???". This replaced `allowsPartialRatings`, which was never independent: it was the exact
+left after the estimator has run is a bug and `contest-manager` refuses loudly. **AtCoder now
+declares it too**: it runs the same estimator over a contest's own standings, so a problem it
+cannot rate is a fault rather than a fact about the problem. CodeChef cannot estimate, so there a
+gap is simply a problem the site hasn't rated — it stores `rating: null` and renders "???". This replaced `allowsPartialRatings`, which was never independent: it was the exact
 inverse of this on all three platforms, two declarations that had to agree with nothing checking
 they did. `???` therefore means exactly one thing — *the site says unrated* — never "we couldn't
-find out", which is why a failed request waits rather than producing one.
+find out", which is why a failed request waits rather than producing one. **It is now a CodeChef
+phenomenon only.** AtCoder used to produce one whenever its standings could not be read — the
+normal outcome when signed out — which was precisely the "we couldn't find out" case wearing the
+other meaning's clothes. That reads `sourceUnreachable` and waits now, and the estimator bounds
+rather than refuses, so nothing on AtCoder stores a null.
 
 ### Whose data is this? (`services/platform-identity.js`)
 
@@ -364,14 +369,29 @@ Things that are easy to get wrong:
   −817. Nothing here may apply the Codeforces estimator's `Math.max(800, …)` floor
   or its round-to-100 — which is exactly why the two estimators pass their constants
   explicitly rather than inheriting defaults.
-- **`canEstimate` stays `false`, even though AtCoder is now estimable.** Flipping it
-  would make an unrated problem a hard error in `contest-manager.js`, so a
-  signed-out user could not add a contest at all. False keeps `rating: null` → "???"
-  tolerable, which is what lets the add path work without a session.
+- **`canEstimate` is `true`, and the estimator had to earn it.** This read `false`
+  for as long as the reasoning was "flipping it would make an unrated problem a
+  hard error, so a signed-out user could not add a contest at all". That was true
+  of the arrangement, not of AtCoder: the signed-out case is *"we could not
+  read the standings"*, which is a failure to ask, not a statement that the
+  problem has no difficulty. It now answers `sourceUnreachable` and waits, and
+  the add works without a session again — by queueing rather than by storing a
+  contest of "???".
+- **The estimator bounds where the source refuses**, which is what makes the flip
+  safe. AtCoder Problems declines in four situations — nobody solved it, everyone
+  did, fewer than forty usable rows, a fit past the ceiling — and each is a
+  situation `codeforces-official/estimator.js` answers with a bound instead
+  (`actualSolves === 0 ? 0.5`, the 800 floor, gyms of 5–76 parties). Same maths,
+  opposite policy, so a problem was rateable on one site and not the other for no
+  reason a user could act on. `fitTask` bounds now. **The port guarantee is
+  untouched:** the *model* is pinned against that Python's own numbers by
+  `rating-models.test.js`, which must keep passing unchanged; the refusals were
+  policy wrapped around it. `atcoder-estimator.test.js` carries the one
+  deliberate divergence by name.
 - **The two failure modes are deliberately asymmetric.** Standings failing is *soft*
-  — the contest stores unrated and fills in on a later refresh, and the gap is
-  visible in the queue as "???". Submissions failing is *loud* — `fetch` follows the
-  302, so a signed-out request arrives as a healthy 200 containing the login form,
+  after the add — an already-stored contest fills in on a later refresh — but on the
+  add itself it waits rather than storing nothing. Submissions failing is *loud* —
+  `fetch` follows the 302, so a signed-out request arrives as a healthy 200 containing the login form,
   and parsing it yields no submissions, which is indistinguishable from having
   solved nothing. `solved` is sticky, so that would strand the queue silently. Both
   clients check `response.url`'s path for `/login`; see `http.js`.

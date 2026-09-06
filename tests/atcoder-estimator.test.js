@@ -44,18 +44,56 @@ const field = (taskId, n, solvers, extra = {}) =>
     results: i < solvers ? { [taskId]: { Score: 100, Status: 1 } } : {},
   }));
 
+/**
+ * Where we deliberately answer and AtCoder Problems refuses.
+ *
+ * Its estimator declines in four situations — nobody solved it, everyone did,
+ * fewer than forty usable rows, or a fit past the ceiling. We bound instead, so
+ * that a problem is never rateable on Codeforces and unrateable here for no
+ * reason a user could act on. See `fitTask`.
+ *
+ * Named rather than deleted, so the divergence stays one line in a diff instead
+ * of a silently edited fixture — and so a *new* one shows up as a failure.
+ */
+const DELIBERATE_DIVERGENCES = {
+  "case 4 abc500_a": "27 usable rows: they refuse under forty, we fit and bound",
+};
+
 test("the whole path reproduces AtCoder Problems' own difficulties", () => {
+  // The model itself is pinned separately, against that Python's own numbers,
+  // by tests/rating-models.test.js — which must keep passing untouched. This
+  // test covers the policy wrapped around it, which is where we now differ.
   const mismatches = [];
+  const diverged = new Set();
+
   for (const [i, c] of cases.entries()) {
     const got = estimateContest(c.standings);
     const keys = new Set([...Object.keys(c.expected), ...got.keys()]);
     for (const key of keys) {
       const ours = got.has(key) ? got.get(key) : "refused";
       const theirs = key in c.expected ? c.expected[key] : "refused";
-      if (ours !== theirs) mismatches.push(`case ${i} ${key}: ${ours} vs ${theirs}`);
+      if (ours === theirs) continue;
+
+      const label = `case ${i} ${key}`;
+      if (label in DELIBERATE_DIVERGENCES) {
+        // Still assert the *shape* of the divergence: they refuse, we answer.
+        // A number-vs-different-number here would be a porting bug wearing an
+        // allowlist entry.
+        assert.equal(theirs, "refused", `${label} is allowlisted but they did not refuse`);
+        assert.equal(typeof ours, "number", `${label} is allowlisted but we refused too`);
+        diverged.add(label);
+        continue;
+      }
+      mismatches.push(`${label}: ${ours} vs ${theirs}`);
     }
   }
+
   assert.deepEqual(mismatches, [], "a difference here is a porting bug");
+  assert.deepEqual(
+    [...diverged].sort(),
+    Object.keys(DELIBERATE_DIVERGENCES).sort(),
+    "an allowlisted divergence stopped diverging — remove it rather than leaving it",
+  );
 });
 
 test("the fixture actually exercises a refusal, or it proves less than it looks", () => {
@@ -63,20 +101,44 @@ test("the fixture actually exercises a refusal, or it proves less than it looks"
   assert.ok(refused.length >= 1, "no case in the fixture refuses to estimate");
 });
 
-test("a task nobody scored on is refused, not rated at the ceiling", () => {
+test("a task nobody solved is rated near the ceiling, not refused", () => {
+  // Codeforces answers this case by aiming at half a solve and letting the
+  // search run high; refusing instead produced a `???` on exactly the hardest
+  // problem in a contest — the one most likely to still be in the queue.
   const result = estimateContest(standings(["abc432_c"], field("abc432_c", 60, 0)));
-  assert.equal(result.has("abc432_c"), false);
+  const solo = estimateContest(standings(["abc432_c"], field("abc432_c", 60, 1)));
+
+  assert.equal(typeof result.get("abc432_c"), "number");
+  assert.ok(
+    result.get("abc432_c") >= solo.get("abc432_c"),
+    "nobody solving it cannot read as easier than one person solving it",
+  );
 });
 
-test("a task everyone solved is refused — no difficulty explains it", () => {
-  const result = estimateContest(standings(["abc432_c"], field("abc432_c", 60, 60)));
-  assert.equal(result.has("abc432_c"), false);
+test("a task everyone solved is rated low, not refused", () => {
+  const all = estimateContest(standings(["abc432_c"], field("abc432_c", 60, 60)));
+  const most = estimateContest(standings(["abc432_c"], field("abc432_c", 60, 59)));
+
+  assert.equal(typeof all.get("abc432_c"), "number");
+  assert.ok(
+    all.get("abc432_c") <= most.get("abc432_c"),
+    "everyone solving it cannot read as harder than all-but-one solving it",
+  );
+  // No 800 floor here: AtCoder difficulties are unbounded below — 931 are
+  // negative, ABC471-A is -817 — so importing Codeforces' floor would be wrong.
+  assert.ok(all.get("abc432_c") < 800, "an everyone-solved task should land low");
 });
 
-test("a field under forty usable rows is refused", () => {
+test("a small field still gets a number, noisy rather than absent", () => {
+  // The source refuses under forty usable rows. Codeforces fits gyms of 5-76
+  // parties and says the result is a mean 211 out; every AtCoder rating already
+  // renders as an estimate, so the honest noisy number beats `???`.
+  const tiny = estimateContest(standings(["abc432_c"], field("abc432_c", 10, 5)));
   const just_under = estimateContest(standings(["abc432_c"], field("abc432_c", 39, 20)));
   const just_over = estimateContest(standings(["abc432_c"], field("abc432_c", 41, 20)));
-  assert.equal(just_under.has("abc432_c"), false);
+
+  assert.equal(typeof tiny.get("abc432_c"), "number");
+  assert.equal(typeof just_under.get("abc432_c"), "number");
   assert.equal(just_over.has("abc432_c"), true);
 });
 

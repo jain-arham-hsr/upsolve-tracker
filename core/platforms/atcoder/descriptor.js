@@ -151,13 +151,22 @@ export const atcoder = {
     // The stats panel drops its whole tag section rather than heading an
     // empty one, which reads as a failed load.
     publishesTags: false,
-    // AtCoder Problems publishes difficulty for every rated contest.
-    bulkProblemData: true,
+    // Nothing bulk is fetched any more — AtCoder Problems is gone entirely, and
+    // a contest's own tasks page is the source. Declarative only; nothing reads
+    // this.
+    bulkProblemData: false,
     bulkStartTimes: true,
-    // No estimator: AtCoder's standings need a login, so there is no field to
-    // fit against. A problem the site has not rated therefore stores as null
-    // and renders "???" — never as a guess — and converges on a later refresh.
-    canEstimate: false,
+    // AtCoder publishes no difficulty at all, so every rating here is fitted
+    // locally — the same estimator Codeforces uses, over the contest's own
+    // standings. That makes a leftover null a *fault* rather than a fact about
+    // the problem, and `contest-manager.js` is the one place that says so.
+    //
+    // This read `false` while the comment claimed "no estimator", which stopped
+    // being true when the fitting moved in-house. The cost of the mismatch was
+    // a queue of `???` whenever the standings could not be read — signed out,
+    // usually — indistinguishable from a problem nothing can rate. That case is
+    // now `sourceUnreachable` and waits; see `estimator.js#fill`.
+    canEstimate: true,
   },
 };
 

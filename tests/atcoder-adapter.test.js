@@ -12,6 +12,7 @@
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { shouldWait } from "../core/contest-status.js";
 import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
@@ -42,6 +43,25 @@ const submissionsPage = (rows, pages = 1) => `<html><body>
 const submissionRow = (taskId, verdict) =>
   `<tr><td>2026-01-01</td><td><a href="/contests/abc432/tasks/${taskId}">X</a></td>` +
   `<td>tourist</td><td>C++</td><td><span>${verdict}</span></td></tr>`;
+
+/**
+ * A standings payload the estimator can actually fit, so a test about the
+ * *record* is not accidentally a test about being signed out. Forty usable rows
+ * is the floor the model wants; half of them solving gives a fit in range.
+ */
+const standingsJson = (taskIds, rows = 60, solvers = 30) =>
+  JSON.stringify({
+    TaskInfo: taskIds.map((id) => ({ TaskScreenName: id })),
+    StandingsData: Array.from({ length: rows }, (_, i) => ({
+      OldRating: 1200 + i,
+      Competitions: 5,
+      IsRated: true,
+      TotalResult: { Count: 1 },
+      TaskResults: Object.fromEntries(
+        taskIds.map((id) => [id, i < solvers ? { Score: 100, Status: 1 } : { Score: 0, Status: 0 }]),
+      ),
+    })),
+  });
 
 let routes;
 let requested;
@@ -75,7 +95,7 @@ beforeEach(() => {
 test("a contest is built from its own tasks page, ids and all", async () => {
   routes = [
     ["/contests/abc432/tasks", tasksPage(taskRow("A", "abc432_a", "Alpha") + taskRow("B", "abc432_b", "Beta"))],
-    ["/standings/json", "LOGIN"],
+    ["/standings/json", standingsJson(["abc432_a", "abc432_b"])],
   ];
 
   const { status, contest } = await fetchContestRecord({
@@ -104,23 +124,32 @@ test("an unreadable task list waits rather than storing an empty contest", async
   assert.equal(result.status, "notPublishedYet");
 });
 
-test("difficulty that cannot be fitted stays null, never a guess", async () => {
-  // Signed out, standings are unreachable — the contest must still be addable,
-  // with its problems rendering "???" until a later refresh can rate them.
+test("signed out, the contest waits rather than storing a queue of ???", async () => {
+  // This used to assert the opposite — that the contest stored with every
+  // problem null, rendering "???" until some later refresh happened to run with
+  // a session. That looked identical to "AtCoder cannot rate these", told the
+  // user nothing, and gave no hint that a tab would fix it.
+  //
+  // Failing to *read* the standings is not a statement about difficulty, so it
+  // answers `sourceUnreachable` and retries — the same treatment every other
+  // "couldn't ask" case gets.
   routes = [
     ["/contests/abc432/tasks", tasksPage(taskRow("A", "abc432_a", "Alpha"))],
     ["/standings/json", "LOGIN"],
   ];
 
-  const { status, contest } = await fetchContestRecord({
+  const result = await fetchContestRecord({
     contestId: "abc432",
     subtype: "ABC",
     session: SESSION,
   });
 
-  assert.equal(status, "ready", "a signed-out user must still be able to add a contest");
-  assert.equal(contest.problems[0].rating, null);
-  assert.equal(contest.problems[0].ratingSource, null);
+  assert.equal(result.status, "sourceUnreachable");
+  // "returns a status" and "actually retries" are different claims, so the
+  // second is asserted rather than assumed.
+  assert.equal(shouldWait(result.status), true);
+  assert.match(result.reason, /signed in/, "the message must say a tab would fix it");
+  assert.equal(result.contest, undefined, "nothing is stored");
 });
 
 test("solved keys are namespaced task ids, so a rerun clears too", async () => {
@@ -238,4 +267,51 @@ test("a retry is stamped even when it resolves nothing", async () => {
     contest.publishedDataCheckedAt > 0,
     "an unstamped failure would monopolise the single retry slot forever",
   );
+});
+
+test("a contest the old policy would have refused entirely still stores", async () => {
+  // Ten rows, nobody solving: under the old forty-row floor *and* the
+  // zero-solve refusal, so every task came back null and the queue showed
+  // "???" for the whole contest. With canEstimate true that would now be a hard
+  // refusal instead — so the estimator has to answer, and this is the test that
+  // says it does.
+  routes = [
+    ["/contests/abc432/tasks", tasksPage(taskRow("A", "abc432_a", "Alpha"))],
+    ["/standings/json", standingsJson(["abc432_a"], 10, 0)],
+  ];
+
+  const { status, contest } = await fetchContestRecord({
+    contestId: "abc432",
+    subtype: "ABC",
+    session: SESSION,
+  });
+
+  assert.equal(status, "ready", "a small, nobody-solved contest must still be addable");
+  assert.equal(typeof contest.problems[0].rating, "number");
+  assert.equal(contest.problems[0].ratingSource, "estimated");
+});
+
+test("nothing AtCoder stores carries a null rating", async () => {
+  // The property canEstimate now enforces, asserted over the record rather than
+  // over the estimator: whatever the field looks like, every stored problem
+  // leaves with a number.
+  for (const [rows, solvers] of [[60, 30], [60, 0], [60, 60], [8, 3]]) {
+    routes = [
+      ["/contests/abc432/tasks", tasksPage(taskRow("A", "abc432_a", "Alpha") + taskRow("B", "abc432_b", "Beta"))],
+      ["/standings/json", standingsJson(["abc432_a", "abc432_b"], rows, solvers)],
+    ];
+
+    const { status, contest } = await fetchContestRecord({
+      contestId: "abc432",
+      subtype: "ABC",
+      session: SESSION,
+    });
+
+    assert.equal(status, "ready", `${rows} rows / ${solvers} solvers should store`);
+    assert.deepEqual(
+      contest.problems.filter((p) => p.rating === null),
+      [],
+      `${rows} rows / ${solvers} solvers left a null rating`,
+    );
+  }
 });
