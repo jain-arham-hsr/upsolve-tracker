@@ -10,25 +10,14 @@
  * ~9 for a Starters division, still fewer than a Codeforces add.
  */
 import { getContest, getProblem, ACCEPTED } from "./api.js";
+import { parseDifficulty, cleanTags, syncPublishedDifficulty } from "./published-sync.js";
+import { practiceFlag, refreshPracticeFlags } from "./practice-flags.js";
 import {
   notEndedYet,
   notPublishedYet,
   sourceUnreachable,
   unavailable,
 } from "../../contest-status.js";
-
-/**
- * `difficulty_rating` arrives as a string and uses two out-of-band values:
- * `-1` for "not rated" (74% of the catalogue) and `9999` for a handful more.
- * Both must become null. `9999` is especially dangerous — it is also the
- * queue's own sort-last sentinel, so passing it through would look like a
- * legitimate, very hard problem.
- */
-const NOT_RATED = new Set([-1, 9999]);
-
-/** Setter handles and contest codes get tagged alongside real topics. */
-const TAG_NOISE = /^(?:start|cook|ltime|snck)\d+$|_adm$/i;
-
 
 export async function fetchContest({
   contestId,
@@ -188,177 +177,21 @@ async function buildProblem(contestCode, problem, solved) {
 }
 
 /**
- * Some old problems were never mirrored into CodeChef's practice archive.
- * `START32C/problems/MAXTHEMIN` still shows its statement inside the contest,
- * but `/problems/MAXTHEMIN` 404s — and a contest stops accepting submissions
- * when it ends, so there is nowhere left to submit it. It is dead work, and
- * because `solved` is only ever set true nothing would ever clear it from the
- * queue.
- *
- * `is_added_to_practice` on the contest payload answers this exactly, and comes
- * free — `fetchContestRecord` already has that payload in hand. Two nearby
- * fields do **not** answer it, so don't reach for them again: `problem_url` is
- * `/problems/MAXTHEMIN` even for the problem that 404s there, and
- * `is_direct_submittable` is false for everything when signed out, since it
- * tracks login state rather than mirroring.
- *
- * The key is written only when the answer is no. Absent means upsolvable, which
- * is every problem on Codeforces and AtCoder — both serve their whole history
- * from a stable per-contest route.
- */
-function practiceFlag(problem) {
-  return problem?.is_added_to_practice === false ? { upsolvable: false } : {};
-}
-
-function parseDifficulty(raw) {
-  const value = Number.parseInt(raw, 10);
-  if (!Number.isFinite(value) || NOT_RATED.has(value)) return null;
-  return value;
-}
-
-function cleanTags(detail, contestCode) {
-  const raw = [...(detail?.user_tags ?? []), ...(detail?.computed_tags ?? [])];
-  const seen = new Set();
-
-  return raw.filter((tag) => {
-    if (typeof tag !== "string") return false;
-    const trimmed = tag.trim();
-    if (!trimmed) return false;
-    if (trimmed.toLowerCase() === contestCode.toLowerCase()) return false;
-    if (TAG_NOISE.test(trimmed)) return false;
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-/**
- * How long a contest with unrated problems waits before being asked again.
- *
- * Governs the **difficulty** re-check only. That one costs a request per
- * still-unrated problem, so it is throttled to a week — the same shape as the
- * Codeforces tag re-check. The practice re-check has its own, much faster
- * cadence and its own cost argument; see `refreshPracticeFlags`.
- */
-const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
-
-/**
  * Re-checks what only settles after a contest is added.
  *
- * Two independent passes, deliberately on different cadences: whether a problem
- * reached CodeChef's practice archive is re-read on **every** refresh, while a
- * missing published difficulty is re-read at most weekly. Sharing one gate
- * would let the slower pass suppress the faster.
+ * Two independent passes, deliberately on different cadences and so in
+ * different files: whether a problem reached CodeChef's practice archive is
+ * re-read on **every** refresh, while a missing published difficulty is re-read
+ * at most weekly. Sharing one gate would let the slower pass suppress the
+ * faster, which is the mistake this shape exists to make impossible.
+ *
+ * Contests are already filtered to this platform by `progress-manager.js`.
  *
  * @returns {number} records updated, across both passes. Nothing in production
  *   reads it; it exists so the tests can tell a real update from a no-op.
  */
 export async function syncMetadata(session, contests, onProgress = () => {}) {
-  const now = Date.now();
-
-  let updated = await refreshPracticeFlags(contests, onProgress);
-
-  const stale = contests.filter(
-    (contest) =>
-      contest.problems.some((problem) => problem.rating === null) &&
-      now - (contest.publishedDataCheckedAt ?? 0) > RECHECK_AFTER_MS,
-  );
-  if (stale.length === 0) return updated;
-
-  for (const contest of stale) {
-    for (const problem of contest.problems) {
-      if (problem.rating !== null) continue;
-
-      onProgress(`Re-checking ${problem.index}…`);
-      try {
-        const detail = await getProblem(contest.id, problem.index);
-        const rating = parseDifficulty(detail?.difficulty_rating);
-        if (rating === null) continue;
-
-        problem.rating = rating;
-        problem.ratingSource = "official";
-        problem.tags = cleanTags(detail, contest.id);
-        updated++;
-      } catch (error) {
-        console.warn(`[CodeChef] re-check of ${problem.index} failed:`, error.message);
-      }
-    }
-    contest.publishedDataCheckedAt = now;
-  }
-
-  return updated;
-}
-
-/**
- * Re-reads `is_added_to_practice` for contests that might have it wrong.
- *
- * Writes in both directions — a problem CodeChef later mirrors has to come back
- * to the queue, so this cannot be write-once the way `solved` is.
- *
- * Two reasons it runs on every refresh rather than on the weekly stamp. A wrongly-flagged problem would otherwise
- * sit out of the queue for a week; and a contest added *hours* after it ends may
- * plausibly report every problem as unmirrored simply because CodeChef has not
- * got to them yet, which would empty the queue for exactly the contest you most
- * want to upsolve. Per-refresh means that self-corrects on the next one.
- * (Unconfirmed: the freshest contests reachable when this was written —
- * START252D and DSAMONDAY016, four and six days old — already reported every
- * problem mirrored, so the delay could not be reproduced.)
- *
- * The cost is bounded by the selection: a contest is asked about only while it
- * still carries a flagged problem, so a fully-mirrored queue — which is the
- * normal case — costs nothing at all. Reading the **contest** payload rather
- * than the per-problem endpoint is what makes even the flagged case cheap: one
- * request per affected contest, against one per affected *problem*. `getContest`
- * is memoised for a minute on top of that.
- *
- * Note this deliberately never re-checks a contest with nothing flagged. The
- * only thing that would find is CodeChef *removing* a problem from practice,
- * which does not happen; paying a request per contest per refresh to look for
- * it would be the sweep this client exists to avoid.
- */
-async function refreshPracticeFlags(contests, onProgress) {
-  const pending = contests.filter((contest) =>
-    contest.problems.some((problem) => problem.upsolvable === false),
-  );
-  if (pending.length === 0) return 0;
-
-  let changed = 0;
-
-  for (const contest of pending) {
-    try {
-      const payload = await getContest(contest.id);
-      const problems = payload?.problems ?? {};
-
-      for (const problem of contest.problems) {
-        const entry = problems[problem.index];
-        // A problem missing from the payload tells us nothing — keep what we
-        // already knew rather than guessing it back into the queue.
-        if (!entry) continue;
-
-        const wasUpsolvable = problem.upsolvable !== false;
-        const isUpsolvable = entry.is_added_to_practice !== false;
-        if (wasUpsolvable === isUpsolvable) continue;
-
-        // Deleted rather than set true, so the stored shape stays "present only
-        // when it means something" — the same rule buildProblem writes under.
-        if (isUpsolvable) delete problem.upsolvable;
-        else problem.upsolvable = false;
-
-        onProgress(
-          isUpsolvable
-            ? `${problem.index} is on practice now…`
-            : `${problem.index} isn't on practice…`,
-        );
-        changed++;
-      }
-    } catch (error) {
-      console.warn(
-        `[CodeChef] practice re-check of ${contest.id} failed:`,
-        error.message,
-      );
-    }
-  }
-
-  return changed;
+  const mirrored = await refreshPracticeFlags(contests, onProgress);
+  const rated = await syncPublishedDifficulty(contests, onProgress);
+  return mirrored + rated;
 }

@@ -28,6 +28,7 @@ import { sourceUnreachable } from "../../contest-status.js";
 import { fitDifficulty } from "../../rating-models/rasch.js";
 import { fitWithUpperAsymptote } from "../../rating-models/rasch-upper-asymptote.js";
 import { fetchStandings } from "./scraping.js";
+import { buildRows, selectDataset, toAbilities, isAgcFirstProblem } from "./field.js";
 
 /** AtCoder's own scale: base 6 over 400, the same constants its ratings use. */
 const SCALE = { base: 6, divisor: 400, lo: -10000, hi: 10000 };
@@ -110,42 +111,6 @@ export function estimateContest(standings) {
 }
 
 /**
- * One row per entrant, carrying every task.
- *
- * **This is the part that must not be simplified.** Every participant appears in
- * every task's dataset, including the ones they never opened — those are the
- * negative samples, and without them the fit sees only people who engaged and
- * reads every problem as far easier than it is. It is also exactly the
- * "model attempts, not ability" change that `estimator-accuracy.test.js` already
- * records as measured and wrong for Codeforces: mean error 213 → 374.
- */
-function buildRows(standings) {
-  return standings.StandingsData.map((entry) => {
-    const scores = new Map();
-    const accepted = new Map();
-
-    for (const [taskId, result] of Object.entries(entry.TaskResults ?? {})) {
-      const score = result?.Score ?? 0;
-      scores.set(taskId, score);
-      // Status is consulted only when the score is positive, matching the
-      // source: a zero-scoring row is not accepted whatever its status says.
-      accepted.set(taskId, score > 0 && result?.Status === 1 ? 1 : 0);
-    }
-
-    return {
-      rating: entry.OldRating ?? 0,
-      previousContests: entry.Competitions ?? 0,
-      isRated: Boolean(entry.IsRated),
-      // Entered and never submitted. They say nothing about difficulty, so they
-      // are excluded everywhere except AGC's first problem.
-      retreated: (entry.TotalResult?.Count ?? 0) === 0,
-      scores,
-      accepted,
-    };
-  });
-}
-
-/**
  * Fit one task, and **always answer where there is anyone to answer from**.
  *
  * ## Why this diverges from the source
@@ -203,10 +168,7 @@ function fitTask(rows, taskId) {
   const degenerate = solved === 0 || solved === responses.length;
   const target = solved === 0 ? 0.5 : solved === responses.length ? solved - 0.5 : solved;
 
-  const abilities = dataset.map((row) => ({
-    rating: inverseAdjustRating(row.rating, row.previousContests),
-    weight: 1,
-  }));
+  const abilities = toAbilities(dataset);
 
   // The upper-asymptote model fits a non-attempt rate from the spread of
   // responses, so it has nothing to work with when they are all identical.
@@ -218,66 +180,4 @@ function fitTask(rows, taskId) {
   // Clamped, not discarded: a fit above the ceiling still means "harder than
   // anything on this scale", which orders correctly.
   return Math.min(difficulty, MAX_DIFFICULTY);
-}
-
-/**
- * Which entrants a task is fitted against.
- *
- * Two hand-tuned exceptions, carried across from the source because dropping
- * them would silently change the numbers:
- *
- *   - **ABC's A and B, from abc042 on.** Strong contestants often skip them
- *     entirely, so their non-solves are not evidence of difficulty. Restricted
- *     to rated entrants who actually submitted something.
- *   - **AGC's first problem.** Its negative samples are unreliable in the other
- *     direction, so retreated entrants stay in and the non-attempt rate is
- *     fitted explicitly instead.
- *
- * Keyed on the **task id**, never the displayed index: in a daily-training rerun
- * `abc432_c` is listed as problem E, and only the id keeps an easy ABC-A
- * classified as one wherever it reappears.
- */
-function selectDataset(recurring, taskId) {
-  if (isVeryEasyProblem(taskId)) {
-    return recurring.filter((row) => row.isRated && !row.retreated);
-  }
-  if (isAgcFirstProblem(taskId)) {
-    return recurring;
-  }
-  return recurring.filter((row) => !row.retreated);
-}
-
-function isVeryEasyProblem(taskId) {
-  if (!taskId.startsWith("abc")) return false;
-  const last = taskId[taskId.length - 1];
-  if (last !== "a" && last !== "b") return false;
-  return Number(taskId.slice(3, 6)) >= 42;
-}
-
-function isAgcFirstProblem(taskId) {
-  return taskId.startsWith("agc") && taskId.endsWith("_a");
-}
-
-/**
- * Recover the rating AtCoder would show a settled account.
- *
- * AtCoder heavily discounts a new competitor's displayed rating — by design, to
- * avoid overstating a small sample. Fitting against the displayed number would
- * measure that discount rather than ability, so it is reversed first. This is
- * the inverse of the adjustment in AtCoder's own rating formula.
- */
-export function inverseAdjustRating(rating, previousContests) {
-  if (rating <= 0) return NaN;
-
-  let adjusted = rating;
-  if (adjusted <= 400) adjusted = 400 * (1 - Math.log(400 / adjusted));
-
-  const correction =
-    ((Math.sqrt(1 - Math.pow(0.9, 2 * previousContests)) /
-      (1 - Math.pow(0.9, previousContests)) -
-      1) /
-      (Math.sqrt(19) - 1)) *
-    1200;
-
-  return adjusted + correction;
 }
