@@ -151,8 +151,8 @@ export async function getAttemptedProblems(onProgress = () => {}) {
  * The lightest page carrying `window.codeChefUserData`: ~9 KB, against 84 KB
  * for the homepage, which doesn't carry it at all.
  */
-export async function getDashboardHtml() {
-  return client.get(`${BASE}/dashboard`);
+export async function getDashboardPage() {
+  return client.getDocument(`${BASE}/dashboard`);
 }
 
 /** Test seam. */

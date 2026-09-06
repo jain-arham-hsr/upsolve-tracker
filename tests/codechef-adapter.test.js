@@ -7,7 +7,13 @@
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { extractSession, extractUserData } from "../core/platforms/codechef/dom-parsers/page-globals.js";
+import { parseHTML } from "linkedom";
+import { DashboardPage } from "../core/platforms/codechef/dom-parsers/page-globals.js";
+
+// The bootstrap object lives in a `<script>`, so these now go through a real
+// document the way production does, rather than being regexed off a string.
+const extractSession = (html) =>
+  DashboardPage.parse(parseHTML(`<html><body>${html ?? ""}</body></html>`).document);
 import { resetApiState } from "../core/platforms/codechef/api.js";
 import { getAdapter } from "../core/platforms/adapters.js";
 
@@ -157,7 +163,7 @@ test("a changed page shape returns null rather than a plausible session", () => 
   assert.equal(extractSession("<html>no bootstrap here</html>"), null);
   assert.equal(extractSession(`<script>window.codeChefUserData = {broken`), null);
   assert.equal(extractSession(null), null);
-  assert.equal(extractUserData("nothing"), null);
+  assert.equal(extractSession("nothing"), null);
   // Signed out: a real object, but no username.
   assert.equal(extractSession(`<script>window.codeChefUserData = {"user":{"username":null}};</script>`), null);
 });

@@ -17,8 +17,8 @@
  * fallback here; it is the only interface.
  */
 import { getDocument, getJson } from "./http.js";
-import { findContestName, findContestTimes, findTasks } from "./dom-parsers/tasks.js";
-import { parseAcceptedTaskIds, parsePageCount } from "./dom-parsers/submissions.js";
+import { TasksPage } from "./dom-parsers/tasks.js";
+import { SubmissionsPage } from "./dom-parsers/submissions.js";
 
 const ORIGIN = "https://atcoder.jp";
 
@@ -41,16 +41,12 @@ const MAX_SUBMISSION_PAGES = 20;
 export async function fetchContestTasks(contestId) {
   const doc = await getDocument(`${ORIGIN}/contests/${encodeURIComponent(contestId)}/tasks`);
 
-  const problems = findTasks(doc);
-  if (problems === null) return null;
+  const page = TasksPage.parse(doc);
+  if (page === null) return null;
 
-  const { startTimeSeconds, endTimeSeconds } = findContestTimes(doc);
-  return {
-    name: findContestName(doc) ?? `Contest ${contestId}`,
-    startTimeSeconds,
-    endTimeSeconds,
-    problems,
-  };
+  // Only the display fallback is left here: a parser returns null rather than
+  // inventing a name, so choosing what to show instead is the caller's.
+  return { ...page, name: page.name ?? `Contest ${contestId}` };
 }
 
 /**
@@ -70,23 +66,25 @@ export async function fetchAcceptedTaskIds(contestId, handle) {
     `${ORIGIN}/contests/${encodeURIComponent(contestId)}/submissions` +
     `?f.User=${encodeURIComponent(handle)}&f.Status=AC`;
 
-  const first = await getDocument(base);
-  const accepted = parseAcceptedTaskIds(first);
+  const first = SubmissionsPage.parse(await getDocument(base));
 
   // A missing table is a layout change, not an empty history. Refuse rather
   // than report "nothing solved", which `solved` being sticky would make
   // permanent-looking.
-  if (accepted === null) {
+  if (first === null) {
     throw new Error(
       `Couldn't read your AtCoder submissions for ${contestId} — the page layout may have changed.`,
     );
   }
 
-  const pages = Math.min(parsePageCount(first), MAX_SUBMISSION_PAGES);
+  const accepted = first.acceptedTaskIds;
+  const pages = Math.min(first.pageCount, MAX_SUBMISSION_PAGES);
+
   for (let page = 2; page <= pages; page++) {
-    const next = parseAcceptedTaskIds(await getDocument(`${base}&page=${page}`));
+    // Only page one is asked how many pages there are; the rest contribute ids.
+    const next = SubmissionsPage.parse(await getDocument(`${base}&page=${page}`));
     if (next === null) break;
-    for (const id of next) accepted.add(id);
+    for (const id of next.acceptedTaskIds) accepted.add(id);
   }
 
   return accepted;

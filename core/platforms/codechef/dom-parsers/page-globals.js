@@ -1,92 +1,102 @@
 /**
- * Every rule for reading CodeChef's HTML lives here.
+ * CodeChef's `/dashboard`, and the bootstrap object its shell carries.
  *
  * CodeChef is an SPA — its pages are a ~4 KB shell with no content — so the
- * only thing worth extracting is the bootstrap object the shell carries:
- * `window.codeChefUserData` on `/dashboard`, which holds the signed-in handle
- * and rating.
+ * only thing worth reading is `window.codeChefUserData`, which holds the
+ * signed-in handle and rating.
  *
- * **Not a DOM parser, despite the folder**, and the same is true of AtCoder's
- * file of this name: there is no DOM worth walking here, so this takes the raw
- * HTML string and slices the global out of it. It is named for the globals
- * rather than for `/dashboard` to keep the two platforms' copies matching.
+ * **That global is a DOM node**, and this file used to pretend otherwise. It
+ * lives inside a `<script>` element like any other markup, so the parser
+ * selects the script and reads its text. Slicing it out of the raw HTML string
+ * was expedient, not necessary, and it was the only reason this file needed an
+ * apology for sitting in `dom-parsers/`.
  *
- * Extractors return **null, never a plausible default**. A guessed handle would
- * look like a logged-in session and a guessed rating would silently mis-sort
- * every CodeChef problem in the queue.
+ * Returns **null, never a plausible default**. A guessed handle would look like
+ * a logged-in session and a guessed rating would silently mis-sort every
+ * CodeChef problem in the queue.
  */
+import { PageParser } from "../../page-parser.js";
 
 const MARKER = "window.codeChefUserData";
 
-/**
- * Slices a balanced `{...}` starting at `start`, respecting strings and
- * escapes. A non-greedy regex would stop at the first `};` inside a nested
- * object or a string.
- */
-function sliceBalancedObject(text, start) {
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
+export class DashboardPage extends PageParser {
+  static selectors = {
+    // Every inline script; the one carrying the marker is picked by content,
+    // since CodeChef gives it no id or class to select on.
+    bootstrap: "script",
+  };
 
-  for (let i = start; i < text.length; i++) {
-    const char = text[i];
+  /**
+   * @param {Document} doc
+   * @returns {{username: string, rating: number|null}|null} null when signed
+   *   out **or** when the shell no longer carries the object. The caller must
+   *   tell both of those from "you have solved nothing".
+   */
+  static parse(doc) {
+    const user = this.#userData(doc)?.user;
+    if (!user?.username) return null;
 
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (char === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (char === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
+    const rating = Number.parseInt(user.rating, 10);
+    return {
+      username: user.username,
+      rating: Number.isFinite(rating) ? rating : null,
+    };
+  }
 
-    if (char === "{") depth++;
-    else if (char === "}") {
-      depth--;
-      if (depth === 0) return text.slice(start, i + 1);
+  /** @returns {object|null} the whole bootstrap object. */
+  static #userData(doc) {
+    const source = this.all(doc, this.selectors.bootstrap)
+      .map((node) => node.textContent ?? "")
+      .find((text) => text.includes(MARKER));
+    if (!source) return null;
+
+    const start = source.indexOf("{", source.indexOf(MARKER));
+    if (start === -1) return null;
+
+    const json = this.#sliceBalancedObject(source, start);
+    if (!json) return null;
+
+    try {
+      return JSON.parse(json);
+    } catch {
+      return null;
     }
   }
-  return null;
-}
 
-/** @returns {object|null} the parsed bootstrap object, or null. */
-export function extractUserData(html) {
-  if (typeof html !== "string") return null;
+  /**
+   * Slices a balanced `{...}` from `start`, respecting strings and escapes.
+   *
+   * A non-greedy regex would stop at the first `};` inside a nested object or
+   * inside a string, which is why this is hand-written.
+   */
+  static #sliceBalancedObject(text, start) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
 
-  const marker = html.indexOf(MARKER);
-  if (marker === -1) return null;
+    for (let i = start; i < text.length; i++) {
+      const char = text[i];
 
-  const start = html.indexOf("{", marker);
-  if (start === -1) return null;
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
 
-  const json = sliceBalancedObject(html, start);
-  if (!json) return null;
-
-  try {
-    return JSON.parse(json);
-  } catch {
+      if (char === "{") depth++;
+      else if (char === "}") {
+        depth--;
+        if (depth === 0) return text.slice(start, i + 1);
+      }
+    }
     return null;
   }
-}
-
-/**
- * @returns {{username: string, rating: number|null}|null} null when signed out
- *   or when the page shape has changed — the caller must tell those apart from
- *   "you have solved nothing".
- */
-export function extractSession(html) {
-  const data = extractUserData(html);
-  const user = data?.user;
-  if (!user?.username) return null;
-
-  const rating = Number.parseInt(user.rating, 10);
-  return {
-    username: user.username,
-    rating: Number.isFinite(rating) ? rating : null,
-  };
 }

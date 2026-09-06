@@ -13,11 +13,7 @@
  * parsed for.
  */
 import { CodeforcesHttp } from "./http.js";
-import {
-  extractProblemsFromList,
-  hasFinished,
-  findContestNameOnProblemsPage,
-} from "./dom-parsers/problems-page.js";
+import { ProblemsPage } from "./dom-parsers/problems-page.js";
 
 /**
  * Problem metadata from a contest's own problems page.
@@ -35,16 +31,17 @@ export async function scrapeProblemsPage(contestId) {
   const path = `/gym/${contestId}`;
   const doc = await CodeforcesHttp.getDocument(`https://codeforces.com${path}`);
 
-  const parsed = extractProblemsFromList(doc);
-  if (!parsed) return null;
+  const page = ProblemsPage.parse(doc, { contestPath: path });
+  if (!page) return null;
 
+  // Which selector finds the name is the parser's business and now lives
+  // there. What is left here is a *display* fallback and the stored shape,
+  // neither of which is a fact about the page — a parser that invented
+  // "Contest 712373" would be doing the thing this folder forbids.
   return {
-    // Not findContestName: this page names the contest somewhere else, and
-    // that chain's second choice is the "→ About Contest" sidebox heading.
-    contestName:
-      findContestNameOnProblemsPage(doc, path) ?? `Contest ${contestId}`,
-    problems: parsed.map(blankProblem),
-    finished: hasFinished(doc),
+    contestName: page.contestName ?? `Contest ${contestId}`,
+    problems: page.problems.map(blankProblem),
+    finished: page.finished,
   };
 }
 

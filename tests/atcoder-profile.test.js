@@ -6,7 +6,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DOMParser } from "linkedom";
-import { extractRating } from "../core/platforms/atcoder/dom-parsers/profile.js";
+import { ProfilePage } from "../core/platforms/atcoder/dom-parsers/profile.js";
+
+/** The page is never null; only the rating field is. */
+const extractRating = (doc) => ProfilePage.parse(doc).rating;
 
 const doc = (body) =>
   new DOMParser().parseFromString(`<html><body>${body}</body></html>`, "text/html");

@@ -39,6 +39,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { updateSolvedStatus } from "../core/progress-manager.js";
 
+import { DOMParser } from "linkedom";
+
+// CodeChef's dashboard is read as a Document now — its bootstrap object
+// lives in a <script> — so the shared client parses, and that needs a DOM.
+globalThis.DOMParser = DOMParser;
+
 let requests = [];
 
 /**

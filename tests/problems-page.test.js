@@ -6,11 +6,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DOMParser } from "linkedom";
-import {
-  extractProblemsFromList,
-  findContestNameOnProblemsPage,
-  hasFinished,
-} from "../core/platforms/codeforces-gyms/dom-parsers/problems-page.js";
+import { ProblemsPage } from "../core/platforms/codeforces-gyms/dom-parsers/problems-page.js";
+
+// One parse per page. `parse` is null exactly when the problems table is
+// unreadable, which is what extractProblemsFromList used to signal alone; the
+// name and phase are fields on the page it returns.
+const extractProblemsFromList = (doc) => ProblemsPage.parse(doc)?.problems ?? null;
+const findContestNameOnProblemsPage = (doc, contestPath) =>
+  ProblemsPage.parse(doc, { contestPath })?.contestName ?? null;
+const hasFinished = (doc) => ProblemsPage.parse(doc)?.finished ?? null;
+
+/**
+ * The name and the phase are *fields* on a parsed page, so a fixture that
+ * exercises them has to be a page `parse` recognises — which means a problems
+ * table. That matches production: the name is never read off a page that has
+ * no problem list, because such a page fails the add outright.
+ */
+const PROBLEM_ROW =
+  `<table class="problems"><tr><td class="id"><a href="/gym/1/problem/A">A</a></td>` +
+  `<td><a href="/gym/1/problem/A">Name</a></td></tr></table>`;
+const pageWith = (sidebar) => parse(`${sidebar}${PROBLEM_ROW}`);
 
 const parse = (body) =>
   new DOMParser().parseFromString(`<html><body>${body}</body></html>`, "text/html");
@@ -129,7 +144,7 @@ const REAL_SIDEBAR = `<div id="sidebar">
 </div>`;
 
 test("the problems page names the contest, not its About sidebox", () => {
-  const doc = parse(REAL_SIDEBAR);
+  const doc = pageWith(REAL_SIDEBAR);
   assert.equal(
     findContestNameOnProblemsPage(doc, "/gym/712373"),
     "ICPC PRELIMS PC : 1",
@@ -139,7 +154,7 @@ test("the problems page names the contest, not its About sidebox", () => {
 
 
 test("the contest name is found even if the sidebar box stops being a link", () => {
-  const doc = parse(`<div id="sidebar"><div class="roundbox">
+  const doc = pageWith(`<div id="sidebar"><div class="roundbox">
     <table class="rtable"><tr><th class="left">ICPC PRELIMS PC : 1</th></tr></table>
   </div><div class="caption titled">→ About Contest</div></div>`);
   assert.equal(
@@ -149,7 +164,7 @@ test("the contest name is found even if the sidebar box stops being a link", () 
 });
 
 test("falls back to the page title, minus Codeforces' own suffix", () => {
-  const doc = parse("<div>no sidebar</div>");
+  const doc = pageWith("<div>no sidebar</div>");
   // linkedom keeps <title> out of body, so set it directly.
   doc.title = "Problems - ICPC PRELIMS PC : 1 - Codeforces";
   assert.equal(

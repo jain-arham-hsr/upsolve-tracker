@@ -1,9 +1,5 @@
 /**
- * Every selector and parsing rule for AtCoder's submissions list.
- *
- * Quarantined for the same reason as its neighbour `tasks.js`: a layout change
- * should be a one-file fix.
- * Takes a `Document`, never a string, so nothing here parses.
+ * AtCoder's `/contests/<id>/submissions` page, filtered to one user.
  *
  * ## Why the verdict is re-read rather than trusted
  *
@@ -15,70 +11,86 @@
  * mistake is permanent and silent. Reading the verdict costs nothing and makes
  * the filter an optimisation rather than a load-bearing assumption.
  */
+import { PageParser } from "../../page-parser.js";
 
 /** AtCoder prints the verdict as a short label; only an exact "AC" counts. */
 const ACCEPTED = "AC";
 
-/**
- * Task ids with an accepted submission on this page.
- *
- * Identity is the task id from the row's link, never the displayed index — the
- * same rule `tasks.js` follows, and what lets one solve clear a problem from
- * every contest that reruns it.
- *
- * @returns {Set<string>|null} `null` when no submissions table can be found —
- *   distinct from an empty set, which means the table is present and you have no
- *   accepted submissions in this contest. Those two must not be conflated: one
- *   is a layout change, the other is a fact.
- */
-export function parseAcceptedTaskIds(doc) {
-  const table = doc.querySelector("table");
-  if (!table) return null;
+export class SubmissionsPage extends PageParser {
+  static selectors = {
+    table: "table",
+    row: "tbody tr",
+    cell: "td",
+    verdictLabel: "span",
+    taskLink: 'a[href*="/tasks/"]',
+    // AtCoder paginates in a `<ul class="pagination">` whose links carry page=N.
+    pageLink: ".pagination a[href]",
+  };
 
-  const rows = [...table.querySelectorAll("tbody tr")];
-  const accepted = new Set();
+  static #TASK_HREF = /\/contests\/[^/]+\/tasks\/([^/?#]+)/;
 
-  for (const row of rows) {
-    const link = row.querySelector('a[href*="/tasks/"]');
-    const match = link?.getAttribute("href")?.match(/\/contests\/[^/]+\/tasks\/([^/?#]+)/);
-    if (!match) continue;
+  /**
+   * @returns {{acceptedTaskIds: Set<string>, pageCount: number}|null}
+   *   `null` when there is no submissions table — a layout change. Distinct
+   *   from an empty set, which means the table is present and you have solved
+   *   nothing in this contest. Conflating those would let a broken selector
+   *   read as "no solves", and `solved` being sticky makes that permanent.
+   */
+  static parse(doc) {
+    const table = this.first(doc, this.selectors.table);
+    if (!table) return null;
 
-    if (!hasAcceptedVerdict(row)) continue;
-    accepted.add(match[1]);
+    return {
+      acceptedTaskIds: this.#accepted(table),
+      pageCount: this.#pageCount(doc),
+    };
   }
 
-  return accepted;
-}
+  /**
+   * Identity is the task id from the row's link, the same rule `tasks.js`
+   * follows, and what lets one solve clear a problem from every contest that
+   * reruns it.
+   */
+  static #accepted(table) {
+    const accepted = new Set();
 
-/**
- * A row counts only if some cell says exactly "AC".
- *
- * Exact, not `includes`: "WA" and "TLE" are distinct verdicts, but so is
- * "AC × 3" in some views, and a substring test would also match the word
- * inside a language name.
- */
-function hasAcceptedVerdict(row) {
-  const cells = [...row.querySelectorAll("td")];
-  return cells.some((cell) => {
-    const label = cell.querySelector("span");
-    const text = (label ?? cell).textContent?.trim();
-    return text === ACCEPTED;
-  });
-}
+    for (const row of this.all(table, this.selectors.row)) {
+      const link = this.first(row, this.selectors.taskLink);
+      const match = (link?.getAttribute("href") ?? "").match(this.#TASK_HREF);
+      if (!match) continue;
+      if (!this.#isAccepted(row)) continue;
 
-/**
- * How many pages the list runs to.
- *
- * AtCoder paginates in a `<ul class="pagination">` whose links carry `page=N`.
- * Absent pagination means a single page, which is the common case: filtered to
- * one user and to accepted submissions, a contest rarely exceeds one.
- *
- * @returns {number} at least 1.
- */
-export function parsePageCount(doc) {
-  const pages = [...doc.querySelectorAll(".pagination a[href]")]
-    .map((link) => Number(link.getAttribute("href")?.match(/[?&]page=(\d+)/)?.[1]))
-    .filter((page) => Number.isInteger(page) && page > 0);
+      accepted.add(match[1]);
+    }
 
-  return pages.length > 0 ? Math.max(...pages) : 1;
+    return accepted;
+  }
+
+  /**
+   * A row counts only if some cell says exactly "AC".
+   *
+   * Exact, not `includes`: "WA" and "TLE" are distinct verdicts, but so is
+   * "AC × 3" in some views, and a substring test would also match the word
+   * inside a language name.
+   */
+  static #isAccepted(row) {
+    return this.all(row, this.selectors.cell).some((cell) => {
+      const label = this.first(cell, this.selectors.verdictLabel);
+      return this.text(label ?? cell) === ACCEPTED;
+    });
+  }
+
+  /**
+   * Absent pagination means a single page, which is the common case: filtered
+   * to one user and to accepted submissions, a contest rarely exceeds one.
+   *
+   * @returns {number} at least 1.
+   */
+  static #pageCount(doc) {
+    const pages = this.all(doc, this.selectors.pageLink)
+      .map((link) => Number(link.getAttribute("href")?.match(/[?&]page=(\d+)/)?.[1]))
+      .filter((page) => Number.isInteger(page) && page > 0);
+
+    return pages.length > 0 ? Math.max(...pages) : 1;
+  }
 }

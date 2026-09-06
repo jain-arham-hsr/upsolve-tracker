@@ -52,7 +52,6 @@ const client = createSiteClient({
   },
 });
 
-export const getPage = (url) => client.get(url);
 export const getDocument = (url) => client.getDocument(url);
 export const getJson = (url) => client.getJson(url);
 

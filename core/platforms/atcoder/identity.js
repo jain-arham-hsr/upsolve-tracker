@@ -12,9 +12,9 @@
  * platform's flags rather than merging them, so the mistake is recoverable.
  */
 import { getSettings } from "../../settings/store.js";
-import { extractRating } from "./dom-parsers/profile.js";
-import { extractSignedInUser } from "./dom-parsers/page-globals.js";
-import { getPage } from "./http.js";
+import { ProfilePage } from "./dom-parsers/profile.js";
+import { PageGlobals } from "./dom-parsers/page-globals.js";
+import { getDocument } from "./http.js";
 
 const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
 
@@ -67,9 +67,14 @@ export async function verifyIdentity(session) {
     throw new Error("No AtCoder handle set. Add one in Settings.");
   }
 
-  let html;
+  // One fetch, one parse, read by two parsers. This used to fetch the page as a
+  // string and hand-build a Document from it, because the two disagreed about
+  // their input — the marker was read by regex off the raw HTML. It is a
+  // `<script>` element, so both take the same doc now, and the last
+  // `new DOMParser()` outside `site-client.js` went with the split.
+  let doc;
   try {
-    html = await getPage(`https://atcoder.jp/users/${encodeURIComponent(session.handle)}`);
+    doc = await getDocument(`https://atcoder.jp/users/${encodeURIComponent(session.handle)}`);
   } catch (error) {
     if (error?.status === 404) {
       throw new Error(`AtCoder has no user "${session.handle}".`);
@@ -77,7 +82,7 @@ export async function verifyIdentity(session) {
     throw error;
   }
 
-  const signedInAs = extractSignedInUser(html);
+  const { signedInAs } = PageGlobals.parse(doc);
 
   if (signedInAs && signedInAs.toLowerCase() !== session.handle.toLowerCase()) {
     // Flagged, not matched on the sentence — the same idiom as CodeChef's, so a
@@ -91,19 +96,12 @@ export async function verifyIdentity(session) {
     throw error;
   }
 
-  // The one place a platform still parses for itself, deliberately. This page
-  // is read twice from one fetch: `extractSignedInUser` wants the raw string,
-  // since the marker is a JavaScript global rather than markup, and
-  // `extractRating` wants a Document. Reaching for `getDocument` here would
-  // cost a second request for a page already in hand.
-  const doc = new DOMParser().parseFromString(html, "text/html");
-
-  // extractRating returns null rather than a default when the page shape
-  // changes — a substituted rating would mis-sort every AtCoder problem.
+  // The rating is null rather than a default when the page shape changes — a
+  // substituted one would mis-sort every AtCoder problem in the queue.
   return {
     // AtCoder's own casing where we have it, so "Tourist" and "tourist" do not
     // read as two different accounts on the next comparison.
     username: signedInAs || session.handle,
-    rating: extractRating(doc),
+    rating: ProfilePage.parse(doc).rating,
   };
 }

@@ -8,8 +8,8 @@
  * deleted outright, and `writeBackup()` runs after the sync, so one sync under
  * another account permanently corrupts the queue *and* overwrites the backup.
  */
-import { getDashboardHtml } from "./api.js";
-import { extractSession } from "./dom-parsers/page-globals.js";
+import { getDashboardPage } from "./api.js";
+import { DashboardPage } from "./dom-parsers/page-globals.js";
 import { getSettings } from "../../settings/store.js";
 
 const HANDLE_KEY = "upsolve_tracker.codechef_handle";
@@ -27,12 +27,10 @@ export async function createSession() {
 
 /** The same session from unsaved values, so Settings can verify what you typed. */
 export async function createSessionFrom(values) {
-  const html = await getDashboardHtml();
-
-  // extractSession returns null both when signed out and when the page shape
-  // has changed. Either way the caller must not read an empty solved list as
-  // "nothing solved".
-  const page = extractSession(html);
+  // Null both when signed out and when the shell no longer carries the
+  // bootstrap object. Either way the caller must not read an empty solved list
+  // as "nothing solved".
+  const page = DashboardPage.parse(await getDashboardPage());
 
   return {
     handle: values[HANDLE_KEY],
