@@ -85,7 +85,7 @@ export class CodeforcesService {
       //
       // `solve-stats.js` reads the flag to rebuild the contest from
       // `contest.status` instead. That used to be triggered by the standings
-      // *page* failing to parse, which meant a hidden gym fetched and parsed
+      // *page* failing to parse, which meant such a gym fetched and parsed
       // HTML purely to discover the fetch was pointless.
       if (/standings are not available/i.test(error.message)) {
         error.isStandingsHidden = true;

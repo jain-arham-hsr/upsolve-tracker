@@ -55,7 +55,7 @@ export async function fetchContestSubmissions(cfService, contestId) {
     if (submissions.length >= MAX_SUBMISSIONS) {
       throw new Error(
         `Gym ${contestId} has more than ${MAX_SUBMISSIONS} submissions, which is too many to ` +
-          `rebuild a hidden standings from.`,
+          `rebuild its standings from.`,
       );
     }
   }
