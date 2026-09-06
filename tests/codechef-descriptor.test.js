@@ -58,7 +58,6 @@ test("problem links point into the contest, not the practice page", () => {
 
 test("partial ratings are allowed — there is no estimator fallback here", () => {
   assert.equal(codechef.capabilities.canEstimate, false);
-  assert.equal(codechef.capabilities.bulkProblemData, false);
 });
 
 test("the queue label drops the division — a problem usually spans several", () => {

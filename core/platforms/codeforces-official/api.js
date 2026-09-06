@@ -12,8 +12,8 @@
  *
  * What they genuinely share is `_callMethod` and its SHA-512 signing, and that
  * is the one duplication here with a real failure mode: a fix applied to one
- * file only. `tests/codeforces-signing.test.js` pins the two against each other
- * for exactly that reason.
+ * file only. `tests/codeforces-api.test.js` pins the two against each other for
+ * exactly that reason.
  *
  * They must **not** get separate request budgets, which is what
  * `budget: "codeforces-api"` below prevents — two clients each honouring a 2 s

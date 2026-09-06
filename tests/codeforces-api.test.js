@@ -182,3 +182,63 @@ test("both clients agree on which parameters they append", async () => {
   assert.ok(!seen[0].includes("gym=true"), "official must not ask for the gym list");
   assert.ok(seen[1].includes("gym=true"), "gyms must ask for the gym list");
 });
+
+test("both clients hash the same string, not merely the same shape", async () => {
+  // The gap this closes. The two tests above compare the *shape* of a
+  // signature — six random characters plus 128 hex, and matching parameter
+  // names — which a client that had stopped appending `#${this.apiSecret}` to
+  // `textToHash` would still satisfy exactly. It would sign every request with
+  // a hash of the public half only, Codeforces would answer FAILED, and the
+  // add would fail with "Codeforces API Error" while both assertions passed.
+  //
+  // So read what actually reaches the hash. `crypto.subtle.digest` receives the
+  // encoded `textToHash`, which is the one place the secret, the sort order and
+  // the separators are all observable at once.
+  const hashed = [];
+  const realDigest = crypto.subtle.digest.bind(crypto.subtle);
+  const realRandom = Math.random;
+  const realNow = Date.now;
+
+  crypto.subtle.digest = async (algorithm, bytes) => {
+    hashed.push({ algorithm, text: new TextDecoder().decode(bytes) });
+    return realDigest(algorithm, bytes);
+  };
+  // `rand` and `time` are deliberately unpredictable, so pin both — otherwise
+  // the two strings differ for a reason that is not drift.
+  Math.random = () => 0.5;
+  Date.now = () => 1_700_000_000_000;
+
+  resetApiState(0);
+  resetGymApiState(0);
+  const stub = stubFetch();
+
+  try {
+    await new CodeforcesService("thekey", "thesecret").getUsersInfo(["tourist"]);
+    await new GymService("thekey", "thesecret").getUsersInfo(["tourist"]);
+
+    assert.equal(hashed.length, 2, "both clients should have signed once");
+    assert.equal(hashed[0].algorithm, "SHA-512");
+    assert.equal(hashed[1].algorithm, "SHA-512");
+
+    assert.equal(
+      hashed[0].text,
+      hashed[1].text,
+      "the two Codeforces clients no longer build the signed string the same way",
+    );
+
+    // And that the string is the documented one, so both drifting together in
+    // the same wrong direction still fails.
+    assert.match(
+      hashed[0].text,
+      /^\d{6}\/user\.info\?apiKey=thekey&handles=tourist&time=1700000000#thesecret$/,
+      `signed string is not rand/method?sortedParams#secret: ${hashed[0].text}`,
+    );
+  } finally {
+    crypto.subtle.digest = realDigest;
+    Math.random = realRandom;
+    Date.now = realNow;
+    stub.restore();
+    resetApiState();
+    resetGymApiState();
+  }
+});

@@ -178,9 +178,6 @@ export const codeforcesOfficial = {
     // problemset.problems carries tags, and covers every official problem in
     // one request.
     publishesTags: true,
-    bulkProblemData: true,
-    // contest.list.
-    bulkStartTimes: true,
     // Codeforces is the only platform whose participant field is readable, so
     // it is the only one that can estimate a difficulty the site has not
     // published. That single fact decides what a gap means: here the estimator

@@ -2,8 +2,12 @@
  * The platform registry.
  *
  * Adding a site means adding a descriptor here; nothing else should branch on
- * which platform a contest came from. Contests stored before platforms existed
- * carry no `platform` field, so every lookup falls back to Codeforces rather
+ * which platform a contest came from.
+ *
+ * Every lookup **throws** on a record with no `platform`, or one naming a
+ * platform this build does not know. There is deliberately no fallback: a
+ * default would file a malformed record under Codeforces and key it as
+ * `undefined:1993`, and an unknown id means data from a newer version.
  */
 import { codeforcesOfficial } from "./codeforces-official/descriptor.js";
 import { codeforcesGyms } from "./codeforces-gyms/descriptor.js";
@@ -20,9 +24,8 @@ export function listPlatforms() {
 
 /**
  * @param {string} [id]
- * @returns {object} The descriptor, or the Codeforces one for records written
- *   before `platform` existed. Throws only for an id that is present but
- *   unknown, which means data from a newer version.
+ * @returns {object} The descriptor. Throws for a missing id as well as an
+ *   unknown one — see above for why neither may be defaulted.
  */
 export function getPlatform(id) {
   const platform = BY_ID.get(id);

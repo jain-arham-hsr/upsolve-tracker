@@ -563,3 +563,66 @@ test("a site client routes through its own platform's descriptor", () => {
   // codeforces-official has no site client, being pure signed JSON API.
   assert.equal(clients.length, 3, `expected three site clients, found ${clients.join(", ")}`);
 });
+
+/**
+ * The two Codeforces folders duplicate three things on purpose, and until now
+ * nothing checked that the copies still matched.
+ *
+ * They are separate platforms with no shared folder between them — that is the
+ * design, and `codeforces-common/` is not coming back. What the design owes in
+ * exchange is a guarantee that a fix landing in one copy lands in both, which
+ * was previously discipline alone. Three comments in the tree claimed
+ * `tests/codeforces-signing.test.js` provided it. No such file has ever
+ * existed.
+ */
+const CF = ["codeforces-official", "codeforces-gyms"];
+
+const bothCopies = (relative) =>
+  CF.map((id) => readFileSync(path.join(PLATFORMS, id, relative), "utf8"));
+
+for (const file of ["identity.js", "submissions.js"]) {
+  test(`both Codeforces folders hold the same ${file}`, () => {
+    // Byte-identical, comments included: one handle, one key pair, one settings
+    // section, so there is nothing in either file that should differ. Anything
+    // that ever *should* differ is a sign the file is doing too much.
+    const [official, gyms] = bothCopies(file);
+
+    assert.equal(
+      official,
+      gyms,
+      `core/platforms/*/${file} are duplicated on purpose — change both, or ` +
+        `move what diverged into the platform that needs it`,
+    );
+  });
+}
+
+test("both Codeforces clients share one signing implementation", () => {
+  // The duplication with a real failure mode, per api.js's own header: a fix to
+  // the signature applied to one file only. A wrong `apiSig` comes back as an
+  // ordinary FAILED, so nothing else would notice.
+  //
+  // Scoped to the two signing methods rather than the whole file, because the
+  // endpoint halves are genuinely different — official has the problemset and
+  // the unsigned public standings, gyms has contest.status.
+  const method = (source, name) => {
+    const start = source.indexOf(`  async ${name}(`);
+    assert.notEqual(start, -1, `${name} not found`);
+
+    let depth = 0;
+    for (let i = source.indexOf("{", start); i < source.length; i++) {
+      if (source[i] === "{") depth++;
+      else if (source[i] === "}" && --depth === 0) return source.slice(start, i + 1);
+    }
+    throw new Error(`${name} is unbalanced`);
+  };
+
+  const [official, gyms] = bothCopies("api.js");
+
+  for (const name of ["_callMethod", "_sha512"]) {
+    assert.equal(
+      method(official, name),
+      method(gyms, name),
+      `${name} has drifted between the two Codeforces clients — change both`,
+    );
+  }
+});

@@ -151,11 +151,6 @@ export const atcoder = {
     // The stats panel drops its whole tag section rather than heading an
     // empty one, which reads as a failed load.
     publishesTags: false,
-    // Nothing bulk is fetched any more — AtCoder Problems is gone entirely, and
-    // a contest's own tasks page is the source. Declarative only; nothing reads
-    // this.
-    bulkProblemData: false,
-    bulkStartTimes: true,
     // AtCoder publishes no difficulty at all, so every rating here is fitted
     // locally — the same estimator Codeforces uses, over the contest's own
     // standings. That makes a leftover null a *fault* rather than a fact about

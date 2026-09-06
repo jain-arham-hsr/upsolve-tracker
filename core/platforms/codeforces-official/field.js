@@ -105,8 +105,10 @@ async function sampleOfficialStandings(cfService, standings, onProgress) {
 /**
  * Handles to one effective rating per party.
  *
- * Shared by both gym paths so they can't drift; the standings path reads the
- * parties off standings.rows, the hidden-standings path off contest.status.
+ * Duplicated verbatim in `codeforces-gyms/field.js`, which is where the two
+ * gym paths use it — the standings one reading parties off standings.rows, the
+ * hidden-standings one off contest.status. Here it serves the sampled official
+ * field. Change one copy and you must change the other.
  */
 async function ratePartyList(cfService, parties) {
   const allHandles = [

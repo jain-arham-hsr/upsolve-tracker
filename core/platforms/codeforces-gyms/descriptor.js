@@ -161,12 +161,6 @@ export const codeforcesGyms = {
     // vocabulary exists — they come off the standings response — so the stats
     // panel's tag section belongs.
     publishesTags: true,
-    // Gyms are absent from problemset.problems entirely; everything comes from
-    // the contest's own standings.
-    bulkProblemData: false,
-    // contest.list?gym=true — though private gyms and mashups are missing from
-    // it, and are dated from the standings at add time instead.
-    bulkStartTimes: true,
     // The participant field is readable, so a gap left after the estimator has
     // run is a bug worth refusing on rather than a problem the site has not
     // rated.

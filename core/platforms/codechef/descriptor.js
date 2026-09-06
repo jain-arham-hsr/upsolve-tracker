@@ -154,11 +154,6 @@ export const codechef = {
     // Tags come back with each problem, mixed with the setter's handle and
     // the contest code; cleanTags strips those.
     publishesTags: true,
-    // Difficulty and tags appear only on the per-problem endpoint — absent
-    // from every bulk and contest-level response, even when logged in.
-    bulkProblemData: false,
-    // The start time arrives with the contest payload itself.
-    bulkStartTimes: false,
     // No estimator: /api/rankings/ answers 403, so there is no field to fit
     // against. A -1 or 9999 sentinel therefore stores as null and renders
     // "???" rather than being guessed at.

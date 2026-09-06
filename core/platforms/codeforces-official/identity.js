@@ -16,7 +16,9 @@
  * shared folder between them, and identity is one of the few things they
  * genuinely share: one handle, one key pair, one settings section. So this file
  * is duplicated rather than imported across the boundary, and
- * `tests/codeforces-signing.test.js` asserts the two copies still agree.
+ * `tests/module-boundaries.test.js` asserts the two copies stay **byte**
+ * identical — so anything that ever ought to differ between them is a sign this
+ * file has taken on something that belongs to one platform alone.
  *
  * The duplication reaches further than it looks: `progress-manager.js` loops
  * platforms, so a refresh verifies the handle twice and reads the whole
