@@ -126,7 +126,7 @@ export async function sync(session, contests, onProgress = () => {}) {
   let updated = 0;
   for (const contest of pending) {
     try {
-      const standings = await session.sources.getPublicContestStandings(contest.id);
+      const standings = await session.sources.publicContestStandings(contest.id);
       // The same applier the add path uses, so the two cannot disagree about
       // what "published" means or which fields it sets.
       CodeforcesSources.applyStandingsProblemData(standings, contest.problems);
@@ -137,14 +137,14 @@ export async function sync(session, contests, onProgress = () => {}) {
       // is deliberately not written on failure, so the contest is asked again on
       // the next refresh rather than waiting out another week.
       console.warn(
-        `[Published Sync] contest.standings failed for ${contest.id}:`,
+        `[Codeforces] contest.standings failed for ${contest.id}:`,
         error.message,
       );
     }
   }
 
   console.log(
-    `[Published Sync] Re-asked ${updated} of ${pending.length} contest(s).`,
+    `[Codeforces] Re-asked ${updated} of ${pending.length} contest(s).`,
   );
   return updated;
 }

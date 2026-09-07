@@ -40,7 +40,7 @@ const CodeforcesHttp = { get: async () => { throw new Error("no page served"); }
 const real = (subtype, fake) =>
   Object.assign(
     new (subtype === "GYM" ? GymSources : OfficialSources)("k", "s"),
-    { getDocument: async (url) => new DOMParser().parseFromString(await CodeforcesHttp.get(url), "text/html") },
+    { page: async (url) => new DOMParser().parseFromString(await CodeforcesHttp.get(url), "text/html") },
     fake,
   );
 
@@ -136,11 +136,11 @@ test("a fully rated gym takes Codeforces' numbers and never measures the field",
   CodeforcesHttp.get = async () => standingsPage("702859");
 
   const contest = await record({
-    getContestStandings: async () => standingsApi([1300, 900, 2100]),
-    getUsersInfo: async () => {
+    contestStandings: async () => standingsApi([1300, 900, 2100]),
+    usersInfo: async () => {
       throw new Error("the field must not be measured when nothing needs estimating");
     },
-    getContestList: async () => [],
+    contestList: async () => [],
   });
 
   assert.deepEqual(contest.problems.map((p) => p.rating), [1300, 900, 2100]);
@@ -158,12 +158,12 @@ test("a mixed gym estimates only what Codeforces leaves unrated", async () => {
   let fieldMeasured = 0;
 
   const contest = await record({
-    getContestStandings: async () => standingsApi([1300, null, 2100]),
-    getUsersInfo: async (handles) => {
+    contestStandings: async () => standingsApi([1300, null, 2100]),
+    usersInfo: async (handles) => {
       fieldMeasured++;
       return handles.map((h) => ({ handle: h, rating: 1500 }));
     },
-    getContestList: async () => [],
+    contestList: async () => [],
   });
 
   assert.equal(fieldMeasured, 1, "the field is measured once, for the one gap");
@@ -197,23 +197,23 @@ test("a hidden-standings gym recovers its field from who submitted", async () =>
 
   const asked = [];
   const contest = await record({
-    getContestStandings: async () => {
-      // The flag `api.js#getContestStandings` sets from Codeforces' comment;
+    contestStandings: async () => {
+      // The flag `api.js#contestStandings` sets from Codeforces' comment;
       // these stubs bypass the real client, so they raise it themselves.
       throw Object.assign(new Error("contestId: Standings are not available"), {
         isStandingsHidden: true,
       });
     },
-    getContestStatus: async () => [
+    contestStatus: async () => [
       submission("A", 1, 1300), submission("A", 2, 1300),
       submission("B", 1, null), submission("B", 2, null, "WRONG_ANSWER"),
       submission("C", 1, 2100, "WRONG_ANSWER"),
     ],
-    getUsersInfo: async (handles) => {
+    usersInfo: async (handles) => {
       asked.push(...handles);
       return handles.map((h) => ({ handle: h, rating: 1600 }));
     },
-    getContestList: async () => [],
+    contestList: async () => [],
   });
 
   // The handles came from the submissions, not from standings.
@@ -231,14 +231,14 @@ test("a hidden-standings gym with nothing to estimate never asks for the field",
     url.includes("/standings") ? NO_TABLE : problemsPage("712373");
 
   const contest = await record({
-    getContestStandings: async () => {
-      // The flag `api.js#getContestStandings` sets from Codeforces' comment;
+    contestStandings: async () => {
+      // The flag `api.js#contestStandings` sets from Codeforces' comment;
       // these stubs bypass the real client, so they raise it themselves.
       throw Object.assign(new Error("contestId: Standings are not available"), {
         isStandingsHidden: true,
       });
     },
-    getContestStatus: async () =>
+    contestStatus: async () =>
       INDEXES.map((index, i) => ({
         problem: { index, name: `Problem ${index}`, rating: 1000 + i * 100, tags: [] },
         author: {
@@ -247,10 +247,10 @@ test("a hidden-standings gym with nothing to estimate never asks for the field",
         },
         verdict: "OK",
       })),
-    getUsersInfo: async () => {
+    usersInfo: async () => {
       throw new Error("nothing needs estimating, so the field must not be read");
     },
-    getContestList: async () => [],
+    contestList: async () => [],
   });
 
   assert.deepEqual(contest.problems.map((p) => p.rating), [1000, 1100, 1200]);
@@ -273,7 +273,7 @@ test("an official round Codeforces has not published waits, and is not scraped",
   const result = await status(
     { contestId: "9999", subtype: "OFFICIAL" },
     {
-      getProblemsetProblems: async () => ({ problems: [{ contestId: 2193, index: "A" }] }),
+      problemsetProblems: async () => ({ problems: [{ contestId: 2193, index: "A" }] }),
     },
   );
   assert.equal(result.status, "notPublishedYet");
@@ -285,11 +285,11 @@ test("a gym is never asked about the problemset — it would never be in one", a
   // gate to them would make every gym unaddable.
   CodeforcesHttp.get = async () => standingsPage("702859");
   const contest = await record({
-    getProblemsetProblems: async () => {
+    problemsetProblems: async () => {
       throw new Error("a gym must not consult the problemset");
     },
-    getContestStandings: async () => standingsApi([1300, 900, 2100]),
-    getContestList: async () => [],
+    contestStandings: async () => standingsApi([1300, 900, 2100]),
+    contestList: async () => [],
   });
   assert.equal(contest.problems.length, 3);
 });
@@ -305,11 +305,11 @@ test("a gym still running waits rather than storing estimates fitted to it", asy
   const result = await status(
     { contestId: "702859", subtype: "GYM" },
     {
-      getContestStandings: async () => running,
-      getUsersInfo: async () => {
+      contestStandings: async () => running,
+      usersInfo: async () => {
         throw new Error("a running gym must not measure the field");
       },
-      getContestList: async () => [],
+      contestList: async () => [],
     },
   );
   assert.equal(result.status, "notEndedYet");
@@ -328,9 +328,9 @@ test("a finished gym with no visible field refuses instead of waiting forever", 
   const result = await status(
     { contestId: "702859", subtype: "GYM" },
     {
-      getContestStandings: async () => empty,
-      getUsersInfo: async () => [],
-      getContestList: async () => [],
+      contestStandings: async () => empty,
+      usersInfo: async () => [],
+      contestList: async () => [],
     },
   );
   assert.equal(result.status, "unavailable");
@@ -344,8 +344,8 @@ test("an unreadable phase proceeds rather than blocking the add", async () => {
   delete noPhase.contest.phase;
 
   const contest = await record({
-    getContestStandings: async () => noPhase,
-    getContestList: async () => [],
+    contestStandings: async () => noPhase,
+    contestList: async () => [],
   });
   assert.equal(contest.problems.length, 3);
 });
@@ -370,7 +370,7 @@ test("a blocked scrape answers sourceUnreachable, and that status waits", async 
     subtype: "GYM",
     session: {
       sources: {
-        getContestStandings: async () => {
+        contestStandings: async () => {
           throw Object.assign(new Error("contestId: Standings are not available"), {
             isStandingsHidden: true,
           });
@@ -397,7 +397,7 @@ test("a scrape failure that is not a block still escapes", async () => {
         subtype: "GYM",
         session: {
           sources: {
-            getContestStandings: async () => {
+            contestStandings: async () => {
               throw Object.assign(new Error("contestId: Standings are not available"), {
                 isStandingsHidden: true,
               });
@@ -426,7 +426,7 @@ test("an official contest takes Codeforces' published ratings, not estimates", a
     subtype: "OFFICIAL",
     session: {
       sources: {
-        getProblemsetProblems: async () => ({
+        problemsetProblems: async () => ({
           problems: INDEXES.map((index, i) => ({
             contestId: 2197,
             index,
@@ -436,18 +436,18 @@ test("an official contest takes Codeforces' published ratings, not estimates", a
         }),
         // The official path builds the whole record from this now — roster,
         // name, ratings and solve counts — and never touches the scrape.
-        getPublicContestStandings: async () => ({
+        publicContestStandings: async () => ({
           contest: { name: "Round", startTimeSeconds: 1000 },
           problems: INDEXES.map((index, i) => ({
             index, name: `Problem ${index}`, rating: 800 + i * 400, tags: ["math"],
           })),
           rows: [],
         }),
-        getContestList: async () => [],
-        getUsersInfo: async () => {
+        contestList: async () => [],
+        usersInfo: async () => {
           throw new Error("the field must not be measured when CF published every rating");
         },
-        getContestStandings: async () => {
+        contestStandings: async () => {
           throw new Error("no estimate should be needed");
         },
       },
@@ -475,12 +475,12 @@ test("a gym's standings are fetched once, not once per concern", async () => {
 
   let standingsCalls = 0;
   const contest = await record({
-    getContestStandings: async () => {
+    contestStandings: async () => {
       standingsCalls++;
       return standingsApi([1300, null, null]);
     },
-    getUsersInfo: async (handles) => handles.map((handle) => ({ handle, rating: 1500 })),
-    getContestList: async () => [],
+    usersInfo: async (handles) => handles.map((handle) => ({ handle, rating: 1500 })),
+    contestList: async () => [],
   });
 
   // Something must actually have needed estimating, or this proves nothing:
@@ -506,11 +506,11 @@ test("a shared Div 1 / Div 2 problem takes its published rating, not an estimate
     session: {
       sources: {
         // Only A is filed under this contest; B and C live under the Div 1 twin.
-        getProblemsetProblems: async () => ({
+        problemsetProblems: async () => ({
           problems: [{ contestId: 2197, index: "A", rating: 800, tags: ["math"] }],
         }),
         // …but the contest's own standings carry all three, correctly.
-        getPublicContestStandings: async () => ({
+        publicContestStandings: async () => ({
           problems: [
             { index: "A", name: "Problem A", rating: 800, tags: ["math"] },
             { index: "B", name: "Problem B", rating: 1600, tags: ["dp"] },
@@ -518,11 +518,11 @@ test("a shared Div 1 / Div 2 problem takes its published rating, not an estimate
           ],
           rows: [],
         }),
-        getContestList: async () => [],
-        getUsersInfo: async () => {
+        contestList: async () => [],
+        usersInfo: async () => {
           throw new Error("the field must not be measured — every rating is published");
         },
-        getContestStandings: async () => {
+        contestStandings: async () => {
           throw new Error("the signed call is refused for a non-gym contest");
         },
       },
@@ -548,13 +548,13 @@ test("losing the standings answers sourceUnreachable, so the add retries", async
     subtype: "OFFICIAL",
     session: {
       sources: {
-        getProblemsetProblems: async () => ({
+        problemsetProblems: async () => ({
           problems: [{ contestId: 2197, index: "A", rating: 800, tags: [] }],
         }),
-        getPublicContestStandings: async () => {
+        publicContestStandings: async () => {
           throw Object.assign(new Error("network"), { isSourceUnreachable: true });
         },
-        getContestList: async () => [],
+        contestList: async () => [],
       },
     },
   });
@@ -583,10 +583,10 @@ test("the official path makes no HTML request at all, estimator included", async
     subtype: "OFFICIAL",
     session: {
       sources: {
-        getProblemsetProblems: async () => ({
+        problemsetProblems: async () => ({
           problems: [{ contestId: 2197, index: "A", rating: 800, tags: ["math"] }],
         }),
-        getPublicContestStandings: async () => ({
+        publicContestStandings: async () => ({
           contest: { name: "Round", startTimeSeconds: 1000 },
           // B is unrated everywhere, so the estimator must run for it.
           problems: [
@@ -603,9 +603,9 @@ test("the official path makes no HTML request at all, estimator included", async
         }),
         // Empty: the round is not rated yet, which is what sends the field to
         // the standings rows rather than to ratingChanges.
-        getContestRatingChanges: async () => [],
-        getUsersInfo: async (handles) => handles.map((handle) => ({ handle, rating: 1500 })),
-        getContestList: async () => [],
+        contestRatingChanges: async () => [],
+        usersInfo: async (handles) => handles.map((handle) => ({ handle, rating: 1500 })),
+        contestList: async () => [],
       },
     },
   });

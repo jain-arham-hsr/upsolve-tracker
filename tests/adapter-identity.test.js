@@ -57,7 +57,7 @@ test("CodeChef accepts a matching session, with no extra request", async () => {
 });
 
 test("Codeforces refuses a handle the API doesn't return", async () => {
-  const session = { handle: "nope", sources: { async getUsersInfo() { return []; } } };
+  const session = { handle: "nope", sources: { async usersInfo() { return []; } } };
   await assert.rejects(() => codeforces.verifyIdentity(session), /doesn't recognise/);
 });
 
@@ -66,7 +66,7 @@ test("Codeforces takes the API's own casing, so case isn't read as a new account
   // and needlessly clear every solved flag.
   const session = {
     handle: "TOURIST",
-    sources: { async getUsersInfo() { return [{ handle: "tourist", rating: 3800 }]; } },
+    sources: { async usersInfo() { return [{ handle: "tourist", rating: 3800 }]; } },
   };
   assert.deepEqual(await codeforces.verifyIdentity(session), {
     username: "tourist", rating: 3800,
@@ -78,7 +78,7 @@ test("an unrated Codeforces account verifies, with a null rating", async () => {
   // zero would read as a real rating and make every problem look impossible.
   const session = {
     handle: "newcomer",
-    sources: { async getUsersInfo() { return [{ handle: "newcomer" }]; } },
+    sources: { async usersInfo() { return [{ handle: "newcomer" }]; } },
   };
   assert.deepEqual(await codeforces.verifyIdentity(session), {
     username: "newcomer", rating: null,

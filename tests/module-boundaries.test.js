@@ -513,9 +513,9 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   // the client started answering with a parsed Document, at which point a
   // name-specific regex matches nothing and "exactly one page read" reads as
   // zero.
-  // `this.getDocument(...)` is the one way a page is read; the method's own
-  // definition is `getDocument(url)`, which this pattern does not match.
-  const fetched = [...sources.matchAll(/\bthis\.getDocument\(([^)]*)\)/g)].map((m) => m[1].trim());
+  // `this.page(...)` is the one way a page is read; the method's own
+  // definition is `page(url)`, which this pattern does not match.
+  const fetched = [...sources.matchAll(/\bthis\.page\(([^)]*)\)/g)].map((m) => m[1].trim());
 
   assert.equal(fetched.length, 1, `expected one page read, got ${fetched.length}`);
   assert.ok(

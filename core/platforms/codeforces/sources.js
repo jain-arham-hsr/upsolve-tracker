@@ -29,27 +29,32 @@ import { createSiteClient } from "../../services/site-client.js";
  * would serve one request per second to codeforces.com. Naming a shared budget
  * makes every client on this host queue as one.
  */
+const ORIGIN = "https://codeforces.com";
+
+/** The API publishes a rate limit; two seconds keeps every add inside it. */
+const GAP_MS = 2000;
+
 const signed = createSiteClient({
   fetchImpl: (...args) => fetch(...args),
-  pacer: { gapMs: 2000, budget: "codeforces-api", credentials: "omit" },
+  pacer: { gapMs: GAP_MS, budget: "codeforces-api", credentials: "omit" },
   refusal: () => null,
 });
 
 export class CodeforcesSources extends Source {
   constructor(apiKey, apiSecret) {
-    super({ client: signed, origin: "https://codeforces.com" });
+    super({ client: signed, origin: ORIGIN });
     this.apiKey = apiKey;
     this.apiSecret = apiSecret;
-    this.baseUrl = "https://codeforces.com/api/";
+    this.baseUrl = `${ORIGIN}/api/`;
   }
 
   /** The whole account's submissions, in one call. */
-  async getUserStatus(handle) {
+  async userStatus(handle) {
     return this._callMethod("user.status", { handle, from: 1, count: 1000 });
   }
 
   /** @param {string[]} handles */
-  async getUsersInfo(handles) {
+  async usersInfo(handles) {
     return this._callMethod("user.info", { handles: handles.join(";") });
   }
 

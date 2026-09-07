@@ -35,7 +35,7 @@ export class CodeforcesOfficial extends CodeforcesPlatform {
     // no equivalent gate on a gym: gyms are absent from the problemset
     // entirely, which is why the two pipelines are two classes.
     onProgress("Checking whether Codeforces has published it…");
-    if (!inProblemset(await sources.getProblemsetProblems(), contestId)) {
+    if (!inProblemset(await sources.problemsetProblems(), contestId)) {
       return notPublishedYet(
         `Codeforces hasn't published contest ${contestId} yet. It'll be added ` +
           `on a refresh once it appears.`,
@@ -48,7 +48,7 @@ export class CodeforcesOfficial extends CodeforcesPlatform {
     // under this contest's own index. Failure is hard: it is the only source
     // of the roster, and it is flagged so the add waits rather than refuses.
     onProgress("Reading the standings…");
-    const standings = await sources.getPublicContestStandings(contestId);
+    const standings = await sources.publicContestStandings(contestId);
     const problems = this.problemsFromStandings(contestId, standings);
 
     // A running round cannot reach here — it would not be in the problemset —

@@ -35,7 +35,7 @@ import { ProfilePage } from "./scrapers/profile.js";
 import { PageGlobals } from "./scrapers/page-globals.js";
 
 const ORIGIN = "https://atcoder.jp";
-const MIN_GAP_MS = 1500;
+const GAP_MS = 1500;
 
 /** Guards a runaway loop if pagination is ever misread. */
 const MAX_SUBMISSION_PAGES = 20;
@@ -62,7 +62,7 @@ export class AtCoderSources extends Source {
         // cross-site request carries no cookies — so without a tab open on
         // atcoder.jp those two answer with a sign-in form, and `refusal` says so.
         site: atcoder,
-        pacer: { gapMs: MIN_GAP_MS },
+        pacer: { gapMs: GAP_MS },
 
         /**
          * **AtCoder refuses by succeeding.** `fetch` follows the 302

@@ -30,6 +30,10 @@ import { ProblemsPage } from "./scrapers/problems-page.js";
  * finishes rather than letting a slow page count towards the next gap.
  * `tests/request-pacer.test.js` fails if that is collapsed.
  */
+/** Tuned against the live site; do not shorten when optimising. */
+const GAP_MS = [1000, 2500];
+const COOLDOWN = { everyNth: 15, gapMs: [6000, 12000] };
+
 const BLOCKED =
   "Codeforces is blocking requests. Please visit codeforces.com in your browser and try again.";
 
@@ -39,17 +43,17 @@ const html = createSiteClient({
   // direct fetch otherwise, which still reads anything public.
   site: codeforcesGyms,
   pacer: {
-    gapMs: [1000, 2500],
+    gapMs: GAP_MS,
     measureFrom: "end",
-    cooldown: { everyNth: 15, gapMs: [6000, 12000] },
+    cooldown: COOLDOWN,
     onWait: ({ count, ms, isCooldown }) => {
       const seconds = (ms / 1000).toFixed(2);
       if (isCooldown) {
         // `info`, not `warn`. chrome://extensions collects warnings alongside
         // errors, so a normal add used to file a row there every 15 requests.
-        console.info(`[codeforces] Cooldown threshold reached. Pausing for ${seconds}s…`);
+        console.info(`[Codeforces] Cooldown threshold reached. Pausing for ${seconds}s…`);
       } else {
-        console.log(`[codeforces] Request ${count}: waiting ${seconds}s`);
+        console.log(`[Codeforces] Request ${count}: waiting ${seconds}s`);
       }
     },
   },
@@ -73,16 +77,16 @@ const html = createSiteClient({
 
 export class GymSources extends CodeforcesSources {
   /**
-   * The one page this platform reads, through the HTML client above. A method
-   * rather than a module object, so a test injects a page the same way it
-   * injects an API answer: by assigning over the instance.
+   * The one page this platform reads, through the HTML client above. A method,
+   * so a test injects a page the same way it injects an API answer: by
+   * assigning over the instance.
    */
-  getDocument(url) {
+  page(url) {
     return html.getDocument(url);
   }
 
   /** Standings for a gym, signed. */
-  async getContestStandings(contestId) {
+  async contestStandings(contestId) {
     try {
       return await this._callMethod("contest.standings", {
         contestId,
@@ -105,7 +109,7 @@ export class GymSources extends CodeforcesSources {
    * Codeforces has hidden. `contest.standings` answers FAILED for those;
    * `contest.status` still answers.
    */
-  async getContestStatus(contestId, { from = 1, count = 10000 } = {}) {
+  async contestStatus(contestId, { from = 1, count = 10000 } = {}) {
     return this._callMethod("contest.status", { contestId, from, count });
   }
 
@@ -114,7 +118,7 @@ export class GymSources extends CodeforcesSources {
    * ids) are absent from this list; those are dated from
    * `standings.contest.startTimeSeconds` at add time instead.
    */
-  async getContestList() {
+  async contestList() {
     return this._callMethod("contest.list", { gym: true });
   }
 
@@ -130,7 +134,7 @@ export class GymSources extends CodeforcesSources {
     let from = 1;
 
     while (true) {
-      const page = await this.getContestStatus(contestId, {
+      const page = await this.contestStatus(contestId, {
         from,
         count: PAGE_SIZE,
       });
@@ -239,7 +243,7 @@ export class GymSources extends CodeforcesSources {
    */
   async problemsPage(contestId) {
     const path = `/gym/${contestId}`;
-    return ProblemsPage.scrape(await this.getDocument(`https://codeforces.com${path}`), { contestPath: path });
+    return ProblemsPage.scrape(await this.page(`https://codeforces.com${path}`), { contestPath: path });
   }
 
   /** Test seam: both clients, since a gym add may touch either. */

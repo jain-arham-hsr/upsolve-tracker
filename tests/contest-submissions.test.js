@@ -158,7 +158,7 @@ test("survives malformed rows without inventing a party", () => {
 test("pages until a short page, then stops", async () => {
   const asked = [];
   const service = {
-    getContestStatus: async (contestId, { from, count }) => {
+    contestStatus: async (contestId, { from, count }) => {
       asked.push({ from, count });
       return asked.length === 1
         ? Array.from({ length: count }, (_, i) => ({ id: i }))
@@ -175,7 +175,7 @@ test("pages until a short page, then stops", async () => {
 test("refuses a contest too large to rebuild rather than truncating", async () => {
   // An understated solve count reads as a harder problem, not as a failure.
   const service = {
-    getContestStatus: async (contestId, { count }) =>
+    contestStatus: async (contestId, { count }) =>
       Array.from({ length: count }, (_, i) => ({ id: i })),
   };
   await assert.rejects(

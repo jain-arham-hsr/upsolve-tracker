@@ -16,12 +16,12 @@ export async function sync(session, contests, onProgress = () => {}) {
 
   const startTimes = new Map();
   try {
-    const list = await session.sources.getContestList();
+    const list = await session.sources.contestList();
     for (const contest of list ?? []) {
       if (contest.startTimeSeconds) startTimes.set(String(contest.id), contest.startTimeSeconds);
     }
   } catch (error) {
-    console.warn("[Start Times] contest.list failed:", error.message);
+    console.warn("[Codeforces] contest.list failed:", error.message);
     return 0;
   }
 
@@ -34,6 +34,6 @@ export async function sync(session, contests, onProgress = () => {}) {
     }
   }
 
-  console.log(`[Start Times] Resolved ${resolved} of ${pending.length} contest(s).`);
+  console.log(`[Codeforces] Resolved ${resolved} of ${pending.length} contest(s).`);
   return resolved;
 }

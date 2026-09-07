@@ -46,8 +46,8 @@ test("consecutive API calls are paced", async () => {
   const service = new CodeforcesService("key", "secret");
 
   try {
-    await service.getUsersInfo(["tourist"]);
-    await service.getContestList();
+    await service.usersInfo(["tourist"]);
+    await service.contestList();
 
     const gap = stub.calls[1].at - stub.calls[0].at;
     assert.ok(gap >= 50, `the second call was not paced — fired ${gap}ms after the first`);
@@ -65,8 +65,8 @@ test("every service instance shares one budget", async () => {
   const stub = stubFetch();
 
   try {
-    await new CodeforcesService("a", "b").getContestList();
-    await new CodeforcesService("c", "d").getContestList();
+    await new CodeforcesService("a", "b").contestList();
+    await new CodeforcesService("c", "d").contestList();
 
     const gap = stub.calls[1].at - stub.calls[0].at;
     assert.ok(gap >= 50, `a second instance skipped the queue — fired ${gap}ms later`);
@@ -81,7 +81,7 @@ test("a request is signed, and the secret never appears in the URL", async () =>
   const stub = stubFetch();
 
   try {
-    await new CodeforcesService("thekey", "thesecret").getUsersInfo(["tourist"]);
+    await new CodeforcesService("thekey", "thesecret").usersInfo(["tourist"]);
     const { url } = stub.calls[0];
 
     assert.match(url, /apiKey=thekey/);
@@ -110,7 +110,7 @@ test("a FAILED response becomes the comment Codeforces gave", async () => {
     // `contest.standings` is a gym-only endpoint — the official client dropped
     // it in the split — so this is the gym half of the client.
     await assert.rejects(
-      () => new GymService("k", "s").getContestStandings(712373),
+      () => new GymService("k", "s").contestStandings(712373),
       /Standings are not available/,
     );
   } finally {
@@ -139,8 +139,8 @@ test("both Codeforces clients sign a request identically", async () => {
   };
 
   try {
-    await new CodeforcesService("thekey", "thesecret").getUsersInfo(["tourist"]);
-    await new GymService("thekey", "thesecret").getUsersInfo(["tourist"]);
+    await new CodeforcesService("thekey", "thesecret").usersInfo(["tourist"]);
+    await new GymService("thekey", "thesecret").usersInfo(["tourist"]);
   } finally {
     globalThis.fetch = original;
   }
@@ -174,8 +174,8 @@ test("both clients agree on which parameters they append", async () => {
   };
 
   try {
-    await new CodeforcesService("k", "s").getContestList();
-    await new GymService("k", "s").getContestList();
+    await new CodeforcesService("k", "s").contestList();
+    await new GymService("k", "s").contestList();
   } finally {
     globalThis.fetch = original;
   }
@@ -219,8 +219,8 @@ test("both clients hash the same string, not merely the same shape", async () =>
   const stub = stubFetch();
 
   try {
-    await new CodeforcesService("thekey", "thesecret").getUsersInfo(["tourist"]);
-    await new GymService("thekey", "thesecret").getUsersInfo(["tourist"]);
+    await new CodeforcesService("thekey", "thesecret").usersInfo(["tourist"]);
+    await new GymService("thekey", "thesecret").usersInfo(["tourist"]);
 
     assert.equal(hashed.length, 2, "both clients should have signed once");
     assert.equal(hashed[0].algorithm, "SHA-512");
@@ -258,7 +258,7 @@ test("the unsigned standings call goes through the same paced client, unsigned",
   const stub = stubFetch({ contest: { name: "Round" }, problems: [], rows: [] });
 
   try {
-    const result = await new CodeforcesService("k", "s").getPublicContestStandings(2197);
+    const result = await new CodeforcesService("k", "s").publicContestStandings(2197);
     assert.equal(stub.calls.length, 1);
     const url = new URL(stub.calls[0].url);
     assert.equal(url.pathname, "/api/contest.standings");

@@ -32,7 +32,7 @@ export class CodeforcesGyms extends CodeforcesPlatform {
     onProgress("Reading the standings…");
     let read;
     try {
-      read = this.fromStandings(contestId, await sources.getContestStandings(contestId));
+      read = this.fromStandings(contestId, await sources.contestStandings(contestId));
     } catch (error) {
       // Opens only where the add would otherwise fail outright: a gym whose
       // standings Codeforces has hidden. Anything else — a network fault, a

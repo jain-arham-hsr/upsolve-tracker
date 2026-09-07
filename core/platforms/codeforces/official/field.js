@@ -39,15 +39,15 @@ export async function readField({ contest, context, session, onProgress = () => 
 
 async function getOfficialRatingDist(sources, contestId, standings, onProgress) {
   try {
-    const ratingChanges = await sources.getContestRatingChanges(contestId);
+    const ratingChanges = await sources.contestRatingChanges(contestId);
     if (ratingChanges?.length > 0) {
       return fullField(ratingChanges.map((user) => user.oldRating));
     }
   } catch (error) {
-    console.warn(`[Rating Dist] ratingChanges failed for ${contestId}:`, error.message);
+    console.warn(`[Codeforces] ratingChanges failed for ${contestId}:`, error.message);
   }
 
-  console.warn(`[Rating Dist] ratingChanges empty for ${contestId}. Falling back to standings.`);
+  console.warn(`[Codeforces] ratingChanges empty for ${contestId}. Falling back to standings.`);
   return sampleOfficialStandings(sources, standings, onProgress);
 }
 
@@ -55,7 +55,7 @@ async function sampleOfficialStandings(sources, standings, onProgress) {
   try {
     const { groups, total } = stratifyRows(standings?.rows);
     if (groups.length === 0) {
-      console.warn("[Rating Dist] Standings carried no rows to sample.");
+      console.warn("[Codeforces] Standings carried no rows to sample.");
       return fullField([]);
     }
 
@@ -74,12 +74,12 @@ async function sampleOfficialStandings(sources, standings, onProgress) {
     }
 
     console.log(
-      `[Rating Dist] Rated ${rated.length} of ~${total} participants across ${strata.length} stratum/strata.`,
+      `[Codeforces] Rated ${rated.length} of ~${total} participants across ${strata.length} stratum/strata.`,
     );
 
     return strata.length > 0 ? { strata } : fullField([]);
   } catch (error) {
-    console.warn(`[Rating Dist] Standings sampling failed:`, error.message);
+    console.warn(`[Codeforces] Standings sampling failed:`, error.message);
     return fullField([]);
   }
 }

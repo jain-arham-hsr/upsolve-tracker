@@ -42,7 +42,7 @@ test("a 403 becomes a sentence about visiting codeforces.com", async () => {
   const stub = stubFetch(async () => ({ status: 403, async text() { return ""; } }));
   try {
     await assert.rejects(
-      () => CodeforcesHttp.getDocument("https://codeforces.com/contest/1/standings"),
+      () => CodeforcesHttp.page("https://codeforces.com/contest/1/standings"),
       /blocking requests.*visit codeforces\.com/s,
     );
   } finally {
@@ -58,7 +58,7 @@ test("a 200 carrying Cloudflare's interstitial is caught too", async () => {
   const stub = stubFetch(async () => ok("<html><body>Just a moment...</body></html>"));
   try {
     await assert.rejects(
-      () => CodeforcesHttp.getDocument("https://codeforces.com/contest/1/standings"),
+      () => CodeforcesHttp.page("https://codeforces.com/contest/1/standings"),
       /blocking requests/,
     );
   } finally {
@@ -70,7 +70,7 @@ test("an ordinary page comes back parsed, ready for the scrapers", async () => {
   resetHttpState();
   const stub = stubFetch(async () => ok("<html><table class='problems'></table></html>"));
   try {
-    const doc = await CodeforcesHttp.getDocument("https://codeforces.com/gym/1");
+    const doc = await CodeforcesHttp.page("https://codeforces.com/gym/1");
     // A Document rather than the string: everything in `scrapers/` takes one,
     // and the parse happening in the client is what keeps `DOMParser` out of
     // platform code entirely.
@@ -84,7 +84,7 @@ test("the session cookie is sent, which is what makes a private gym readable", a
   resetHttpState();
   const stub = stubFetch(async () => ok("<html></html>"));
   try {
-    await CodeforcesHttp.getDocument("https://codeforces.com/gym/712373/standings");
+    await CodeforcesHttp.page("https://codeforces.com/gym/712373/standings");
     assert.equal(
       stub.calls[0].init.credentials,
       "include",
@@ -102,8 +102,8 @@ test("requests actually go through the pacer", async () => {
   resetHttpState(60);
   const stub = stubFetch(async () => ok("<html></html>"));
   try {
-    await CodeforcesHttp.getDocument("https://codeforces.com/contest/1/standings");
-    await CodeforcesHttp.getDocument("https://codeforces.com/contest/2/standings");
+    await CodeforcesHttp.page("https://codeforces.com/contest/1/standings");
+    await CodeforcesHttp.page("https://codeforces.com/contest/2/standings");
 
     const gap = stub.calls[1].at - stub.calls[0].at;
     assert.ok(gap >= 50, `the second request was not paced — fired ${gap}ms after the first`);
@@ -130,7 +130,7 @@ test("a block is flagged, so it can wait instead of failing the add", async () =
     resetHttpState();
     globalThis.fetch = async () => response;
 
-    const error = await CodeforcesHttp.getDocument("https://codeforces.com/contest/1/standings").then(
+    const error = await CodeforcesHttp.page("https://codeforces.com/contest/1/standings").then(
       () => null,
       (e) => e,
     );
@@ -144,6 +144,6 @@ test("an ordinary failure is not flagged, so it still fails loudly", async () =>
   // quietly retried forever under the same flag.
   resetHttpState();
   globalThis.fetch = async () => ({ status: 200, async text() { return "<html><p>fine</p></html>"; } });
-  const doc = await CodeforcesHttp.getDocument("https://codeforces.com/x");
+  const doc = await CodeforcesHttp.page("https://codeforces.com/x");
   assert.match(doc.querySelector("p").textContent, /fine/);
 });

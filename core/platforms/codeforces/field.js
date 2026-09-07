@@ -21,18 +21,18 @@ const CHUNK = 250;
 export async function ratePartyList(sources, parties) {
   const allHandles = [...new Set(parties.flat().filter(Boolean))];
 
-  console.log(`[Rating Dist] Found ${allHandles.length} unique handles across ${parties.length} parties.`);
+  console.log(`[Codeforces] Found ${allHandles.length} unique handles across ${parties.length} parties.`);
   if (allHandles.length === 0) return [];
 
   const handleToRating = {};
   for (let i = 0; i < allHandles.length; i += CHUNK) {
     try {
-      const usersInfo = await sources.getUsersInfo(allHandles.slice(i, i + CHUNK));
+      const usersInfo = await sources.usersInfo(allHandles.slice(i, i + CHUNK));
       usersInfo?.forEach((u) => {
         handleToRating[u.handle] = u.rating ?? 800;
       });
     } catch {
-      console.warn(`[Rating Dist] Chunk ${Math.floor(i / CHUNK) + 1} rejected. Skipping.`);
+      console.warn(`[Codeforces] Chunk ${Math.floor(i / CHUNK) + 1} rejected. Skipping.`);
     }
   }
 

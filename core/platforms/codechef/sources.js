@@ -29,10 +29,10 @@ import { createSiteClient } from "../../services/site-client.js";
 import { codechef } from "./descriptor.js";
 import { DashboardPage } from "./scrapers/page-globals.js";
 
-const BASE = "https://www.codechef.com";
+const ORIGIN = "https://www.codechef.com";
 
 /** Human-paced. A contest costs 1 + one request per problem. */
-const MIN_GAP_MS = 1500;
+const GAP_MS = 1500;
 
 /** Rows per page of the attempted-problems listing; 100 is honoured. */
 const PAGE_SIZE = 100;
@@ -66,12 +66,12 @@ const TAG_NOISE = /^(?:start|cook|ltime|snck)\d+$|_adm$/i;
 export class CodeChefSources extends Source {
   constructor() {
     super({
-      origin: BASE,
+      origin: ORIGIN,
       client: createSiteClient({
         // CodeChef answers for whoever holds the session cookie, so routing
         // through a tab is what makes the signed-in account visible at all.
         site: codechef,
-        pacer: { gapMs: MIN_GAP_MS },
+        pacer: { gapMs: GAP_MS },
 
         /**
          * CodeChef's refusal is a 403 — its `/api/` routes are CSRF-gated, and

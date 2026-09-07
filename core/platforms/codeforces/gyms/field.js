@@ -58,10 +58,10 @@ export async function readField({ contest, context, session, onProgress = () => 
 /** `standings` is the response the add already paid for; the hidden path has none. */
 async function fromStandings(sources, contestId, prefetched) {
   try {
-    const standings = prefetched ?? (await sources.getContestStandings(contestId));
+    const standings = prefetched ?? (await sources.contestStandings(contestId));
 
     if (!standings?.rows?.length) {
-      console.warn(`[Rating Dist] Standings API returned empty for ${contestId}.`);
+      console.warn(`[Codeforces] Standings API returned empty for ${contestId}.`);
       return fullField([]);
     }
 
@@ -72,7 +72,7 @@ async function fromStandings(sources, contestId, prefetched) {
       ),
     );
   } catch (error) {
-    console.warn(`[Rating Dist] Standings method failed for ${contestId}:`, error.message);
+    console.warn(`[Codeforces] Standings method failed for ${contestId}:`, error.message);
     return fullField([]);
   }
 }
@@ -83,7 +83,7 @@ async function fromParties(sources, partyHandles) {
   try {
     return fullField(await ratePartyList(sources, partyHandles));
   } catch (error) {
-    console.warn(`[Rating Dist] Submission-derived field failed:`, error.message);
+    console.warn(`[Codeforces] Submission-derived field failed:`, error.message);
     return fullField([]);
   }
 }

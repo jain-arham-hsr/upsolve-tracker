@@ -53,10 +53,10 @@ test("the filter is what stops a foreign contest inheriting a CF start time", as
   // the `cf` helper supplies one by default for the re-check tests below.
   const foreign = cf({ id: "1000", platform: "atcoder", type: "ABC", startTimeSeconds: null });
   const service = {
-    async getContestList() {
+    async contestList() {
       return [{ id: 1000, startTimeSeconds: 1_700_000_000 }];
     },
-    async getContestStandings() {
+    async contestStandings() {
       throw new Error("should not be called");
     },
   };
@@ -90,7 +90,7 @@ test("gyms never reach the official sync — they are a different platform", asy
 
   let called = false;
   const service = {
-    async getPublicContestStandings() {
+    async publicContestStandings() {
       called = true;
       return { problems: [] };
     },
@@ -111,7 +111,7 @@ test("a published rating replaces an estimate and records its source", async () 
   });
   let asked = null;
   const service = {
-    async getPublicContestStandings(id) {
+    async publicContestStandings(id) {
       asked = id;
       return standingsFor("A", 1300, ["dp"]);
     },
@@ -136,10 +136,10 @@ test("the re-check never reads problemset.problems", async () => {
     problems: [{ index: "C", rating: 1000, ratingSource: "estimated", tags: [] }],
   });
   const service = {
-    async getPublicContestStandings() {
+    async publicContestStandings() {
       return standingsFor("C", 1200, ["math"]);
     },
-    async getProblemsetProblems() {
+    async problemsetProblems() {
       throw new Error("the re-check must not consult the problemset");
     },
   };
@@ -158,7 +158,7 @@ test("a contest stops being asked about six weeks after it ran", async () => {
 
   const asked = [];
   const service = {
-    async getPublicContestStandings(id) {
+    async publicContestStandings(id) {
       asked.push(id);
       return standingsFor("A", 1500, ["dp"]);
     },
@@ -181,7 +181,7 @@ test("the cutoff reads seconds, not milliseconds", async () => {
   });
   let asked = false;
   const service = {
-    async getPublicContestStandings() {
+    async publicContestStandings() {
       asked = true;
       return standingsFor("A", 1500, ["dp"]);
     },
@@ -201,7 +201,7 @@ test("an undated contest falls back to when it was added", async () => {
 
   const asked = [];
   const service = {
-    async getPublicContestStandings(id) {
+    async publicContestStandings(id) {
       asked.push(id);
       return standingsFor("A", 1500, ["dp"]);
     },
@@ -218,7 +218,7 @@ test("a fully published contest is never asked again", async () => {
     problems: [{ index: "A", rating: 1300, ratingSource: "official", tags: ["dp"] }],
   });
   const service = {
-    async getPublicContestStandings() {
+    async publicContestStandings() {
       throw new Error("a settled contest must not be re-asked");
     },
   };
@@ -231,14 +231,14 @@ test("a contest asked about recently waits out its week", async () => {
     problems: [{ index: "A", rating: 900, ratingSource: "estimated", tags: [] }],
   });
   const service = {
-    async getPublicContestStandings() {
+    async publicContestStandings() {
       throw new Error("asked again inside the week");
     },
   };
   assert.equal(await syncPublishedProblemData(service, [contest]), 0);
 
   contest.publishedDataCheckedAt = Date.now() - 8 * DAY;
-  const service2 = { async getPublicContestStandings() { return standingsFor("A", 1500, ["dp"]); } };
+  const service2 = { async publicContestStandings() { return standingsFor("A", 1500, ["dp"]); } };
   assert.equal(await syncPublishedProblemData(service2, [contest]), 1);
 });
 
@@ -247,7 +247,7 @@ test("a failed re-check is not stamped, so it retries next refresh", async () =>
     problems: [{ index: "A", rating: 900, ratingSource: "estimated", tags: [] }],
   });
   const service = {
-    async getPublicContestStandings() {
+    async publicContestStandings() {
       throw new Error("network");
     },
   };

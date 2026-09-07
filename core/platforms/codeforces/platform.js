@@ -65,7 +65,7 @@ export class CodeforcesPlatform extends Platform {
     }
 
     // A bad handle comes back FAILED, which the source turns into a throw.
-    const users = await session.sources.getUsersInfo([session.handle]);
+    const users = await session.sources.usersInfo([session.handle]);
     const user = users?.[0];
 
     if (!user?.handle) {
@@ -124,7 +124,7 @@ export class CodeforcesPlatform extends Platform {
   /** `contests` is unused: `user.status` returns the whole history in one call. */
   async fetchAccepted(session, _contests, onProgress = () => {}) {
     onProgress("Checking your submissions…");
-    const submissions = await session.sources.getUserStatus(session.handle);
+    const submissions = await session.sources.userStatus(session.handle);
 
     return submissions
       .filter((submission) => submission.verdict === "OK")

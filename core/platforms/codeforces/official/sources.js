@@ -27,7 +27,7 @@ export class OfficialSources extends CodeforcesSources {
     { ttlMs: PROBLEMSET_TTL_MS },
   );
 
-  async getContestRatingChanges(contestId) {
+  async contestRatingChanges(contestId) {
     return this._callMethod("contest.ratingChanges", { contestId });
   }
 
@@ -49,7 +49,7 @@ export class OfficialSources extends CodeforcesSources {
    * exposes the pairing: not the API, not the HTML, and matching on start
    * time or problem name is unsound.
    */
-  async getPublicContestStandings(contestId) {
+  async publicContestStandings(contestId) {
     const url = `${this.baseUrl}contest.standings?contestId=${encodeURIComponent(contestId)}`;
     const data = await this.json(url);
 
@@ -60,12 +60,12 @@ export class OfficialSources extends CodeforcesSources {
   }
 
   /** Contest metadata in bulk, ~400 KB. Official rounds only. */
-  async getContestList() {
+  async contestList() {
     return this._callMethod("contest.list", {});
   }
 
   /** The entire public problemset, ~2 MB, memoised for a minute. */
-  async getProblemsetProblems() {
+  async problemsetProblems() {
     return OfficialSources.#problemset("", this);
   }
 

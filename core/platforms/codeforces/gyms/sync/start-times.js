@@ -17,14 +17,14 @@ export async function sync(session, contests, onProgress = () => {}) {
     // Deliberately slow — the API pacer spaces these — so it counts itself off.
     onProgress(`Dating gym ${index + 1} of ${gyms.length}…`);
     try {
-      const standings = await session.sources.getContestStandings(contest.id);
+      const standings = await session.sources.contestStandings(contest.id);
       const startTime = standings?.contest?.startTimeSeconds;
       if (startTime) {
         contest.startTimeSeconds = startTime;
         resolved++;
       }
     } catch (error) {
-      console.warn(`[Start Times] Gym ${contest.id} standings failed:`, error.message);
+      console.warn(`[Codeforces] Gym ${contest.id} standings failed:`, error.message);
     }
   }
 
