@@ -18,8 +18,8 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { GymSources } = await import("../core/platforms/codeforces-gyms/sources.js");
-const { OfficialSources } = await import("../core/platforms/codeforces-official/sources.js");
+const { GymSources } = await import("../core/platforms/codeforces/gyms/sources.js");
+const { OfficialSources } = await import("../core/platforms/codeforces/official/sources.js");
 const { getAdapter } = await import("../core/platforms/platforms.js");
 
 /**

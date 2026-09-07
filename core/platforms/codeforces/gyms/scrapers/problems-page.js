@@ -10,7 +10,7 @@
  * nothing tied a scraper's name to the page it reads. Naming it for the page is
  * what makes the next such drift visible.
  */
-import { Scraper } from "../../scraper.js";
+import { Scraper } from "../../../scraper.js";
 
 /** Shared by both problem readers so their fallbacks can't drift. */
 const UNKNOWN_PROBLEM = "Unknown Problem";

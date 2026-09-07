@@ -14,8 +14,8 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { GymSources } = await import("../core/platforms/codeforces-gyms/sources.js");
-const { OfficialSources } = await import("../core/platforms/codeforces-official/sources.js");
+const { GymSources } = await import("../core/platforms/codeforces/gyms/sources.js");
+const { OfficialSources } = await import("../core/platforms/codeforces/official/sources.js");
 
 /**
  * The page a hidden-standings gym reads, stubbed the way Codeforces serves it

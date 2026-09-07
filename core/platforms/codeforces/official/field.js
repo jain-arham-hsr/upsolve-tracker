@@ -7,8 +7,8 @@
  * the add already holds are stratified and resolved through `user.info`; see
  * the sampling section below for why it samples when every row is in hand.
  */
-import { fullField, distributionSize } from "../../rating-models/rating-distribution.js";
-import { ratePartyList } from "../codeforces/field.js";
+import { fullField, distributionSize } from "../../../rating-models/rating-distribution.js";
+import { ratePartyList } from "../field.js";
 
 /**
  * @returns {Promise<object|null>} the distribution, or null when there was

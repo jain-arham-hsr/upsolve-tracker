@@ -6,13 +6,13 @@
  * ratings and tags, the start time, and rows enough to count in-contest solves
  * — and to measure the field when nothing else can.
  */
-import { CodeforcesPlatform } from "../codeforces/platform.js";
+import { CodeforcesPlatform } from "../platform.js";
 import { codeforcesOfficial } from "./descriptor.js";
 import { readField } from "./field.js";
 import { OfficialSources } from "./sources.js";
 import { sync as syncPublishedData } from "./sync/published-data.js";
-import { sync as syncStartTimes } from "../codeforces/sync/start-times.js";
-import { notPublishedYet } from "../../contest-status.js";
+import { sync as syncStartTimes } from "../sync/start-times.js";
+import { notPublishedYet } from "../../../contest-status.js";
 
 export class CodeforcesOfficial extends CodeforcesPlatform {
   static Sources = OfficialSources;

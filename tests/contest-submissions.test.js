@@ -16,7 +16,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const { GymSources } = await import("../core/platforms/codeforces-gyms/sources.js");
+const { GymSources } = await import("../core/platforms/codeforces/gyms/sources.js");
 
 const summariseSubmissions = (rows) => GymSources.summariseSubmissions(rows);
 /** A real source with the one API method stubbed, the way every Codeforces test injects. */

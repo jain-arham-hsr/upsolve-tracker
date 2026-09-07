@@ -4,7 +4,7 @@
  * mashups (the 6xxxxx ids) never appear in the list; most are dated at add
  * time from the standings already in hand, and this covers the rest.
  */
-import { sync as fromList } from "../../codeforces/sync/start-times.js";
+import { sync as fromList } from "../../sync/start-times.js";
 
 export async function sync(session, contests, onProgress = () => {}) {
   const pending = contests.filter((contest) => !contest.startTimeSeconds);

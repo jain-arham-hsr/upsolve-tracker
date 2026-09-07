@@ -77,7 +77,7 @@ export function estimateContest(standings) {
  * AtCoder Problems refuses in four situations: nobody solved it, everyone solved
  * it, fewer than forty usable rows, or a fit above the ceiling. Ported
  * faithfully, that meant AtCoder problems could render `???` while the identical
- * situation on Codeforces produced a number — `codeforces-official/estimator.js`
+ * situation on Codeforces produced a number — `codeforces/official/estimator.js`
  * targets 0.5 expected solves when nobody solved a problem and lets the search
  * run to its ceiling, and floors the result rather than declining.
  *

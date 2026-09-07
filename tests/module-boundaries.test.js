@@ -742,8 +742,13 @@ const PLATFORM_ROOT_FILES = new Set([
   "field.js",
 ]);
 
-/** A base folder is a platform folder minus the descriptor. */
+/**
+ * A base folder is a platform folder minus the descriptor — plus `site.js`,
+ * the pieces of a descriptor its platforms share, which the registry never
+ * sees directly.
+ */
 const REQUIRED = { platform: ["descriptor.js", "platform.js", "sources.js"], base: ["platform.js", "sources.js"] };
+const BASE_ONLY_FILES = new Set(["site.js"]);
 
 test("a platform's root holds only contract names", () => {
   const offenders = [];
@@ -762,13 +767,17 @@ test("a platform's root holds only contract names", () => {
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (!PLATFORM_FOLDERS.has(entry.name)) {
+        // A base may hold its platforms' folders; a platform may not.
+        const isPlatform = FOLDERS.platforms.has(
+          [...FOLDERS.platforms].find(([, f]) => f === `${folder}/${entry.name}`)?.[0],
+        );
+        if (!PLATFORM_FOLDERS.has(entry.name) && !(kind === "base" && isPlatform)) {
           offenders.push(`${folder}/${entry.name}/ is not a known kind of folder`);
         }
-        // A base may hold sub-platforms; a platform may not.
         continue;
       }
 
+      if (kind === "base" && BASE_ONLY_FILES.has(entry.name)) continue;
       if (!PLATFORM_ROOT_FILES.has(entry.name)) {
         offenders.push(
           `${folder}/${entry.name} is not a contract name — put it in ` +

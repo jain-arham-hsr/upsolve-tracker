@@ -6,8 +6,8 @@
  * identity, capabilities — and is imported by things like backup-validation
  * that must not drag the network stack in. Only the orchestrators need this.
  */
-import { CodeforcesOfficial } from "./codeforces-official/platform.js";
-import { CodeforcesGyms } from "./codeforces-gyms/platform.js";
+import { CodeforcesOfficial } from "./codeforces/official/platform.js";
+import { CodeforcesGyms } from "./codeforces/gyms/platform.js";
 import { AtCoder } from "./atcoder/platform.js";
 import { CodeChef } from "./codechef/platform.js";
 

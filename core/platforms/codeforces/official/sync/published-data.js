@@ -30,7 +30,7 @@
  * in the other, and a rated one carries identical values in both. The difference
  * is coverage alone.
  */
-import { CodeforcesSources } from "../../codeforces/sources.js";
+import { CodeforcesSources } from "../../sources.js";
 
 /** How long before a contest with missing data is worth asking about again. */
 const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;

@@ -9,7 +9,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { contestsOnPlatform } from "../core/platforms/registry.js";
 import { sync as startTimes } from "../core/platforms/codeforces/sync/start-times.js";
-import { sync as publishedData } from "../core/platforms/codeforces-official/sync/published-data.js";
+import { sync as publishedData } from "../core/platforms/codeforces/official/sync/published-data.js";
 
 // Every pass takes the session; these hand it a fake source the way a test
 // hands the platform one.
@@ -76,7 +76,7 @@ test("gyms never reach the official sync — they are a different platform", asy
   // because the module gated on `contest.type !== "OFFICIAL"`.
   //
   // That gate is gone, and deliberately: the module lives in
-  // `codeforces-official/` now and gyms are a different platform, so a gym
+  // `codeforces/official/` now and gyms are a different platform, so a gym
   // cannot arrive here at all. What is worth asserting is the thing that makes
   // that true — `contestsOnPlatform` keeps them apart — because the gate it
   // replaced had a real failure: a record built before `type` was stamped on it

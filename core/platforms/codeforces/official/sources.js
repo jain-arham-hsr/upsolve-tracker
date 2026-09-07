@@ -7,8 +7,8 @@
  * `problemset.problems`, `contest.list`, and the deliberately unsigned
  * `contest.standings`.
  */
-import { CodeforcesSources } from "../codeforces/sources.js";
-import { withTtlCache } from "../../services/ttl-cache.js";
+import { CodeforcesSources } from "../sources.js";
+import { withTtlCache } from "../../../services/ttl-cache.js";
 
 /**
  * problemset.problems is ~2 MB and an add reads it twice: once to ask whether

@@ -9,9 +9,9 @@
  * entered and submitted nothing solved nothing either, so the counts stay
  * consistent with it.
  */
-import { fullField, distributionSize } from "../../rating-models/rating-distribution.js";
-import { unavailable } from "../../contest-status.js";
-import { ratePartyList } from "../codeforces/field.js";
+import { fullField, distributionSize } from "../../../rating-models/rating-distribution.js";
+import { unavailable } from "../../../contest-status.js";
+import { ratePartyList } from "../field.js";
 
 /**
  * @returns {Promise<object>} the distribution, or `unavailable` — a gym with

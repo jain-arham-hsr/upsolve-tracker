@@ -11,9 +11,9 @@
  * Only the last reads markup, and even it just fetches the page and hands it
  * to `scrapers/problems-page.js`.
  */
-import { CodeforcesSources } from "../codeforces/sources.js";
+import { CodeforcesSources } from "../sources.js";
 import { codeforcesGyms } from "./descriptor.js";
-import { createSiteClient } from "../../services/site-client.js";
+import { createSiteClient } from "../../../services/site-client.js";
 import { ProblemsPage } from "./scrapers/problems-page.js";
 
 

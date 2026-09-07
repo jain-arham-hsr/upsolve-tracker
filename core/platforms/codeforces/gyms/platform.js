@@ -7,12 +7,12 @@
  * only page those contests render, and the field is recovered from who
  * submitted, via `contest.status`.
  */
-import { CodeforcesPlatform } from "../codeforces/platform.js";
+import { CodeforcesPlatform } from "../platform.js";
 import { codeforcesGyms } from "./descriptor.js";
 import { readField } from "./field.js";
 import { GymSources } from "./sources.js";
 import { sync as syncStartTimes } from "./sync/start-times.js";
-import { notEndedYet } from "../../contest-status.js";
+import { notEndedYet } from "../../../contest-status.js";
 
 export class CodeforcesGyms extends CodeforcesPlatform {
   static Sources = GymSources;
