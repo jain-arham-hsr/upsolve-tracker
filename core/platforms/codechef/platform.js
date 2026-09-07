@@ -18,10 +18,10 @@
  */
 import { Platform } from "../platform.js";
 import { codechef } from "./descriptor.js";
-import { sources, ACCEPTED } from "./sources.js";
+import { CodeChefSources, sources } from "./sources.js";
 import { DashboardPage } from "./scrapers/page-globals.js";
-import { parseDifficulty, cleanTags, syncPublishedDifficulty } from "./sync/published-data.js";
-import { practiceFlag, refreshPracticeFlags } from "./sync/practice-flags.js";
+import { sync as syncPublishedDifficulty } from "./sync/published-data.js";
+import { sync as refreshPracticeFlags } from "./sync/practice-flags.js";
 import {
   notEndedYet,
   notPublishedYet,
@@ -163,7 +163,7 @@ export class CodeChef extends Platform {
     const accepted = [];
 
     for (const row of rows) {
-      if (Number(row?.status) !== ACCEPTED) continue;
+      if (Number(row?.status) !== CodeChefSources.ACCEPTED) continue;
       if (!row?.code) continue;
       accepted.push({ contest: { id: null }, problem: { index: row.code } });
     }
@@ -248,7 +248,7 @@ async function buildProblem(sources, contestCode, problem, solved) {
     throw Object.assign(error, { isSourceUnreachable: true });
   }
 
-  const rating = parseDifficulty(detail?.difficulty_rating);
+  const rating = CodeChefSources.parseDifficulty(detail?.difficulty_rating);
 
   return {
     index: code,
@@ -258,7 +258,7 @@ async function buildProblem(sources, contestCode, problem, solved) {
     ratingConfidence: null,
     officialSolves: Number.parseInt(problem.successful_submissions, 10) || 0,
     solved: solved.has(code),
-    tags: cleanTags(detail, contestCode),
-    ...practiceFlag(problem),
+    tags: CodeChefSources.cleanTags(detail, contestCode),
+    ...CodeChefSources.practiceFlag(problem),
   };
 }

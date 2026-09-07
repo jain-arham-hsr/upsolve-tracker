@@ -13,49 +13,8 @@
  * argument and writes in both directions. See `practice-flags.js`.
  */
 
-/**
- * `difficulty_rating` arrives as a string and uses two out-of-band values:
- * `-1` for "not rated" (74% of the catalogue) and `9999` for a handful more.
- * Both must become null. `9999` is especially dangerous — it is also the
- * queue's own sort-last sentinel, so passing it through would look like a
- * legitimate, very hard problem.
- */
-const NOT_RATED = new Set([-1, 9999]);
+import { CodeChefSources } from "../sources.js";
 
-/** Setter handles and contest codes get tagged alongside real topics. */
-const TAG_NOISE = /^(?:start|cook|ltime|snck)\d+$|_adm$/i;
-
-export function parseDifficulty(raw) {
-  const value = Number.parseInt(raw, 10);
-  if (!Number.isFinite(value) || NOT_RATED.has(value)) return null;
-  return value;
-}
-
-export function cleanTags(detail, contestCode) {
-  const raw = [...(detail?.user_tags ?? []), ...(detail?.computed_tags ?? [])];
-  const seen = new Set();
-
-  return raw.filter((tag) => {
-    if (typeof tag !== "string") return false;
-    const trimmed = tag.trim();
-    if (!trimmed) return false;
-    if (trimmed.toLowerCase() === contestCode.toLowerCase()) return false;
-    if (TAG_NOISE.test(trimmed)) return false;
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-/**
- * How long a contest with unrated problems waits before being asked again.
- *
- * Costs a request per still-unrated problem, so it is throttled to a week —
- * the same shape as the Codeforces tag re-check. The practice re-check has
- * its own, much faster cadence and its own cost argument; see
- * `practice-flags.js`.
- */
 const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
@@ -69,7 +28,7 @@ const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
  * @returns {number} problems updated. Nothing in production reads it; it exists
  *   so the tests can tell a real update from a no-op.
  */
-export async function syncPublishedDifficulty(session, contests, onProgress = () => {}) {
+export async function sync(session, contests, onProgress = () => {}) {
   const now = Date.now();
   let updated = 0;
 
@@ -87,12 +46,12 @@ export async function syncPublishedDifficulty(session, contests, onProgress = ()
       onProgress(`Re-checking ${problem.index}…`);
       try {
         const detail = await session.sources.problem(contest.id, problem.index);
-        const rating = parseDifficulty(detail?.difficulty_rating);
+        const rating = CodeChefSources.parseDifficulty(detail?.difficulty_rating);
         if (rating === null) continue;
 
         problem.rating = rating;
         problem.ratingSource = "official";
-        problem.tags = cleanTags(detail, contest.id);
+        problem.tags = CodeChefSources.cleanTags(detail, contest.id);
         updated++;
       } catch (error) {
         console.warn(`[CodeChef] re-check of ${problem.index} failed:`, error.message);

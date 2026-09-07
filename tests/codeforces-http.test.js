@@ -20,7 +20,10 @@ import { DOMParser } from "linkedom";
 // gives production one.
 globalThis.DOMParser = DOMParser;
 
-import { CodeforcesHttp, resetHttpState } from "../core/platforms/codeforces-gyms/sources.js";
+import { GymSources } from "../core/platforms/codeforces-gyms/sources.js";
+
+const CodeforcesHttp = new GymSources("k", "s");
+const resetHttpState = (ms) => GymSources.reset(ms);
 
 function stubFetch(handler) {
   const calls = [];

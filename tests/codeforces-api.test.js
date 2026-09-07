@@ -16,11 +16,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { OfficialSources as CodeforcesService, resetApiState } from "../core/platforms/codeforces-official/sources.js";
-import {
-  GymSources as GymService,
-  resetApiState as resetGymApiState,
-} from "../core/platforms/codeforces-gyms/sources.js";
+import { OfficialSources as CodeforcesService } from "../core/platforms/codeforces-official/sources.js";
+import { GymSources as GymService } from "../core/platforms/codeforces-gyms/sources.js";
+
+const resetApiState = (ms) => CodeforcesService.reset(ms);
+const resetGymApiState = (ms) => GymService.reset(ms);
 
 /**
  * The signed client goes through `services/site-client.js` like every other

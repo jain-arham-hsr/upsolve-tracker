@@ -12,29 +12,6 @@
  */
 
 /**
- * Some old problems were never mirrored into CodeChef's practice archive.
- * `START32C/problems/MAXTHEMIN` still shows its statement inside the contest,
- * but `/problems/MAXTHEMIN` 404s — and a contest stops accepting submissions
- * when it ends, so there is nowhere left to submit it. It is dead work, and
- * because `solved` is only ever set true nothing would ever clear it from the
- * queue.
- *
- * `is_added_to_practice` on the contest payload answers this exactly, and comes
- * free — `fetchContestRecord` already has that payload in hand. Two nearby
- * fields do **not** answer it, so don't reach for them again: `problem_url` is
- * `/problems/MAXTHEMIN` even for the problem that 404s there, and
- * `is_direct_submittable` is false for everything when signed out, since it
- * tracks login state rather than mirroring.
- *
- * The key is written only when the answer is no. Absent means upsolvable, which
- * is every problem on Codeforces and AtCoder — both serve their whole history
- * from a stable per-contest route.
- */
-export function practiceFlag(problem) {
-  return problem?.is_added_to_practice === false ? { upsolvable: false } : {};
-}
-
-/**
  * Re-reads `is_added_to_practice` for contests that might have it wrong.
  *
  * Writes in both directions — a problem CodeChef later mirrors has to come back
@@ -62,7 +39,7 @@ export function practiceFlag(problem) {
  * which does not happen; paying a request per contest per refresh to look for
  * it would be the sweep this client exists to avoid.
  */
-export async function refreshPracticeFlags(session, contests, onProgress = () => {}) {
+export async function sync(session, contests, onProgress = () => {}) {
   const pending = contests.filter((contest) =>
     contest.problems.some((problem) => problem.upsolvable === false),
   );

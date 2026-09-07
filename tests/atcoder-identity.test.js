@@ -22,7 +22,7 @@ globalThis.DOMParser = DOMParser;
 
 const { getAdapter } = await import("../core/platforms/platforms.js");
 const verifyIdentity = (session) => getAdapter("atcoder").verifyIdentity(session);
-const { sources, resetHttpState } = await import("../core/platforms/atcoder/sources.js");
+const { sources } = await import("../core/platforms/atcoder/sources.js");
 
 const profile = (signedInAs, rating = 1600) => `<html><head>
   <script>var userScreenName = ${signedInAs === null ? "undefined" : `"${signedInAs}"`};</script>
@@ -37,7 +37,7 @@ const noMarker = `<html><body><table class="dl-table">
 
 let served;
 beforeEach(() => {
-  resetHttpState(0);
+  getAdapter("atcoder").reset(0);
   served = { status: 200, body: profile("") };
   globalThis.fetch = async (url) => ({
     ok: served.status === 200,

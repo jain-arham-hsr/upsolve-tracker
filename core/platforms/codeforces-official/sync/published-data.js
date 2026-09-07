@@ -30,7 +30,7 @@
  * in the other, and a rated one carries identical values in both. The difference
  * is coverage alone.
  */
-import { applyStandingsProblemData } from "../sources.js";
+import { CodeforcesSources } from "../../codeforces/sources.js";
 
 /** How long before a contest with missing data is worth asking about again. */
 const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
@@ -116,11 +116,7 @@ function needsSync(contest, now) {
  *
  * @returns {Promise<number>} How many contests were updated.
  */
-export async function syncPublishedProblemData(
-  sources,
-  contests,
-  onProgress = () => {},
-) {
+export async function sync(session, contests, onProgress = () => {}) {
   const now = Date.now();
   const pending = contests.filter((contest) => needsSync(contest, now));
   if (pending.length === 0) return 0;
@@ -130,10 +126,10 @@ export async function syncPublishedProblemData(
   let updated = 0;
   for (const contest of pending) {
     try {
-      const standings = await sources.getPublicContestStandings(contest.id);
+      const standings = await session.sources.getPublicContestStandings(contest.id);
       // The same applier the add path uses, so the two cannot disagree about
       // what "published" means or which fields it sets.
-      applyStandingsProblemData(standings, contest.problems);
+      CodeforcesSources.applyStandingsProblemData(standings, contest.problems);
       contest.publishedDataCheckedAt = now;
       updated++;
     } catch (error) {

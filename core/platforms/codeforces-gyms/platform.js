@@ -10,8 +10,8 @@
 import { CodeforcesPlatform } from "../codeforces/platform.js";
 import { codeforcesGyms } from "./descriptor.js";
 import { readField } from "./field.js";
-import { GymSources, readSolveStats } from "./sources.js";
-import { syncStartTimes } from "./sync/start-times.js";
+import { GymSources } from "./sources.js";
+import { sync as syncStartTimes } from "./sync/start-times.js";
 import { notEndedYet } from "../../contest-status.js";
 
 export class CodeforcesGyms extends CodeforcesPlatform {
@@ -39,7 +39,7 @@ export class CodeforcesGyms extends CodeforcesPlatform {
       partyHandles,
       finished,
       standings,
-    } = await readSolveStats(contestId, sources);
+    } = await sources.contestFromStandings(contestId);
 
     // A running gym has visible standings carrying partial solve counts, so
     // the estimator would fit them and store inflated difficulties — and a gym
@@ -60,7 +60,7 @@ export class CodeforcesGyms extends CodeforcesPlatform {
 
     // No problemset sync: gyms are absent from problemset.problems entirely.
     // Tags and published ratings came off the standings response instead.
-    await syncStartTimes(sources, [record], onProgress);
+    await syncStartTimes(session, [record], onProgress);
 
     return {
       ...record,
@@ -80,6 +80,6 @@ export class CodeforcesGyms extends CodeforcesPlatform {
    * refresh forever.
    */
   async syncMetadata(session, contests, onProgress = () => {}) {
-    await syncStartTimes(session.sources, contests, onProgress);
+    await syncStartTimes(session, contests, onProgress);
   }
 }

@@ -9,9 +9,9 @@
 import { CodeforcesPlatform } from "../codeforces/platform.js";
 import { codeforcesOfficial } from "./descriptor.js";
 import { readField } from "./field.js";
-import { OfficialSources, readSolveStats, isInProblemset } from "./sources.js";
-import { syncPublishedProblemData } from "./sync/published-data.js";
-import { syncStartTimes } from "./sync/start-times.js";
+import { OfficialSources } from "./sources.js";
+import { sync as syncPublishedData } from "./sync/published-data.js";
+import { sync as syncStartTimes } from "../codeforces/sync/start-times.js";
 import { notPublishedYet } from "../../contest-status.js";
 
 export class CodeforcesOfficial extends CodeforcesPlatform {
@@ -35,7 +35,7 @@ export class CodeforcesOfficial extends CodeforcesPlatform {
     // no equivalent gate on a gym: gyms are absent from the problemset
     // entirely, which is why the two pipelines are two classes.
     onProgress("Checking whether Codeforces has published it…");
-    if (!(await isInProblemset(sources, contestId))) {
+    if (!(await sources.isInProblemset(contestId))) {
       return notPublishedYet(
         `Codeforces hasn't published contest ${contestId} yet. It'll be added ` +
           `on a refresh once it appears.`,
@@ -44,7 +44,7 @@ export class CodeforcesOfficial extends CodeforcesPlatform {
 
     onProgress("Reading the standings…");
     const { contestName, problems, startTimeSeconds, solveCountsRead, standings } =
-      await readSolveStats(contestId, sources);
+      await sources.contestFromStandings(contestId);
 
     // A running round cannot reach here — it would not be in the problemset —
     // so unlike a gym this needs no phase check of its own.
@@ -52,14 +52,14 @@ export class CodeforcesOfficial extends CodeforcesPlatform {
       id: contestId,
       name: contestName,
       problems,
-      // Stamped, not null: `readSolveStats` has already applied every rating
+      // Stamped, not null: `contestFromStandings` has already applied every rating
       // and tag the standings carry. A round Codeforces has not rated yet
       // stores estimates and is settled later by `sync/published-data.js`.
       publishedDataCheckedAt: Date.now(),
       startTimeSeconds,
     };
 
-    await syncStartTimes(sources, [record], onProgress);
+    await syncStartTimes(session, [record], onProgress);
 
     return {
       ...record,
@@ -78,7 +78,7 @@ export class CodeforcesOfficial extends CodeforcesPlatform {
    * is resolved, so a settled queue costs nothing.
    */
   async syncMetadata(session, contests, onProgress = () => {}) {
-    await syncPublishedProblemData(session.sources, contests, onProgress);
-    await syncStartTimes(session.sources, contests, onProgress);
+    await syncPublishedData(session, contests, onProgress);
+    await syncStartTimes(session, contests, onProgress);
   }
 }

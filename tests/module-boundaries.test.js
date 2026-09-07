@@ -390,6 +390,10 @@ test("the retired names survive nowhere", () => {
     "start-time-service",
     "codeforces-service",
     "scraping-service",
+    // The five per-platform reset seams, replaced by `platform.reset()`.
+    "resetApiState",
+    "resetHttpState",
+    "CodeforcesHttp",
   ];
   const offenders = [];
 
@@ -509,10 +513,9 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   // the client started answering with a parsed Document, at which point a
   // name-specific regex matches nothing and "exactly one page read" reads as
   // zero.
-  const fetched = [...sources.matchAll(/CodeforcesHttp\.\w+\(([^)]*)\)/g)]
-    .map((m) => m[1].trim())
-    // The export declares the method by name; only calls count.
-    .filter((args) => args && !args.startsWith("url,"));
+  // `this.getDocument(...)` is the one way a page is read; the method's own
+  // definition is `getDocument(url)`, which this pattern does not match.
+  const fetched = [...sources.matchAll(/\bthis\.getDocument\(([^)]*)\)/g)].map((m) => m[1].trim());
 
   assert.equal(fetched.length, 1, `expected one page read, got ${fetched.length}`);
   assert.ok(
@@ -825,6 +828,83 @@ test("every scraper is one, by the definition rather than by folder", async () =
 
   assert.deepEqual(offenders, [], "a scraper owns one page and says how it reads it");
   assert.equal(scrapers, 6, `expected six scrapers, found ${scrapers}`);
+});
+
+test("a sources.js exports one Source class, and at most a singleton of it", async () => {
+  // What made "what do these have in common" hard to answer: one sources.js
+  // exported a class and six free functions, another a singleton and a reset
+  // seam, a third a constant. Everything a site's reads need is now on the
+  // class — endpoints as methods, payload vocabulary as statics — so the file
+  // is the class, plus the one instance a platform with no credentials keeps.
+  const { Source } = await import("../core/platforms/source.js");
+  const offenders = [];
+  let checked = 0;
+
+  for (const file of sourceFiles(PLATFORMS, [".js"]).filter((f) => path.basename(f) === "sources.js")) {
+    const relative = path.relative(ROOT, file);
+    const exported = await import(file);
+    checked++;
+
+    const classes = Object.entries(exported).filter(
+      ([, value]) => typeof value === "function" && value.prototype instanceof Source,
+    );
+    if (classes.length !== 1) {
+      offenders.push(`${relative} exports ${classes.length} Source classes, expected one`);
+      continue;
+    }
+    const [, cls] = classes[0];
+
+    for (const [name, value] of Object.entries(exported)) {
+      if (value === cls) continue;
+      if (name === "sources" && value instanceof cls) continue;
+      offenders.push(`${relative} also exports ${name} — put it on the class, or in the module that owns it`);
+    }
+  }
+
+  assert.deepEqual(offenders, []);
+  assert.equal(checked, 5, `expected five sources.js, found ${checked}`);
+});
+
+test("a sync pass exports sync(session, contests, onProgress) and nothing else", async () => {
+  // Four passes took four argument lists — the client first, or not at all.
+  // One shape, so `syncMetadata` composes them without knowing which is which.
+  const offenders = [];
+  let checked = 0;
+
+  for (const file of sourceFiles(PLATFORMS, [".js"]).filter((f) => path.basename(path.dirname(f)) === "sync")) {
+    const relative = path.relative(ROOT, file);
+    const exported = Object.keys(await import(file));
+    checked++;
+
+    if (exported.length !== 1 || exported[0] !== "sync") {
+      offenders.push(`${relative} exports ${exported.join(", ") || "nothing"}, expected exactly sync`);
+    }
+    const code = stripComments(readFileSync(file, "utf8"));
+    if (!/export\s+async\s+function\s+sync\s*\(\s*session\s*,\s*contests\s*,\s*onProgress\b/.test(code)) {
+      offenders.push(`${relative}'s sync() does not take (session, contests, onProgress)`);
+    }
+  }
+
+  assert.deepEqual(offenders, []);
+  assert.equal(checked, 5, `expected five sync passes, found ${checked}`);
+});
+
+test("a source singleton is reached through the session, never imported", () => {
+  // The second idiom this removed. A platform's class attaches the singleton
+  // to the session it builds; everything else reads `session.sources`, which
+  // is the seam a test injects a fake through. A module that imported the
+  // singleton instead would work in production and be untestable.
+  const offenders = [];
+
+  for (const file of sourceFiles(PLATFORMS, [".js"])) {
+    if (path.basename(file) === "platform.js") continue;
+    const code = stripComments(readFileSync(file, "utf8"));
+    if (/import\s*\{[^}]*\bsources\b[^}]*\}\s*from\s*"[^"]*sources\.js"/.test(code)) {
+      offenders.push(`${path.relative(ROOT, file)} imports the sources singleton`);
+    }
+  }
+
+  assert.deepEqual(offenders, []);
 });
 
 test("DOMParser is constructed in exactly one place", () => {

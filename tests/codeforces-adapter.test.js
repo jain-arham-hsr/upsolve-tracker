@@ -18,27 +18,40 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { CodeforcesHttp } = await import("../core/platforms/codeforces-gyms/sources.js");
+const { GymSources } = await import("../core/platforms/codeforces-gyms/sources.js");
+const { OfficialSources } = await import("../core/platforms/codeforces-official/sources.js");
 const { getAdapter } = await import("../core/platforms/platforms.js");
 
 /**
- * These cases stub the page the way Codeforces serves it — as HTML — while
- * production's `getDocument` hands back a parsed `Document`. This bridges the
- * two so each stub below stays a readable page rather than a constructed DOM.
- * The real `getDocument`, parse included, is covered by
+ * The one page a hidden-standings gym reads. These cases stub it the way
+ * Codeforces serves it — as HTML — and the source's `getDocument` is what
+ * parses, so each stub stays a readable page rather than a constructed DOM.
+ * The real `getDocument`, refusal and parse included, is covered by
  * `tests/codeforces-http.test.js`.
  */
-CodeforcesHttp.getDocument = async (...args) =>
-  new DOMParser().parseFromString(await CodeforcesHttp.get(...args), "text/html");
+const CodeforcesHttp = { get: async () => { throw new Error("no page served"); } };
 
 /**
- * Codeforces is two platforms now, and the subtype is what picks between them —
+ * A real source with the fake API answers assigned over it, which is how every
+ * Codeforces test injects: the methods the platform composes — reading a
+ * contest off the standings, rebuilding one from submissions — stay real, and
+ * only the API calls beneath them are stubbed.
+ */
+const real = (subtype, fake) =>
+  Object.assign(
+    new (subtype === "GYM" ? GymSources : OfficialSources)("k", "s"),
+    { getDocument: async (url) => new DOMParser().parseFromString(await CodeforcesHttp.get(url), "text/html") },
+    fake,
+  );
+
+/**
+ * Codeforces is two platforms, and the subtype is what picks between them —
  * so this routes the way `matchContestUrl` does, and every case below keeps
  * naming the subtype it is about.
  */
-const fetchContestRecord = ({ subtype, ...rest }) =>
+const fetchContestRecord = ({ subtype, session, ...rest }) =>
   getAdapter(subtype === "GYM" ? "codeforces-gyms" : "codeforces-official")
-    .fetchContestRecord({ subtype, ...rest });
+    .fetchContestRecord({ subtype, session: { ...session, sources: real(subtype, session.sources) }, ...rest });
 
 const INDEXES = ["A", "B", "C"];
 

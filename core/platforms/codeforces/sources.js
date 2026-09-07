@@ -61,6 +61,59 @@ export class CodeforcesSources extends Source {
     signed.reset(spacingMs);
   }
 
+  /**
+   * Applies the tags and the rating Codeforces attaches to a contest's
+   * problems, off a `contest.standings` response.
+   *
+   * On an official round this is the only source that reports a shared
+   * Div. 1 / Div. 2 problem's rating under this contest's own index; on a gym
+   * about a third of problems carry a rating inherited from the archive.
+   *
+   * @returns {boolean} whether the API answered with problems at all, which
+   *   is what `publishedDataCheckedAt` records.
+   */
+  static applyStandingsProblemData(standings, problems) {
+    const apiProblems = standings?.problems;
+    if (!apiProblems?.length) return false;
+
+    const byIndex = new Map(
+      apiProblems.map((problem) => [problem.index, problem]),
+    );
+    problems.forEach((problem) => {
+      const published = byIndex.get(problem.index);
+      problem.tags = published?.tags ?? [];
+
+      if (typeof published?.rating === "number") {
+        problem.rating = published.rating;
+        problem.ratingSource = "official";
+      }
+    });
+
+    return true;
+  }
+
+  /** In-contest solves per problem, from the rows, ghosts excluded. */
+  static populateSolveCounts(standings, problems) {
+    if (!standings?.rows?.length) return;
+
+    const validRows = standings.rows.filter((row) => !row.party.ghost);
+    const solveCountMap = {};
+
+    validRows.forEach((row) => {
+      row.problemResults.forEach((result, i) => {
+        const index = problems[i]?.index;
+        if (!index) return;
+        if (result.bestSubmissionTimeSeconds != null) {
+          solveCountMap[index] = (solveCountMap[index] ?? 0) + 1;
+        }
+      });
+    });
+
+    problems.forEach((problem) => {
+      problem.officialSolves = solveCountMap[problem.index] ?? 0;
+    });
+  }
+
   /** Signs and issues one API call; a FAILED status becomes the comment Codeforces gave. */
   async _callMethod(methodName, params) {
     const time = Math.floor(Date.now() / 1000);

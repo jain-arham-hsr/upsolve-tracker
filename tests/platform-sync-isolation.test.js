@@ -8,8 +8,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { contestsOnPlatform } from "../core/platforms/registry.js";
-import { syncStartTimes } from "../core/platforms/codeforces-official/sync/start-times.js";
-import { syncPublishedProblemData } from "../core/platforms/codeforces-official/sync/published-data.js";
+import { sync as startTimes } from "../core/platforms/codeforces/sync/start-times.js";
+import { sync as publishedData } from "../core/platforms/codeforces-official/sync/published-data.js";
+
+// Every pass takes the session; these hand it a fake source the way a test
+// hands the platform one.
+const syncStartTimes = (service, contests, onProgress) => startTimes({ sources: service }, contests, onProgress);
+const syncPublishedProblemData = (service, contests, onProgress) => publishedData({ sources: service }, contests, onProgress);
 
 /**
  * `startTimeSeconds` defaults to *now* because the re-check stops asking about a

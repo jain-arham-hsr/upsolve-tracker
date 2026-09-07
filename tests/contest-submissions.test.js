@@ -16,10 +16,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const {
-  summariseSubmissions,
-  fetchContestSubmissions,
-} = await import("../core/platforms/codeforces-gyms/sources.js");
+const { GymSources } = await import("../core/platforms/codeforces-gyms/sources.js");
+
+const summariseSubmissions = (rows) => GymSources.summariseSubmissions(rows);
+/** A real source with the one API method stubbed, the way every Codeforces test injects. */
+const fetchContestSubmissions = (service, contestId) =>
+  Object.assign(new GymSources("k", "s"), service).contestSubmissions(contestId);
 
 const FIXTURE = JSON.parse(
   readFileSync(new URL("./fixtures/gym-standings-hidden.json", import.meta.url)),

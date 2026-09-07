@@ -14,7 +14,7 @@ import { DashboardPage } from "../core/platforms/codechef/scrapers/page-globals.
 // document the way production does, rather than being regexed off a string.
 const extractSession = (html) =>
   DashboardPage.scrape(parseHTML(`<html><body>${html ?? ""}</body></html>`).document);
-import { sources, resetApiState } from "../core/platforms/codechef/sources.js";
+import { sources } from "../core/platforms/codechef/sources.js";
 import { getAdapter } from "../core/platforms/platforms.js";
 
 // The platform is instantiated in platforms.js, so this exercises the real
@@ -108,7 +108,7 @@ const textResponse = (body) => respond(body);
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 beforeEach(() => {
-  resetApiState();
+  platform.reset();
   attempted = { rows: [], count: null };
   details = clone(DETAILS);
   contests = {
@@ -375,7 +375,7 @@ test("a problem CodeChef later mirrors comes back to the queue", async () => {
   assert.equal(updqs.upsolvable, false);
 
   // CodeChef adds it to practice.
-  resetApiState();
+  platform.reset();
   contests.START252D.problems.UPDQS.is_added_to_practice = true;
 
   const changed = await syncMetadata({ sources }, [contest]);
@@ -393,7 +393,7 @@ test("the re-check runs every refresh, not on the weekly rating stamp", async ()
   // Freshly stamped, so the weekly rating re-check is skipped entirely.
   contest.publishedDataCheckedAt = Date.now();
 
-  resetApiState();
+  platform.reset();
   contests.START252D.problems.UPDQS.is_added_to_practice = true;
   await syncMetadata({ sources }, [contest]);
 
@@ -410,7 +410,7 @@ test("a contest with nothing flagged is never asked about", async () => {
   });
   assert.deepEqual(contest.problems.filter((p) => p.upsolvable === false), []);
 
-  resetApiState();
+  platform.reset();
   requestLog = [];
   await syncMetadata({ sources }, [contest]);
   assert.equal(requestLog.length, 0);
@@ -423,20 +423,20 @@ test("a flagged contest is re-checked until it clears, then stops costing anythi
   assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
 
   // Still unmirrored: asked again, and stays flagged.
-  resetApiState();
+  platform.reset();
   requestLog = [];
   await syncMetadata({ sources }, [contest]);
   assert.equal(requestLog.length, 1);
   assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
 
   // CodeChef mirrors it: the flag clears...
-  resetApiState();
+  platform.reset();
   contests.START252D.problems.UPDQS.is_added_to_practice = true;
   await syncMetadata({ sources }, [contest]);
   assert.equal("upsolvable" in contest.problems.find((p) => p.index === "UPDQS"), false);
 
   // ...and with nothing left flagged, the contest drops out of the pass.
-  resetApiState();
+  platform.reset();
   requestLog = [];
   await syncMetadata({ sources }, [contest]);
   assert.equal(requestLog.length, 0, "a settled contest must cost nothing");
@@ -448,7 +448,7 @@ test("a failed re-check leaves the flag alone rather than clearing it", async ()
   const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: { sources },
   });
-  resetApiState();
+  platform.reset();
   delete contests.START252D;
 
   await syncMetadata({ sources }, [contest]);
@@ -463,7 +463,7 @@ test("a problem missing from the payload keeps its flag rather than being guesse
   const contest = await record({
     contestId: "START252D", subtype: "STARTERS", session: { sources },
   });
-  resetApiState();
+  platform.reset();
   delete contests.START252D.problems.UPDQS;
 
   await syncMetadata({ sources }, [contest]);
@@ -485,7 +485,7 @@ test("a difficulty published after the contest was added is filled in", async ()
   assert.equal(modsub.rating, null, "-1 is CodeChef's 'not rated'");
 
   // Rated since, and the contest has not been looked at for a fortnight.
-  resetApiState();
+  platform.reset();
   details.MODSUB = { difficulty_rating: "1500", user_tags: ["greedy", "start252"] };
   contest.publishedDataCheckedAt = Date.now() - 14 * 24 * 60 * 60 * 1000;
 
@@ -504,7 +504,7 @@ test("the difficulty re-check is throttled to a week, unlike the practice one", 
   // pins that the two cadences really are independent rather than both firing.
   contest.publishedDataCheckedAt = Date.now();
 
-  resetApiState();
+  platform.reset();
   details.MODSUB = { difficulty_rating: "1500", user_tags: [] };
   requestLog = [];
   await syncMetadata({ sources }, [contest]);

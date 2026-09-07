@@ -40,7 +40,7 @@ const MIN_GAP_MS = 1500;
 const MAX_SUBMISSION_PAGES = 20;
 
 /** Thrown rather than returned, so no caller can mistake it for "nothing found". */
-export class NotSignedInError extends Error {
+class NotSignedInError extends Error {
   constructor(url) {
     super(
       "AtCoder is not signed in, so your submissions can't be read. " +
@@ -52,7 +52,7 @@ export class NotSignedInError extends Error {
   }
 }
 
-class AtCoderSources extends Source {
+export class AtCoderSources extends Source {
   constructor() {
     super({
       origin: ORIGIN,
@@ -190,6 +190,3 @@ class AtCoderSources extends Source {
  * `source.js`.
  */
 export const sources = new AtCoderSources();
-
-/** Test seam: resets pacing between cases. Production always uses MIN_GAP_MS. */
-export const resetHttpState = (ms = MIN_GAP_MS) => sources.reset(ms);

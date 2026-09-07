@@ -109,11 +109,9 @@ test("the trunk emits every contest field its readers actually read", () => {
  * an official contest gets all the way through, which is precisely what silently
  * stopped happening.
  *
- * It used to probe `problemset-sync.js`. That module is now the readiness gate
- * alone — the weekly re-check moved to `published-sync.js` and reads
- * `contest.standings` — so the probe follows the code it was written for:
- * `applyStandingsProblemData` is the single applier both the add path and the
- * re-check go through, which makes it the one line that has to execute.
+ * `applyStandingsProblemData`, on the shared Codeforces source, is the single
+ * applier the add path and the weekly re-check both go through, which makes
+ * it the one line that has to execute.
  */
 test("some test actually reaches the code that applies published ratings", () => {
   const run = spawnSync(
@@ -131,11 +129,11 @@ test("some test actually reaches the code that applies published ratings", () =>
 
   const row = run.stdout
     .split("\n")
-    .find((line) => line.includes("codeforces-official/sources.js"));
+    .find((line) => line.includes("codeforces/sources.js"));
 
   // Without this, a changed coverage format would make the assertion below
   // vacuous — the same hollowness this test replaced.
-  assert.ok(row, "no coverage row for sources.js; the format has changed");
+  assert.ok(row, "no coverage row for codeforces/sources.js; the format has changed");
 
   const uncovered = (row.split("|").pop() ?? "").trim();
   const ranges = uncovered.split(/\s+/).filter(Boolean).map((range) => {
@@ -148,7 +146,7 @@ test("some test actually reaches the code that applies published ratings", () =>
   // covered line and passes — silently, which is the failure this whole file
   // exists to prevent.
   const source = readFileSync(
-    path.join(PLATFORMS, "codeforces-official", "sources.js"),
+    path.join(PLATFORMS, "codeforces", "sources.js"),
     "utf8",
   ).split("\n");
   const applyIndex = source.findIndex((line) =>

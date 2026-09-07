@@ -10,13 +10,12 @@
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { resetApiState } from "../core/platforms/codechef/sources.js";
 import { getAdapter } from "../core/platforms/platforms.js";
 
 const codechef = getAdapter("codechef");
 const codeforces = getAdapter("codeforces-official");
 
-beforeEach(() => resetApiState());
+beforeEach(() => codechef.reset());
 
 test("every platform refuses when it has no handle", async () => {
   await assert.rejects(() => codeforces.verifyIdentity({}), /No Codeforces handle/);

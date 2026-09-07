@@ -78,6 +78,11 @@ export class CodeforcesPlatform extends Platform {
     };
   }
 
+  /** Both clients are module-level, so the seam is static on the Sources class. */
+  reset(spacingMs = 0) {
+    this.constructor.Sources.reset(spacingMs);
+  }
+
   /** Both platforms fit the same quantity; only how the field is read differs. */
   estimate(contest, field) {
     return estimate(contest, field);

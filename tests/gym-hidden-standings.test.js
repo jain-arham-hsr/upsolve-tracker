@@ -14,21 +14,22 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { CodeforcesHttp } = await import("../core/platforms/codeforces-gyms/sources.js");
-const { readSolveStats } = await import("../core/platforms/codeforces-gyms/sources.js");
-const { readSolveStats: readOfficialStats } = await import(
-  "../core/platforms/codeforces-official/sources.js"
-);
+const { GymSources } = await import("../core/platforms/codeforces-gyms/sources.js");
+const { OfficialSources } = await import("../core/platforms/codeforces-official/sources.js");
 
 /**
- * These cases stub the page the way Codeforces serves it — as HTML — while
- * production's `getDocument` hands back a parsed `Document`. This bridges the
- * two so each stub below stays a readable page rather than a constructed DOM.
- * The real `getDocument`, parse included, is covered by
- * `tests/codeforces-http.test.js`.
+ * The page a hidden-standings gym reads, stubbed the way Codeforces serves it
+ * — as HTML — and parsed by the source's own `getDocument`, so each stub stays
+ * a readable page. `tests/codeforces-http.test.js` covers the real one.
  */
-CodeforcesHttp.getDocument = async (...args) =>
-  new DOMParser().parseFromString(await CodeforcesHttp.get(...args), "text/html");
+const CodeforcesHttp = { get: async () => { throw new Error("no page served"); } };
+const parsed = async (url) => new DOMParser().parseFromString(await CodeforcesHttp.get(url), "text/html");
+
+/** A real source with the fake API answers assigned over it. */
+const readSolveStats = (contestId, fake) =>
+  Object.assign(new GymSources("k", "s"), { getDocument: parsed }, fake).contestFromStandings(contestId);
+const readOfficialStats = (contestId, fake) =>
+  Object.assign(new OfficialSources("k", "s"), { getDocument: parsed }, fake).contestFromStandings(contestId);
 
 const PROBLEMS = [
   ["A", "Everything Everywhere All But One"],
