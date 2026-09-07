@@ -31,6 +31,8 @@ import { createSiteClient } from "../../services/site-client.js";
 import { atcoder } from "./descriptor.js";
 import { TasksPage } from "./scrapers/tasks.js";
 import { SubmissionsPage } from "./scrapers/submissions.js";
+import { ProfilePage } from "./scrapers/profile.js";
+import { PageGlobals } from "./scrapers/page-globals.js";
 
 const ORIGIN = "https://atcoder.jp";
 const MIN_GAP_MS = 1500;
@@ -150,6 +152,21 @@ export class AtCoderSources extends Source {
     }
 
     return accepted;
+  }
+
+  /**
+   * A user's profile page, read for two facts at once: the rating shown, and
+   * who the browser is signed in as — every page AtCoder serves carries
+   * `var userScreenName`, so one request answers both.
+   *
+   * @returns {Promise<{signedInAs: string|null, rating: number|null}>}
+   *   `signedInAs` is `""` when signed out and `null` when the marker is gone;
+   *   the platform decides what each means.
+   * @throws with `status: 404` when AtCoder has no such user.
+   */
+  async profile(handle) {
+    const doc = await this.document(`/users/${encodeURIComponent(handle)}`);
+    return { ...PageGlobals.scrape(doc), rating: ProfilePage.scrape(doc).rating };
   }
 
   /**

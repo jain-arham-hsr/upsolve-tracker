@@ -16,6 +16,7 @@ globalThis.DOMParser = DOMParser;
 
 const { GymSources } = await import("../core/platforms/codeforces/gyms/sources.js");
 const { OfficialSources } = await import("../core/platforms/codeforces/official/sources.js");
+const { getAdapter } = await import("../core/platforms/platforms.js");
 
 /**
  * The page a hidden-standings gym reads, stubbed the way Codeforces serves it
@@ -25,11 +26,24 @@ const { OfficialSources } = await import("../core/platforms/codeforces/official/
 const CodeforcesHttp = { get: async () => { throw new Error("no page served"); } };
 const parsed = async (url) => new DOMParser().parseFromString(await CodeforcesHttp.get(url), "text/html");
 
-/** A real source with the fake API answers assigned over it. */
-const readSolveStats = (contestId, fake) =>
-  Object.assign(new GymSources("k", "s"), { getDocument: parsed }, fake).contestFromStandings(contestId);
-const readOfficialStats = (contestId, fake) =>
-  Object.assign(new OfficialSources("k", "s"), { getDocument: parsed }, fake).contestFromStandings(contestId);
+/**
+ * Drives the platform's `fetchContest` over a real source with the fake API
+ * answers assigned over it, and flattens what it acquired — the record plus
+ * its `context` — into one object, which is the shape these cases assert on.
+ * `contest.list` is stubbed empty so the start-time pass makes no request.
+ */
+async function acquire(platformId, Sources, contestId, fake) {
+  const sources = Object.assign(
+    new Sources("k", "s"),
+    { getDocument: parsed, getContestList: async () => [] },
+    fake,
+  );
+  const acquired = await getAdapter(platformId).fetchContest({ contestId, session: { sources } });
+  if (acquired.status) throw new Error(`${acquired.status}: ${acquired.reason}`);
+  return { contestName: acquired.name, ...acquired, ...acquired.context };
+}
+const readSolveStats = (contestId, fake) => acquire("codeforces-gyms", GymSources, contestId, fake);
+const readOfficialStats = (contestId, fake) => acquire("codeforces-official", OfficialSources, contestId, fake);
 
 const PROBLEMS = [
   ["A", "Everything Everywhere All But One"],
@@ -157,6 +171,8 @@ test("the official reader is a different module, and it reaches no page at all",
   const seen = serve({ standings: NO_TABLE, problems: problemsPage(1) });
 
   const stats = await readOfficialStats("2193", forbiddenService({
+    // The publication gate runs first; this round is in the problemset.
+    getProblemsetProblems: async () => ({ problems: [{ contestId: 2193, index: "A" }] }),
     getPublicContestStandings: async () => ({
       contest: { name: "Round 2193", startTimeSeconds: 4242 },
       problems: [{ index: "A", name: "Alpha", rating: 900, tags: ["math"] }],

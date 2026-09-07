@@ -19,7 +19,6 @@
 import { Platform } from "../platform.js";
 import { codechef } from "./descriptor.js";
 import { CodeChefSources, sources } from "./sources.js";
-import { DashboardPage } from "./scrapers/page-globals.js";
 import { sync as syncPublishedDifficulty } from "./sync/published-data.js";
 import { sync as refreshPracticeFlags } from "./sync/practice-flags.js";
 import {
@@ -44,10 +43,7 @@ export class CodeChef extends Platform {
    * as. Both, because they can differ — and that difference is the point.
    */
   async buildSession(values) {
-    // Null both when signed out and when the shell no longer carries the
-    // bootstrap object. Either way the caller must not read an empty solved
-    // list as "nothing solved".
-    const page = DashboardPage.scrape(await this.sources.dashboard());
+    const page = await this.sources.dashboard();
 
     return {
       handle: values[HANDLE_KEY],

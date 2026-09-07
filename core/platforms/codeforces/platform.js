@@ -19,6 +19,7 @@
  */
 import { Platform } from "../platform.js";
 import { estimate } from "./estimator.js";
+import { CodeforcesSources } from "./sources.js";
 
 const HANDLE_KEY = "upsolve_tracker.handle";
 
@@ -76,6 +77,38 @@ export class CodeforcesPlatform extends Platform {
       username: user.handle,
       rating: typeof user.rating === "number" ? user.rating : null,
     };
+  }
+
+  /**
+   * The problems a `contest.standings` response describes, in the stored shape:
+   * blank, then Codeforces' published ratings and tags applied, then in-contest
+   * solves counted from the rows. Both platforms start here; what differs is
+   * what each does when the call fails.
+   *
+   * @throws flagged `isSourceUnreachable` when the response names no problems —
+   *   there is nothing to store, and an unreachable API is a reason to retry.
+   */
+  problemsFromStandings(contestId, standings) {
+    const problems = (standings?.problems ?? []).map((problem) => ({
+      index: problem.index,
+      name: problem.name,
+      rating: null,
+      ratingSource: null,
+      officialSolves: 0,
+      solved: false,
+      tags: [],
+    }));
+
+    if (problems.length === 0) {
+      throw Object.assign(
+        new Error(`Codeforces returned no problems for ${contestId}, so there is nothing to store.`),
+        { isSourceUnreachable: true },
+      );
+    }
+
+    CodeforcesSources.applyStandingsProblemData(standings, problems);
+    CodeforcesSources.populateSolveCounts(standings, problems);
+    return problems;
   }
 
   /** Both clients are module-level, so the seam is static on the Sources class. */

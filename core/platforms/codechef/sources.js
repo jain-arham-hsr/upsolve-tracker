@@ -27,6 +27,7 @@
 import { Source } from "../source.js";
 import { createSiteClient } from "../../services/site-client.js";
 import { codechef } from "./descriptor.js";
+import { DashboardPage } from "./scrapers/page-globals.js";
 
 const BASE = "https://www.codechef.com";
 
@@ -171,12 +172,17 @@ export class CodeChefSources extends Source {
     return rows;
   }
 
-  /**
-   * The lightest page carrying `window.codeChefUserData`: ~9 KB, against 84 KB
-   * for the homepage, which doesn't carry it at all.
+    /**
+   * Who the browser is signed in as, off the lightest page carrying
+   * `window.codeChefUserData` (~9 KB, against 84 KB for the homepage, which
+   * doesn't carry it at all).
+   *
+   * @returns {Promise<{username: string, rating: number|null}|null>} null both
+   *   when signed out and when the shell no longer carries the bootstrap
+   *   object; the platform must not read either as "nothing solved".
    */
-  dashboard() {
-    return this.document("/dashboard");
+  async dashboard() {
+    return DashboardPage.scrape(await this.document("/dashboard"));
   }
 
   /**

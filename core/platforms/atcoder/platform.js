@@ -18,8 +18,6 @@
 import { Platform } from "../platform.js";
 import { atcoder } from "./descriptor.js";
 import { sources } from "./sources.js";
-import { ProfilePage } from "./scrapers/profile.js";
-import { PageGlobals } from "./scrapers/page-globals.js";
 import { readField } from "./field.js";
 import { estimate } from "./estimator.js";
 import { notPublishedYet } from "../../contest-status.js";
@@ -53,9 +51,9 @@ export class AtCoder extends Platform {
       throw new Error("No AtCoder handle set. Add one in Settings.");
     }
 
-    let doc;
+    let profile;
     try {
-      doc = await session.sources.document(`/users/${encodeURIComponent(session.handle)}`);
+      profile = await session.sources.profile(session.handle);
     } catch (error) {
       if (error?.status === 404) {
         throw new Error(`AtCoder has no user "${session.handle}".`);
@@ -63,7 +61,7 @@ export class AtCoder extends Platform {
       throw error;
     }
 
-    const { signedInAs } = PageGlobals.scrape(doc);
+    const { signedInAs } = profile;
 
     if (signedInAs && signedInAs.toLowerCase() !== session.handle.toLowerCase()) {
       // Flagged, not matched on the sentence, so a copy edit cannot change
@@ -83,7 +81,7 @@ export class AtCoder extends Platform {
       username: signedInAs || session.handle,
       // Null rather than a default when the page shape changes: a substituted
       // rating would mis-sort every AtCoder problem in the queue.
-      rating: ProfilePage.scrape(doc).rating,
+      rating: profile.rating,
     };
   }
 

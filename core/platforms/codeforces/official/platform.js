@@ -35,28 +35,33 @@ export class CodeforcesOfficial extends CodeforcesPlatform {
     // no equivalent gate on a gym: gyms are absent from the problemset
     // entirely, which is why the two pipelines are two classes.
     onProgress("Checking whether Codeforces has published it…");
-    if (!(await sources.isInProblemset(contestId))) {
+    if (!inProblemset(await sources.getProblemsetProblems(), contestId)) {
       return notPublishedYet(
         `Codeforces hasn't published contest ${contestId} yet. It'll be added ` +
           `on a refresh once it appears.`,
       );
     }
 
+    // One unsigned call carries the name, the problems with their published
+    // ratings and tags, the start time, and rows enough to count solves. It is
+    // the only thing that reports a shared Div. 1 / Div. 2 problem's rating
+    // under this contest's own index. Failure is hard: it is the only source
+    // of the roster, and it is flagged so the add waits rather than refuses.
     onProgress("Reading the standings…");
-    const { contestName, problems, startTimeSeconds, solveCountsRead, standings } =
-      await sources.contestFromStandings(contestId);
+    const standings = await sources.getPublicContestStandings(contestId);
+    const problems = this.problemsFromStandings(contestId, standings);
 
     // A running round cannot reach here — it would not be in the problemset —
     // so unlike a gym this needs no phase check of its own.
     const record = {
       id: contestId,
-      name: contestName,
+      name: standings?.contest?.name ?? `Contest ${contestId}`,
       problems,
-      // Stamped, not null: `contestFromStandings` has already applied every rating
-      // and tag the standings carry. A round Codeforces has not rated yet
-      // stores estimates and is settled later by `sync/published-data.js`.
+      // Stamped, not null: every rating and tag the standings carry is already
+      // applied. A round Codeforces has not rated yet stores estimates and is
+      // settled later by `sync/published-data.js`.
       publishedDataCheckedAt: Date.now(),
-      startTimeSeconds,
+      startTimeSeconds: standings?.contest?.startTimeSeconds ?? null,
     };
 
     await syncStartTimes(session, [record], onProgress);
@@ -65,7 +70,9 @@ export class CodeforcesOfficial extends CodeforcesPlatform {
       ...record,
       // Passed, never stored: ~8.5 MB of one round's field. The estimator
       // measures the field from these rows rather than fetching them again.
-      context: { solveCountsRead, standings },
+      // `solveCountsRead` is true unconditionally: counts come from rows or
+      // not at all, and there is no totals row left to misparse.
+      context: { solveCountsRead: true, standings },
     };
   }
 
@@ -81,4 +88,17 @@ export class CodeforcesOfficial extends CodeforcesPlatform {
     await syncPublishedData(session, contests, onProgress);
     await syncStartTimes(session, contests, onProgress);
   }
+}
+
+/**
+ * Whether Codeforces has published this contest's problems yet — the
+ * publication gate, and only that. Present does not mean rated: 41 of 2,007
+ * contests in the problemset have no rated problem, and the newest are
+ * ordinary recent rounds still waiting on Codeforces. A contest that is
+ * present but unrated stores with estimates and is settled later. Gyms are
+ * absent from the problemset entirely and are never asked.
+ */
+function inProblemset(problemset, contestId) {
+  const wanted = String(contestId);
+  return (problemset?.problems ?? []).some((problem) => String(problem.contestId) === wanted);
 }

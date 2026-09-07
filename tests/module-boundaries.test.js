@@ -916,6 +916,38 @@ test("a source singleton is reached through the session, never imported", () => 
   assert.deepEqual(offenders, []);
 });
 
+test("a scraper is called only from a sources.js, so a platform never sees a Document", () => {
+  // The rule that makes every folder read alike: a source answers routes — a
+  // JSON endpoint, or a page handed to its scraper — and a platform decides
+  // over what came back. AtCoder's class used to scrape the profile itself and
+  // CodeChef's the dashboard, so the same kind of work sat in two places.
+  const offenders = [];
+  let importers = 0;
+
+  for (const file of sourceFiles(PLATFORMS, [".js"])) {
+    const code = stripComments(readFileSync(file, "utf8"));
+    if (!importsOf(code).some((spec) => spec.includes("/scrapers/"))) continue;
+    importers++;
+    if (path.basename(file) !== "sources.js") {
+      offenders.push(`${path.relative(ROOT, file)} imports a scraper`);
+    }
+  }
+
+  assert.deepEqual(offenders, [], "a scraper takes a page the source fetched; only the source calls it");
+  assert.equal(importers, 3, `expected three sources to scrape, found ${importers}`);
+});
+
+test("a source never answers with a status", () => {
+  // A status is a decision — wait, refuse, retry — and deciding is the
+  // platform's. A source that imported the vocabulary would be deciding.
+  const offenders = sourceFiles(PLATFORMS, [".js"])
+    .filter((file) => path.basename(file) === "sources.js")
+    .filter((file) => importsOf(stripComments(readFileSync(file, "utf8"))).some((spec) => spec.endsWith("contest-status.js")))
+    .map((file) => path.relative(ROOT, file));
+
+  assert.deepEqual(offenders, []);
+});
+
 test("DOMParser is constructed in exactly one place", () => {
   // What makes every reader testable in Node against linkedom: they take a
   // Document and never build one. It was three places until the two
