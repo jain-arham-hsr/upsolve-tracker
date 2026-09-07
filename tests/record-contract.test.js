@@ -180,20 +180,24 @@ test("every platform expresses an accepted submission the same way", () => {
   // say — it works on AtCoder and throws on CodeChef, from a line that mentions
   // neither. So: always an object, never a bare null.
   const offenders = [];
+  let builders = 0;
 
-  for (const id of readdirSync(PLATFORMS, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)) {
-    const file = path.join(PLATFORMS, id, "submissions.js");
+  // Wherever `fetchAccepted` is implemented — a platform's own class, or a
+  // base shared between two platforms — it must build a contest object.
+  for (const file of walk(PLATFORMS)) {
     const code = read(file);
+    if (!/\bfetchAccepted\s*\(/.test(code) || !/(async\s+fetchAccepted|function\s+fetchAccepted)\s*\(/.test(code)) continue;
+    builders++;
+    const relative = path.relative(PLATFORMS, file);
 
     if (/contest:\s*null\b/.test(code)) {
-      offenders.push(`${id}/submissions.js returns a bare null contest`);
+      offenders.push(`${relative} returns a bare null contest`);
     }
     if (!/contest:\s*\{/.test(code)) {
-      offenders.push(`${id}/submissions.js never builds a contest object`);
+      offenders.push(`${relative} never builds a contest object`);
     }
   }
 
+  assert.ok(builders >= 3, `found only ${builders} fetchAccepted implementations; the scan has stopped seeing them`);
   assert.deepEqual(offenders, [], "an accepted pair's contest is always an object");
 });

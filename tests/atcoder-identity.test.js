@@ -20,7 +20,8 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { verifyIdentity } = await import("../core/platforms/atcoder/identity.js");
+const { getAdapter } = await import("../core/platforms/platforms.js");
+const verifyIdentity = (session) => getAdapter("atcoder").verifyIdentity(session);
 const { sources, resetHttpState } = await import("../core/platforms/atcoder/sources.js");
 
 const profile = (signedInAs, rating = 1600) => `<html><head>

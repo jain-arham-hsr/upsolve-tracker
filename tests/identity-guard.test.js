@@ -216,7 +216,8 @@ test("CodeChef verifies again itself, even if the caller already did", async () 
   // cookie rather than by a handle we ask about, so it does not rely on the
   // orchestrator having checked: a caller that skipped the check, or swallowed
   // its failure, must still not be able to read somebody else's solves.
-  const { fetchAccepted } = await import("../core/platforms/codechef/submissions.js");
+  const { getAdapter } = await import("../core/platforms/platforms.js");
+  const fetchAccepted = (...args) => getAdapter("codechef").fetchAccepted(...args);
   stub({
     storage: { "upsolve_tracker.codechef_handle": "me" },
     handler: (url) =>

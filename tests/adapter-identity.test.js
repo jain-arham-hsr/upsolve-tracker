@@ -11,8 +11,10 @@
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { resetApiState } from "../core/platforms/codechef/sources.js";
-import * as codechef from "../core/platforms/codechef/identity.js";
-import * as codeforces from "../core/platforms/codeforces-official/identity.js";
+import { getAdapter } from "../core/platforms/platforms.js";
+
+const codechef = getAdapter("codechef");
+const codeforces = getAdapter("codeforces-official");
 
 beforeEach(() => resetApiState());
 
