@@ -1,5 +1,6 @@
 /**
- * Everything this platform reads from Codeforces — the client and its endpoints.
+ * Everything the gym platform reads from Codeforces, beyond what
+ * `codeforces/sources.js` already covers.
  *
  * Three endpoints, in the order a gym add reaches them:
  *
@@ -7,54 +8,14 @@
  *   contest.status      the same, rebuilt from submissions, when standings are hidden
  *   /gym/<id>           the definitive problem list, likewise
  *
- * Only the last reads markup, and even it just fetches the page and hands it to
- * `scrapers/problems-page.js`.
- *
- * ## Two copies of this file, deliberately
- *
- * `codeforces-official/` and `codeforces-gyms/` are separate platforms with no
- * shared folder between them, so each carries its own client — trimmed to the
- * endpoints it actually calls.
- *
- * What they genuinely share is `_callMethod` and its SHA-512 signing, and that
- * is the one duplication with a real failure mode: a fix applied to one file
- * only. `tests/module-boundaries.test.js` pins those two methods against each
- * other, and `tests/codeforces-api.test.js` pins the string they hash.
- *
- * `Source` supplies the plumbing — path joining, `json`/`document`, the memo and
- * the reset seam. What is left here is which endpoints exist and what an
- * unusable answer means for each.
+ * Only the last reads markup, and even it just fetches the page and hands it
+ * to `scrapers/problems-page.js`.
  */
-import { Source } from "../source.js";
+import { CodeforcesSources } from "../codeforces/sources.js";
 import { codeforcesGyms } from "./descriptor.js";
 import { createSiteClient } from "../../services/site-client.js";
 import { ProblemsPage } from "./scrapers/problems-page.js";
 
-
-/**
- * One client for both Codeforces platforms' signed calls.
- *
- * It goes through `services/site-client.js` like every other platform, but with
- * two deliberate parameters:
- *
- *   - **a direct `fetchImpl`, not the page transport.** The signed API works
- *     anonymously and is never challenged, so routing it through a tab would add
- *     a dependency it does not need.
- *   - **`refusal: () => null`.** This API does not refuse at the transport — a
- *     bad key comes back as a 200 with `status: "FAILED"`, which `_callMethod`
- *     reads. Saying so here is what lets the transport stay shared.
- *
- * `budget` rather than a bare pacer, because Codeforces is two platforms — each
- * with its own copy of this. Two clients each honouring a 2 s gap would serve one
- * request per second to codeforces.com; a shared budget makes them queue as one.
- * Settings builds a second instance through `createSessionFrom` to check
- * credentials you have typed but not saved, which must not get a fresh allowance.
- */
-const signed = createSiteClient({
-  fetchImpl: (...args) => fetch(...args),
-  pacer: { gapMs: 2000, budget: "codeforces-api", credentials: "omit" },
-  refusal: () => null,
-});
 
 /**
  * The second client, for the one page this platform still reads.
@@ -116,49 +77,19 @@ export const CodeforcesHttp = {
   getDocument: (url, options = {}) => html.getDocument(url, options),
 };
 
-export class CodeforcesService extends Source {
-  constructor(apiKey, apiSecret) {
-    super({ client: signed, origin: "https://codeforces.com" });
-    this.apiKey = apiKey;
-    this.apiSecret = apiSecret;
-    this.baseUrl = "https://codeforces.com/api/";
-  }
-
-  /**
-   * Fetches the user.status (submissions) for a specific handle.
-   * @param {string} handle - The CF user handle
-   */
-  async getUserStatus(handle) {
-    const params = {
-      handle: handle,
-      from: 1,
-      count: 1000, // You can adjust this as needed
-    };
-
-    return this._callMethod("user.status", params);
-  }
-
-  /**
-   * Fetches standings for a contest to extract contestant handles.
-   * @param {string|number} contestId
-   */
+export class GymSources extends CodeforcesSources {
+  /** Standings for a gym, signed. */
   async getContestStandings(contestId) {
     try {
       return await this._callMethod("contest.standings", {
-        contestId: contestId,
+        contestId,
         showUnofficial: true,
         participantTypes: "CONTESTANT,VIRTUAL",
       });
     } catch (error) {
-      // **The one place a message match is unavoidable**, and it is converted to
-      // a flag here so that nothing downstream ever matches on prose. A setter
-      // who hides a gym's standings gets this exact comment and no distinct
-      // status code, so Codeforces' wording is the only signal there is.
-      //
-      // `solve-stats.js` reads the flag to rebuild the contest from
-      // `contest.status` instead. That used to be triggered by the standings
-      // *page* failing to parse, which meant such a gym fetched and parsed
-      // HTML purely to discover the fetch was pointless.
+      // The one place a message match is unavoidable, converted to a flag here
+      // so nothing downstream matches on prose: a setter who hides a gym's
+      // standings gets this exact comment and no distinct status code.
       if (/standings are not available/i.test(error.message)) {
         error.isStandingsHidden = true;
       }
@@ -167,95 +98,21 @@ export class CodeforcesService extends Source {
   }
 
   /**
-   * Fetches submissions for a contest.
-   *
-   * This is the only window into a gym whose standings Codeforces has hidden:
-   * contest.standings answers FAILED for those, but contest.status still
-   * answers. See contest-submissions.js.
-   *
-   * @param {string|number} contestId
-   * @param {{from?: number, count?: number}} [page]
+   * Submissions for a contest — the only window into a gym whose standings
+   * Codeforces has hidden. `contest.standings` answers FAILED for those;
+   * `contest.status` still answers.
    */
   async getContestStatus(contestId, { from = 1, count = 10000 } = {}) {
-    return this._callMethod("contest.status", {
-      contestId: contestId,
-      from: from,
-      count: count,
-    });
+    return this._callMethod("contest.status", { contestId, from, count });
   }
 
   /**
-   * Contest metadata (including startTimeSeconds) in bulk, for gyms.
-   *
-   * Note private gyms and mashups (the 6xxxxx ids) are absent from this list
-   * entirely; those are dated from `standings.contest.startTimeSeconds` at add
-   * time instead.
+   * Contest metadata in bulk, for gyms. Private gyms and mashups (the 6xxxxx
+   * ids) are absent from this list; those are dated from
+   * `standings.contest.startTimeSeconds` at add time instead.
    */
   async getContestList() {
     return this._callMethod("contest.list", { gym: true });
-  }
-
-  /**
-   * Fetches user info for an array of handles.
-   * @param {string[]} handles
-   */
-  async getUsersInfo(handles) {
-    return this._callMethod("user.info", { handles: handles.join(";") });
-  }
-
-  /**
-   * Private helper to handle signing and fetching
-   */
-  async _callMethod(methodName, params) {
-    const time = Math.floor(Date.now() / 1000);
-    const rand = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // 1. Add authentication parameters
-    const authParams = {
-      ...params,
-      apiKey: this.apiKey,
-      time: time,
-    };
-
-    // 2. Sort parameters alphabetically by key
-    const sortedKeys = Object.keys(authParams).sort();
-    const queryParts = sortedKeys.map((key) => `${key}=${authParams[key]}`);
-    const queryString = queryParts.join("&");
-
-    // 3. Construct the string to hash: rand/methodName?params#secret
-    const textToHash = `${rand}/${methodName}?${queryString}#${this.apiSecret}`;
-
-    // 4. Generate SHA-512 Hash
-    const hashHex = await this._sha512(textToHash);
-
-    // 5. Build final apiSig: rand + hash
-    const apiSig = `${rand}${hashHex}`;
-
-    // 6. Execute Request
-    const finalUrl = `${this.baseUrl}${methodName}?${queryString}&apiSig=${apiSig}`;
-
-    try {
-      const data = await this.json(finalUrl);
-
-      if (data.status !== "OK") {
-        throw new Error(data.comment || "Codeforces API Error");
-      }
-
-      return data.result;
-    } catch (error) {
-      console.error(`CF API ${methodName} failed:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Native Browser SHA-512 implementation
-   */
-  async _sha512(message) {
-    const msgUint8 = new TextEncoder().encode(message);
-    const hashBuffer = await crypto.subtle.digest("SHA-512", msgUint8);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   }
 }
 
@@ -294,7 +151,7 @@ export class CodeforcesService extends Source {
  * is not challenged and goes through the pacer rather than the page transport.
  *
  * @param {string} contestId
- * @param {CodeforcesService} sources
+ * @param {GymSources} sources
  * @returns {{ contestName: string, problems: object[], tagsSynced: boolean,
  *   startTimeSeconds: number|null, solveCountsRead: boolean,
  *   partyHandles: string[][]|null, finished: boolean|null, standings: object }}
@@ -379,7 +236,7 @@ export async function readSolveStats(contestId, sources) {
  * supplies everything else.
  *
  * @param {string} contestId
- * @param {CodeforcesService} sources
+ * @param {GymSources} sources
  * @param {Error} standingsError - what the standings scrape threw, so a
  *   failure here can name the original cause rather than replacing it.
  */
@@ -534,7 +391,7 @@ const MAX_SUBMISSIONS = 50000;
 /**
  * Every submission to a contest, paged.
  *
- * @param {CodeforcesService} sources
+ * @param {GymSources} sources
  * @param {string|number} contestId
  * @returns {Promise<object[]>}
  */
@@ -725,7 +582,7 @@ function blankProblem(problem) {
  * observable gap, and it was paced by nothing at all until recently.
  */
 export function resetApiState(spacingMs = 0) {
-  signed.reset(spacingMs);
+  CodeforcesSources.reset(spacingMs);
 }
 
 /**

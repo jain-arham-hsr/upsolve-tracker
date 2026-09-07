@@ -110,6 +110,79 @@ const stripComments = (source) =>
 const importsOf = (source) =>
   [...source.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
 
+/** One file per page / pass — a platform may have any number of each. */
+const PLATFORM_FOLDERS = new Set(["scrapers", "sync"]);
+
+/**
+ * Every folder under core/platforms/ is one of two things, and platforms.js is
+ * what says which. A **platform folder** is one whose platform.js exports the
+ * class a registered instance was built from. A **base folder** is one whose
+ * platform.js exports a class at least two registered instances extend and
+ * none is built from — codeforces/ is the one there is. Anything else is an
+ * offender: a folder with no platform.js, a class nobody registers or extends.
+ *
+ * Classified once, at load, because most of the checks below need to know
+ * where a platform lives without assuming its folder is named after its id.
+ */
+const { getAdapter } = await import("../core/platforms/platforms.js");
+const { Platform } = await import("../core/platforms/platform.js");
+const INSTANCES = listPlatforms().map((platform) => getAdapter(platform.id));
+
+/** Folders under core/platforms/ that could hold a platform or a base. */
+function candidateDirs(root) {
+  const out = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || PLATFORM_FOLDERS.has(entry.name)) continue;
+    const full = path.join(root, entry.name);
+    out.push(full, ...candidateDirs(full));
+  }
+  return out;
+}
+
+async function classifyFolders() {
+  const platforms = new Map();
+  const bases = [];
+  const offenders = [];
+
+  for (const dir of candidateDirs(PLATFORMS)) {
+    const relative = path.relative(ROOT, dir);
+    if (!readdirSync(dir).includes("platform.js")) {
+      offenders.push(`${relative} has no platform.js`);
+      continue;
+    }
+
+    const classes = Object.values(await import(path.join(dir, "platform.js"))).filter(
+      (value) => typeof value === "function" && value.prototype instanceof Platform,
+    );
+    if (classes.length !== 1) {
+      offenders.push(`${relative}/platform.js exports ${classes.length} Platform classes, expected one`);
+      continue;
+    }
+
+    const [cls] = classes;
+    const builtFrom = INSTANCES.filter((instance) => instance.constructor === cls);
+    const extending = INSTANCES.filter(
+      (instance) => instance instanceof cls && instance.constructor !== cls,
+    );
+
+    if (builtFrom.length === 1 && extending.length === 0) platforms.set(builtFrom[0].id, relative);
+    else if (builtFrom.length === 0 && extending.length >= 2) bases.push(relative);
+    else {
+      offenders.push(
+        `${relative}/platform.js: ${cls.name} is built by ${builtFrom.length} platform(s) ` +
+          `and extended by ${extending.length} — neither a platform nor a base`,
+      );
+    }
+  }
+
+  return { platforms, bases, offenders };
+}
+
+const FOLDERS = await classifyFolders();
+
+/** Absolute folder of a registered platform. */
+const folderOf = (id) => path.join(ROOT, FOLDERS.platforms.get(id));
+
 test("shared code covers the whole of core/, not just its top level", () => {
   const files = sharedFiles();
 
@@ -319,11 +392,10 @@ test("the retired names survive nowhere", () => {
 });
 
 /**
- * Codeforces is two platforms in two folders with nothing between them.
- *
- * The three tests below are what keeps that true. Without them the split is a
- * convention, and a convention erodes on the first shortcut — the cheapest of
- * which is to reach sideways for something the other folder already has.
+ * Codeforces is two platforms over one base folder. What the account shares —
+ * identity, the submission stream, the signed client — is inherited from
+ * `codeforces/`; what the site publishes differently stays in each platform.
+ * They import the base and never each other.
  */
 const cfFolders = ["codeforces-official", "codeforces-gyms"];
 
@@ -332,7 +404,7 @@ test("the two Codeforces platforms do not import each other", () => {
 
   for (const folder of cfFolders) {
     const other = cfFolders.find((candidate) => candidate !== folder);
-    const dir = path.join(PLATFORMS, folder);
+    const dir = folderOf(folder);
 
     for (const file of sourceFiles(dir, [".js"])) {
       for (const spec of importsOf(readFileSync(file, "utf8"))) {
@@ -350,36 +422,29 @@ test("the two Codeforces platforms do not import each other", () => {
   );
 });
 
-test("a folder under core/platforms/ has a descriptor iff it is registered", () => {
-  // This is what stops a shared `codeforces-common/` reappearing between the
-  // two: a folder with no descriptor is not a platform, and there is nowhere
-  // else for one to sit. It also catches the opposite — a platform folder that
-  // was written but never wired into registry.js, which would simply never run.
-  //
-  // Note this reads **one level only**, which is deliberate rather than an
-  // oversight: `scrapers/` is a folder under a platform and has no
-  // descriptor, so a recursive walk would fail it.
-  const registered = new Set(listPlatforms().map((platform) => platform.id));
-  const folders = readdirSync(PLATFORMS, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
+test("every folder under core/platforms/ is a platform or a base, and platforms.js says which", () => {
+  assert.deepEqual(FOLDERS.offenders, [], "a folder that is neither has nowhere to be");
 
-  for (const folder of folders) {
-    const hasDescriptor = readdirSync(path.join(PLATFORMS, folder)).includes("descriptor.js");
-    assert.equal(
-      hasDescriptor,
-      registered.has(folder),
-      hasDescriptor
-        ? `core/platforms/${folder}/ has a descriptor but is not in registry.js`
-        : `core/platforms/${folder}/ is registered but has no descriptor.js`,
+  assert.deepEqual(
+    [...FOLDERS.platforms.keys()].sort(),
+    listPlatforms().map((platform) => platform.id).sort(),
+    "every registered platform has exactly one folder, and every platform folder is registered",
+  );
+
+  // A platform folder carries its descriptor; a base carries none, since a
+  // base is not a platform and the registry must not be able to list it.
+  for (const [id, folder] of FOLDERS.platforms) {
+    assert.ok(readdirSync(path.join(ROOT, folder)).includes("descriptor.js"), `${id} has no descriptor.js`);
+  }
+  for (const folder of FOLDERS.bases) {
+    assert.ok(
+      !readdirSync(path.join(ROOT, folder)).includes("descriptor.js"),
+      `${folder} is a base folder and must not carry a descriptor of its own`,
     );
   }
 
-  assert.deepEqual(
-    folders.slice().sort(),
-    [...registered].sort(),
-    "every platform folder is a registered platform, and vice versa",
-  );
+  // Or a base could quietly become a platform, or vice versa, and pass.
+  assert.deepEqual(FOLDERS.bases, ["core/platforms/codeforces"]);
 });
 
 test("the official Codeforces platform reaches no HTML at all", () => {
@@ -398,7 +463,7 @@ test("the official Codeforces platform reaches no HTML at all", () => {
   const forbidden = ["scrapers", "DOMParser"];
   const offenders = [];
 
-  for (const file of sourceFiles(path.join(PLATFORMS, "codeforces-official"), [".js"])) {
+  for (const file of sourceFiles(folderOf("codeforces-official"), [".js"])) {
     const relative = path.relative(ROOT, file);
     const code = stripComments(readFileSync(file, "utf8"));
 
@@ -424,7 +489,7 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   // had started scraping again, and no other test would notice: the result is
   // correct either way and only the request count differs.
   const sources = stripComments(
-    readFileSync(path.join(PLATFORMS, "codeforces-gyms", "sources.js"), "utf8"),
+    readFileSync(path.join(folderOf("codeforces-gyms"), "sources.js"), "utf8"),
   );
 
   // Any method on the client, not `getDocument` specifically. Pinning the
@@ -446,7 +511,7 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   // And the official half reads no page at all, which is why it has no
   // `scrapers/` folder to go with it.
   assert.ok(
-    !readdirSync(path.join(PLATFORMS, "codeforces-official")).includes("scrapers"),
+    !readdirSync(folderOf("codeforces-official")).includes("scrapers"),
     "codeforces-official grew a scrapers/ folder — it should read no HTML",
   );
 });
@@ -467,7 +532,7 @@ test("a platform has estimator.js iff its descriptor claims canEstimate", () => 
   const offenders = [];
 
   for (const platform of listPlatforms()) {
-    const hasEstimator = readdirSync(path.join(PLATFORMS, platform.id)).includes("estimator.js");
+    const hasEstimator = readdirSync(folderOf(platform.id)).includes("estimator.js");
     const claimed = platform.capabilities.canEstimate === true;
     if (hasEstimator === claimed) continue;
 
@@ -503,7 +568,7 @@ test("nothing in a scrapers/ folder fetches", () => {
   const scrapers = [];
 
   for (const platform of listPlatforms()) {
-    const root = path.join(PLATFORMS, platform.id);
+    const root = folderOf(platform.id);
     if (!readdirSync(root).includes("scrapers")) continue;
 
     for (const file of sourceFiles(path.join(root, "scrapers"), [".js"])) {
@@ -547,8 +612,8 @@ test("a site client routes through its own platform's descriptor", () => {
   const offenders = [];
   const clients = [];
 
-  for (const platform of listPlatforms()) {
-    for (const file of sourceFiles(path.join(PLATFORMS, platform.id), [".js"])) {
+  for (const file of sourceFiles(PLATFORMS, [".js"])) {
+    {
       const code = stripComments(readFileSync(file, "utf8"));
       if (!code.includes("createSiteClient(")) continue;
 
@@ -577,73 +642,22 @@ test("a site client routes through its own platform's descriptor", () => {
 
   assert.deepEqual(offenders, [], "a client must speak to the site it belongs to");
 
-  // Or a rename could empty the loop and pass. Four now, one per platform:
-  // every read of every site goes through `services/site-client.js`, including
-  // Codeforces' signed API, which used to talk to a bare pacer.
+  // Or a rename could empty the loop and pass. Four: AtCoder, CodeChef, the
+  // signed Codeforces API in its base, and the HTML client a hidden gym needs.
   assert.equal(clients.length, 4, `expected four site clients, found ${clients.join(", ")}`);
 });
 
-/**
- * The two Codeforces folders duplicate three things on purpose, and until now
- * nothing checked that the copies still matched.
- *
- * They are separate platforms with no shared folder between them — that is the
- * design, and `codeforces-common/` is not coming back. What the design owes in
- * exchange is a guarantee that a fix landing in one copy lands in both, which
- * was previously discipline alone. Three comments in the tree claimed
- * `tests/codeforces-signing.test.js` provided it. No such file has ever
- * existed.
- */
-const CF = ["codeforces-official", "codeforces-gyms"];
+test("Codeforces signs in exactly one place", () => {
+  // The duplication with a real failure mode used to be two copies of the
+  // signing routine, pinned against each other. A wrong `apiSig` comes back as
+  // an ordinary FAILED, so nothing else would notice a fix landing in one copy.
+  // Now there is one, in the base, and this is what keeps a second from
+  // growing back in a subclass.
+  const signers = sourceFiles(PLATFORMS, [".js"])
+    .filter((file) => /\b(_callMethod|_sha512)\s*\([^)]*\)\s*\{/.test(stripComments(readFileSync(file, "utf8"))))
+    .map((file) => path.relative(ROOT, file));
 
-const bothCopies = (relative) =>
-  CF.map((id) => readFileSync(path.join(PLATFORMS, id, relative), "utf8"));
-
-for (const file of ["identity.js", "submissions.js"]) {
-  test(`both Codeforces folders hold the same ${file}`, () => {
-    // Byte-identical, comments included: one handle, one key pair, one settings
-    // section, so there is nothing in either file that should differ. Anything
-    // that ever *should* differ is a sign the file is doing too much.
-    const [official, gyms] = bothCopies(file);
-
-    assert.equal(
-      official,
-      gyms,
-      `core/platforms/*/${file} are duplicated on purpose — change both, or ` +
-        `move what diverged into the platform that needs it`,
-    );
-  });
-}
-
-test("both Codeforces clients share one signing implementation", () => {
-  // The duplication with a real failure mode, per api.js's own header: a fix to
-  // the signature applied to one file only. A wrong `apiSig` comes back as an
-  // ordinary FAILED, so nothing else would notice.
-  //
-  // Scoped to the two signing methods rather than the whole file, because the
-  // endpoint halves are genuinely different — official has the problemset and
-  // the unsigned public standings, gyms has contest.status.
-  const method = (source, name) => {
-    const start = source.indexOf(`  async ${name}(`);
-    assert.notEqual(start, -1, `${name} not found`);
-
-    let depth = 0;
-    for (let i = source.indexOf("{", start); i < source.length; i++) {
-      if (source[i] === "{") depth++;
-      else if (source[i] === "}" && --depth === 0) return source.slice(start, i + 1);
-    }
-    throw new Error(`${name} is unbalanced`);
-  };
-
-  const [official, gyms] = bothCopies("sources.js");
-
-  for (const name of ["_callMethod", "_sha512"]) {
-    assert.equal(
-      method(official, name),
-      method(gyms, name),
-      `${name} has drifted between the two Codeforces clients — change both`,
-    );
-  }
+  assert.deepEqual(signers, ["core/platforms/codeforces/sources.js"]);
 });
 
 /**
@@ -664,42 +678,45 @@ test("both Codeforces clients share one signing implementation", () => {
  * endpoint they read, inside `sources/`.
  */
 const PLATFORM_ROOT_FILES = new Set([
-  // Always.
+  // Always: the registry's view, the contract, and the site's reads.
   "descriptor.js",
   "platform.js",
-  "identity.js",
-  "problems.js",
-  "submissions.js",
+  "sources.js",
   // Where the platform estimates.
   "estimator.js",
   "field.js",
-  // Everything it reads from the site, client included. There is no api.js or
-  // http.js any more: the client and the endpoints that use it were never two
-  // subjects, and splitting them meant a file name had to carry which kind of
-  // site a platform talks to.
-  "sources.js",
 ]);
 
-/** One file per page / pass / endpoint — a platform may have any number. */
-const PLATFORM_FOLDERS = new Set(["scrapers", "sync"]);
+/** A base folder is a platform folder minus the descriptor. */
+const REQUIRED = { platform: ["descriptor.js", "platform.js", "sources.js"], base: ["platform.js", "sources.js"] };
 
 test("a platform's root holds only contract names", () => {
   const offenders = [];
+  const folders = [
+    ...[...FOLDERS.platforms.values()].map((folder) => [folder, "platform"]),
+    ...FOLDERS.bases.map((folder) => [folder, "base"]),
+  ];
 
-  for (const platform of listPlatforms()) {
-    for (const entry of readdirSync(path.join(PLATFORMS, platform.id), {
-      withFileTypes: true,
-    })) {
+  for (const [folder, kind] of folders) {
+    const entries = readdirSync(path.join(ROOT, folder), { withFileTypes: true });
+    const names = entries.map((entry) => entry.name);
+
+    for (const required of REQUIRED[kind]) {
+      if (!names.includes(required)) offenders.push(`${folder} has no ${required}`);
+    }
+
+    for (const entry of entries) {
       if (entry.isDirectory()) {
         if (!PLATFORM_FOLDERS.has(entry.name)) {
-          offenders.push(`${platform.id}/${entry.name}/ is not a known kind of folder`);
+          offenders.push(`${folder}/${entry.name}/ is not a known kind of folder`);
         }
+        // A base may hold sub-platforms; a platform may not.
         continue;
       }
 
       if (!PLATFORM_ROOT_FILES.has(entry.name)) {
         offenders.push(
-          `${platform.id}/${entry.name} is not a contract name — put it in ` +
+          `${folder}/${entry.name} is not a contract name — put it in ` +
             `${[...PLATFORM_FOLDERS].map((f) => `${f}/`).join(" or ")}, or argue ` +
             `here for widening the root`,
         );
@@ -724,7 +741,7 @@ test("every scraper is one, by the definition rather than by folder", async () =
   let scrapers = 0;
 
   for (const platform of listPlatforms()) {
-    const root = path.join(PLATFORMS, platform.id);
+    const root = folderOf(platform.id);
     if (!readdirSync(root).includes("scrapers")) continue;
 
     for (const file of sourceFiles(path.join(root, "scrapers"), [".js"])) {

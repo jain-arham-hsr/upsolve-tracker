@@ -6,29 +6,19 @@
  * ratings and tags, the start time, and rows enough to count in-contest solves
  * — and to measure the field when nothing else can.
  */
-import { Platform } from "../platform.js";
+import { CodeforcesPlatform } from "../codeforces/platform.js";
 import { codeforcesOfficial } from "./descriptor.js";
-import * as identity from "./identity.js";
-import * as submissions from "./submissions.js";
 import { fill } from "./estimator.js";
-import { readSolveStats, isInProblemset } from "./sources.js";
+import { OfficialSources, readSolveStats, isInProblemset } from "./sources.js";
 import { syncPublishedProblemData } from "./sync/published-data.js";
 import { syncStartTimes } from "./sync/start-times.js";
 import { notPublishedYet } from "../../contest-status.js";
 
-export class CodeforcesOfficial extends Platform {
-  static settingsSection = "codeforces";
+export class CodeforcesOfficial extends CodeforcesPlatform {
+  static Sources = OfficialSources;
 
   constructor() {
     super(codeforcesOfficial);
-  }
-
-  buildSession(values) {
-    return identity.createSessionFrom(values);
-  }
-
-  identify(session) {
-    return identity.verifyIdentity(session);
   }
 
   /**
@@ -81,10 +71,6 @@ export class CodeforcesOfficial extends Platform {
 
   fill(args) {
     return fill(args);
-  }
-
-  fetchAccepted(session, contests, onProgress) {
-    return submissions.fetchAccepted(session, contests, onProgress);
   }
 
   /**

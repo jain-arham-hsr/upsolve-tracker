@@ -7,28 +7,18 @@
  * only page those contests render, and the field is recovered from who
  * submitted, via `contest.status`.
  */
-import { Platform } from "../platform.js";
+import { CodeforcesPlatform } from "../codeforces/platform.js";
 import { codeforcesGyms } from "./descriptor.js";
-import * as identity from "./identity.js";
-import * as submissions from "./submissions.js";
 import { fill } from "./estimator.js";
-import { readSolveStats } from "./sources.js";
+import { GymSources, readSolveStats } from "./sources.js";
 import { syncStartTimes } from "./sync/start-times.js";
 import { notEndedYet } from "../../contest-status.js";
 
-export class CodeforcesGyms extends Platform {
-  static settingsSection = "codeforces";
+export class CodeforcesGyms extends CodeforcesPlatform {
+  static Sources = GymSources;
 
   constructor() {
     super(codeforcesGyms);
-  }
-
-  buildSession(values) {
-    return identity.createSessionFrom(values);
-  }
-
-  identify(session) {
-    return identity.verifyIdentity(session);
   }
 
   /**
@@ -81,10 +71,6 @@ export class CodeforcesGyms extends Platform {
 
   fill(args) {
     return fill(args);
-  }
-
-  fetchAccepted(session, contests, onProgress) {
-    return submissions.fetchAccepted(session, contests, onProgress);
   }
 
   /**

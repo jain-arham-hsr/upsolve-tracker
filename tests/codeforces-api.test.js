@@ -16,9 +16,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { CodeforcesService, resetApiState } from "../core/platforms/codeforces-official/sources.js";
+import { OfficialSources as CodeforcesService, resetApiState } from "../core/platforms/codeforces-official/sources.js";
 import {
-  CodeforcesService as GymService,
+  GymSources as GymService,
   resetApiState as resetGymApiState,
 } from "../core/platforms/codeforces-gyms/sources.js";
 
@@ -119,13 +119,10 @@ test("a FAILED response becomes the comment Codeforces gave", async () => {
 });
 
 /**
- * The two clients are separate files in separate platforms with no shared
- * folder between them, so `_callMethod` and its SHA-512 signing exist twice.
- * That is the one duplication in the Codeforces split with a real failure mode:
- * a fix, or a Codeforces protocol change, applied to one file only.
- *
- * Signing is not observable from a response — a wrong `apiSig` comes back as an
- * ordinary FAILED — so nothing else here would notice the two drifting apart.
+ * Both platforms sign through one base, `codeforces/sources.js`. These cases
+ * drive each subclass through it and pin what is hashed, since signing is not
+ * observable from a response — a wrong `apiSig` comes back as an ordinary
+ * FAILED — and a subclass could still override its way out.
  */
 test("both Codeforces clients sign a request identically", async () => {
   resetApiState(0);
@@ -249,5 +246,26 @@ test("both clients hash the same string, not merely the same shape", async () =>
     stub.restore();
     resetApiState();
     resetGymApiState();
+  }
+});
+
+test("the unsigned standings call goes through the same paced client, unsigned", async () => {
+  // The one method that must not sign: Codeforces serves a non-gym standings
+  // only to an anonymous request with no extra parameters. It is also the one
+  // method no adapter test reaches, since they all stub the service — which is
+  // how it once shipped calling a pacer that no longer existed.
+  resetApiState(0);
+  const stub = stubFetch({ contest: { name: "Round" }, problems: [], rows: [] });
+
+  try {
+    const result = await new CodeforcesService("k", "s").getPublicContestStandings(2197);
+    assert.equal(stub.calls.length, 1);
+    const url = new URL(stub.calls[0].url);
+    assert.equal(url.pathname, "/api/contest.standings");
+    assert.deepEqual([...url.searchParams.keys()], ["contestId"], "must carry no extra parameters");
+    assert.equal(result.contest.name, "Round");
+  } finally {
+    stub.restore();
+    resetApiState();
   }
 });
