@@ -59,7 +59,7 @@ const STOP_CHECKING_AFTER_MS = 6 * 7 * 24 * 60 * 60 * 1000;
  * comparing the two directly puts the cutoff out by a factor of 1000 and reads
  * as every contest being either permanently in scope or permanently out of it.
  *
- * Falls back to `addedAt` when the start time is missing: `contestFromStandings` takes
+ * Falls back to `addedAt` when the start time is missing: `fetchContest` takes
  * it from the standings with `?? null`, so it is usual but not guaranteed, and a
  * contest we cannot date is better bounded by when it was added than not bounded
  * at all.
