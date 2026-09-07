@@ -159,7 +159,7 @@ export class OfficialSources extends CodeforcesSources {
    *
    * That does not weaken the gate, because it was never asking about ratings. A
    * contest Codeforces has not published has no problem list to store; one it has
-   * published but not rated stores with estimates, which `published-sync.js` then
+   * published but not rated stores with estimates, which `sync/published-data.js` then
    * settles. So absence really is the only question worth asking here.
    *
    * Gyms are absent from the problemset entirely and must never be asked.

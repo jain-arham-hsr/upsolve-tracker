@@ -3,21 +3,22 @@
  *
  * > A source owns **one site's reads**. It holds the client those reads go
  * > through, joins paths onto an origin, and hands back text, JSON or a
- * > `Document`. It decides what an unusable answer means for each endpoint.
+ * > `Document`. Endpoints are its methods; what an answer's fields mean —
+ * > a sentinel rating, an accepted status — are its statics.
  *
- * One per platform, in `sources.js`. Everything that reaches out to a site goes
- * through it, which is why no platform folder has an `api.js` or an `http.js`
- * any more — the client and the endpoints that use it were never two subjects.
+ * One subclass per platform, in `sources.js`, and nothing else exported from
+ * that file but at most a singleton. Every read of a site goes through the
+ * `sources` a session carries, which is the one seam a test injects a fake
+ * through.
  *
  * ## Instances, where `Scraper` is statics-only
  *
  * The asymmetry is deliberate and worth knowing before "fixing" it. Scraping is
  * pure — a `Document` in, facts out — so a scraper needs no state and no `new`.
  * A source is the opposite: it holds a client, sometimes a TTL cache, and on
- * Codeforces a **key pair**. `identity.js` builds one per credential set
- * (`new CodeforcesService(apiKey, apiSecret)`), Settings builds a second to
- * check credentials you have typed but not saved, and both live on the session.
- * Statics could not express that.
+ * Codeforces a **key pair**. `Platform#buildSession` builds one per credential
+ * set, Settings builds a second to check credentials you have typed but not
+ * saved, and both live on the session. Statics could not express that.
  *
  * Platforms with no credentials export a singleton instead, so their callers
  * still never write `new`.
@@ -84,12 +85,9 @@ export class Source {
   #memos;
 
   /**
-   * Test seam. Five platforms hand-rolled this as `resetApiState` /
-   * `resetHttpState`, each clearing its own client and cache.
-   *
-   * Takes a spacing rather than always pinning zero: a test proving this module
-   * *is* paced needs a gap it can observe, and one that only wants the requests
-   * needs it out of the way.
+   * Test seam, reached through `Platform#reset`. Takes a spacing rather than
+   * always pinning zero: a test proving this module *is* paced needs a gap it
+   * can observe, and one that only wants the requests needs it out of the way.
    */
   reset(spacingMs = 0) {
     this.client.reset(spacingMs);

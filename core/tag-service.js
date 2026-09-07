@@ -1,5 +1,5 @@
 /**
- * Tag counting for the stats view. Fetching tags is problemset-sync.js's job.
+ * Tag counting for the stats view. Fetching tags is each platform's sync pass's job.
  */
 
 /**

@@ -3,7 +3,7 @@
  *
  * A CodeChef contest stops accepting submissions when it ends, so upsolving
  * happens at `/problems/<CODE>` — and some older problems were never mirrored
- * there. Its own file rather than a section of `published-sync.js`, because the
+ * there. Its own file rather than a section of `published-data.js`, because the
  * two re-checks that `syncMetadata` runs differ in every way that matters:
  * this one runs on **every** refresh, writes in **both** directions, and is
  * bounded by the contests already carrying a flag rather than by a timestamp.

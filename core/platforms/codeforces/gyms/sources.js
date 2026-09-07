@@ -125,27 +125,13 @@ export class GymSources extends CodeforcesSources {
    * the problems in order with their published ratings and tags, the start time,
    * the phase, and rows enough to count in-contest solves.
    *
-   * ## This used to scrape the standings page first
-   *
-   * It fetched and parsed `/gym/<id>/standings` for the roster and the name, then
-   * made this call anyway for everything else — and `populateSolveCountsFromApi`
-   * *overwrote* the counts the page had just been parsed for. The scrape's only
-   * surviving contribution was the contest name and the problem index/name list,
-   * both of which are in this response. Verified against real gyms: 100001, 102253
-   * and 702859 all return `contest.name` and a `problems[]` where every entry has
-   * an index and a name.
-   *
-   * The recorded reason for scraping was that "a gym's roster has no API source:
-   * its standings need signing". Needing a key is not an obstacle when the key is
-   * in hand — this call is signed and works. The genuine obstacle applies only to
-   * a gym whose standings the setter has hidden, which is the branch below.
-   *
-   * So a gym add now makes **no HTML request** unless the standings are hidden,
-   * and therefore needs no codeforces.com tab: this is the signed JSON API, which
-   * is not challenged and goes through the pacer rather than the page transport.
+   * Verified against real gyms — 100001, 102253, 702859 — all of which return
+   * `contest.name` and a `problems[]` with an index and a name on every entry.
+   * So a gym add makes **no HTML request** unless the standings are hidden, and
+   * needs no codeforces.com tab: this is the signed JSON API, which is not
+   * challenged. Only a gym whose standings the setter hid takes the branch below.
    *
    * @param {string} contestId
-   * @param {GymSources} sources
    * @returns {{ contestName: string, problems: object[], tagsSynced: boolean,
    *   startTimeSeconds: number|null, solveCountsRead: boolean,
    *   partyHandles: string[][]|null, finished: boolean|null, standings: object }}
@@ -200,7 +186,7 @@ export class GymSources extends CodeforcesSources {
       startTimeSeconds: standings?.contest?.startTimeSeconds ?? null,
       // `solveCountsRead: true` unconditionally, which looks like a hole and is
       // deliberate. Counts come from the API rather than a parsed totals row, and
-      // `populateSolveCountsFromApi` does bail without deriving any when
+      // `populateSolveCounts` does bail without deriving any when
       // `standings.rows` is empty — so this can claim counts it never read, and
       // the `!solveCountsRead` guard in estimator.js is unreachable.
       //

@@ -1,9 +1,8 @@
 /**
  * Everything this extension reads from AtCoder — the client and its three routes.
  *
- * Named `sources.js` rather than `scraping.js` because scraping is what
- * `scrapers/` does: turning markup into facts. This half fetches, and one of the
- * three routes below is JSON, so "scraping" was wrong twice over.
+ * Scraping is what `scrapers/` does: turning markup into facts. This half
+ * fetches, and one of the three routes below is JSON.
  *
  * `Source` supplies the client plumbing — path joining, `text`/`json`/`document`,
  * the memo and the reset seam. What each route owns is its URL, how many requests
@@ -77,7 +76,7 @@ export class AtCoderSources extends Source {
           if (response.ok) return null;
 
           // The status rides along so a caller can say something better than
-          // this: `identity.js` turns a 404 into "AtCoder has no user X", which
+          // this: `identify` turns a 404 into "AtCoder has no user X", which
           // is the difference between a typo and an outage.
           return Object.assign(
             new Error(`AtCoder returned ${response.status} for ${new URL(url).pathname}.`),

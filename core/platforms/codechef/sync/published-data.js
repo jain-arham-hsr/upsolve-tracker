@@ -1,7 +1,7 @@
 /**
  * What CodeChef publishes about a problem, and re-asking for what it has not.
  *
- * The named counterpart to `codeforces/official/published-sync.js`, and the
+ * The named counterpart to `codeforces/official/sync/published-data.js`, and the
  * same shape: a contest added before the site finished rating it stores `???`,
  * and this converges it. Both halves live here because they are one question —
  * `parseDifficulty` and `cleanTags` read the answer whether it arrives on the

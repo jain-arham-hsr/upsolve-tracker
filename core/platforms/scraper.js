@@ -13,12 +13,12 @@
  *
  * ## The assembly used to happen in the wrong file
  *
- * `scraping.js` fetched a page and then *composed its facts itself*, calling
+ * the fetching module fetched a page and then *composed its facts itself*, calling
  * three or four extractors and deciding which failure meant the whole page was
  * unusable. That put page knowledge in the fetcher — including, verbatim, the
  * comment "Not findContestName: this page names the contest somewhere else",
  * which is a scraper's business by any reading. One `read` per page moves that
- * back, and leaves `scraping.js` doing only what its name says.
+ * back, and leaves `sources.js` doing only what its name says.
  *
  * ## Statics, not instances
  *

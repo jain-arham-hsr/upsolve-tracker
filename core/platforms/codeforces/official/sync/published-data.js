@@ -59,7 +59,7 @@ const STOP_CHECKING_AFTER_MS = 6 * 7 * 24 * 60 * 60 * 1000;
  * comparing the two directly puts the cutoff out by a factor of 1000 and reads
  * as every contest being either permanently in scope or permanently out of it.
  *
- * Falls back to `addedAt` when the start time is missing: `solve-stats.js` takes
+ * Falls back to `addedAt` when the start time is missing: `contestFromStandings` takes
  * it from the standings with `?? null`, so it is usual but not guaranteed, and a
  * contest we cannot date is better bounded by when it was added than not bounded
  * at all.
@@ -83,7 +83,7 @@ function needsSync(contest, now) {
   // longer arrive here at all.
   //
   // Worth recording why the gate was dangerous rather than merely redundant.
-  // `problems.js` once handed this a freshly-built record before `type` had been
+  // The add once handed this a freshly-built record before `type` had been
   // stamped on it, so the comparison answered "not official", every official add
   // silently skipped its published ratings, and estimates with a mean error of
   // ~211 were stored in their place. Nothing threw, no test failed, and the
@@ -106,7 +106,7 @@ function needsSync(contest, now) {
  * A published rating replaces an estimate: it is the same quantity, measured
  * rather than inferred. `ratingSource` records which one a problem is on.
  *
- * **No per-refresh cap**, unlike `atcoder/problems.js`, and that is a decision
+ * **No per-refresh cap**, unlike AtCoder's `syncMetadata`, and that is a decision
  * rather than an omission: a cap interacts badly with the cutoff. With several
  * stale contests and an infrequent refresher, a capped rotation gives each
  * contest one look every few refreshes, and a contest that loses that race ages

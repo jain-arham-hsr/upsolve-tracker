@@ -88,10 +88,9 @@ export const SECTIONS = [
      * otherwise silent, since `getAdapter` returns null and the button throws
      * only once pressed.
      *
-     * Either Codeforces platform would do: they hold byte-identical copies of
-     * `identity.js`, which `tests/module-boundaries.test.js` pins against each
-     * other. This names official because that is the one most users configure
-     * for.
+     * Either Codeforces platform would do: both inherit identity from
+     * `platforms/codeforces/platform.js`. This names official because that is
+     * the one most users configure for.
      */
     verify: {
       trigger: "button",

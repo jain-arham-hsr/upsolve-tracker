@@ -16,7 +16,7 @@ npm run build:chrome    # -> dist/chrome
 npm test                # node --test over tests/ — no framework, no browser
 ```
 
-`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, the sampling arithmetic (via `scraping.test.js`, which stubs `CodeforcesHttp` so no network is touched), backup validation and queue ordering — plus three things that are invisible by nature. **Request pacing** (`request-pacer.test.js`, `codeforces-http.test.js`, `codeforces-api.test.js`): nothing about a response says whether a delay was served, so pacing can be removed without any other test noticing. These are the only tests here that assert on **wall-clock time**, so they are also the only ones that can flake on a loaded machine — and the two kinds behave differently. `codeforces-http` and `codeforces-api` assert a **lower bound** (`gap >= 50` against a pinned 60ms), which a stall can only make more true. `request-pacer.test.js` asserts **both directions** via its `near()` helper, including two `near(…, 0, 40)` checks that a request should *not* have waited — a 40ms stall fails those. **If one goes red on CI and nowhere else, widen the tolerance; do not touch the pacing.** The pinned gaps are test-only anyway, set through the `resetApiState(ms)` / `resetHttpState(ms)` seams; production values are in the table below. **The platform boundary** (`module-boundaries.test.js`). And **the settings page's markup** (`options-settings.test.js`), which is generated from the descriptors and so is assertable in Node. There is no linter or formatter configured.
+`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, the sampling arithmetic (via `sampling.test.js`, against captured fields, so no network is touched), backup validation and queue ordering — plus three things that are invisible by nature. **Request pacing** (`request-pacer.test.js`, `codeforces-http.test.js`, `codeforces-api.test.js`): nothing about a response says whether a delay was served, so pacing can be removed without any other test noticing. These are the only tests here that assert on **wall-clock time**, so they are also the only ones that can flake on a loaded machine — and the two kinds behave differently. `codeforces-http` and `codeforces-api` assert a **lower bound** (`gap >= 50` against a pinned 60ms), which a stall can only make more true. `request-pacer.test.js` asserts **both directions** via its `near()` helper, including two `near(…, 0, 40)` checks that a request should *not* have waited — a 40ms stall fails those. **If one goes red on CI and nowhere else, widen the tolerance; do not touch the pacing.** The pinned gaps are test-only anyway, set through `platform.reset(ms)` and the sources' static `reset(ms)`; production values are in the table below. **The platform boundary** (`module-boundaries.test.js`). And **the settings page's markup** (`options-settings.test.js`), which is generated from the descriptors and so is assertable in Node. There is no linter or formatter configured.
 
 **Adapter fixtures must be cloned per test, not shared.** `codechef-adapter.test.js` keeps its payloads in module-level consts (`PROBLEMS`, `DETAILS`) that the `fetch` stub reads directly, so a test modelling "CodeChef published this later" — flipping `is_added_to_practice`, or filling in a `difficulty_rating` — mutates the fixture for every test that runs after it. The suite then passes or fails on *ordering*. `beforeEach` deep-copies both; do the same for any fixture a test writes to.
 
@@ -93,11 +93,11 @@ The test step is the gate: before it existed the workflow would happily build an
 
   **`tests/module-boundaries.test.js` previously asserted almost nothing**, and passing green is what made that expensive. It read *one directory* — files directly under `core/` — so `core/services/` and `core/ui/` were never examined; and it recognised a violation by import **path shape** (`./platforms/<id>/…`), which a platform-specific module living outside `platforms/` never has. It could only flag the problem after the move that fixes it. It now walks recursively and checks three things: no import from inside a platform folder, no platform id in comment-stripped code, and no use of a platform's **subtype vocabulary** (`"OFFICIAL"`, `"GYM"`, `"ABC"`) — the leak with no platform name in it. Comment-stripping is essential rather than convenient: every shared module discusses all three platforms in its prose, so a raw scan would fail on documentation and prove nothing.
 
-  There is **one named exception**, `stats-view.js#renderHint`, with its reason recorded beside it and a test that fails if the file stops needing it. A named exception is a debt the suite keeps visible; the version being replaced hid a whole subtree by accident.
+  There is **one named exception**, `settings/schema.js`, whose `verify.adapter` has to name a platform, with its reason recorded beside it and a test that fails if the file stops needing it. A named exception is a debt the suite keeps visible; the version being replaced hid a whole subtree by accident.
 
 **A second class of leak has its own file, `tests/record-contract.test.js`.** Not a
 boundary between platforms but between *modules*: a record handed on without a field
-the receiver gates on. `codeforces-official/problems.js` once passed the metadata syncs a
+the receiver gates on. The official Codeforces add once passed the metadata syncs a
 record built before the trunk had stamped `type` on it, and
 the sync's `needsSync` read `contest.type !== "OFFICIAL"` — so it answered
 "not official", every official add skipped its published ratings, the estimator ran
@@ -124,7 +124,7 @@ watching it fire:
   hardcoded, since a stale line number would point at some covered line and pass; and
   a missing coverage row asserts loudly rather than skipping, since the child runner
   suppresses the table unless `NODE_TEST_CONTEXT` is cleared.
-- `linkedom` is a devDependency used only by the tests (`problems-page.test.js`, `scraping.test.js`, `options-settings.test.js`) to parse HTML in Node; shipped code uses the browser's `DOMParser`.
+- `linkedom` is a devDependency used only by the tests (`problems-page.test.js`, `gym-hidden-standings.test.js`, `options-settings.test.js` and others) to parse HTML in Node; shipped code uses the browser's `DOMParser`.
 
 ## Architecture
 
@@ -142,7 +142,7 @@ It also answers everything shared code used to hardcode about a platform, which 
 | `chartColor`, `ratingBandClass` | assigning colours or rank tints by id |
 | `hostPermissions` | hand-listing origins in `targets/chrome/manifest.json` |
 
-`registry.js` and `adapters.js` are the **only** two modules allowed to enumerate platforms. Nothing else — not a view, not a service, not the build — should branch on one, and `tests/module-boundaries.test.js` fails if it does.
+`registry.js` and `platforms.js` are the **only** two modules allowed to enumerate platforms. Nothing else — not a view, not a service, not the build — should branch on one, and `tests/module-boundaries.test.js` fails if it does.
 
 This replaced two copies of the same Codeforces URL regex (`contest-manager.js` and `contest-list.js`) and three hardcoded `https://codeforces.com` origins, so a URL change is now one edit.
 
@@ -208,165 +208,126 @@ The guarantee rests on three independent layers, each confirmed by removing it a
 
 `updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption. The shell reports them **last**, after the backup write and the view refresh — reporting earlier let `"Writing backup…"` overwrite the message for exactly the users whose backup was at risk.
 
-Note the Codeforces scrape sends cookies (`platforms/codeforces-gyms/http.js`), but the one page it still reads — `/gym/<id>`, read by `scrapers/problems-page.js` — yields only the contest name and its problem list, nothing about the viewer. So it needs no identity, and neither does AtCoder's public tasks page. (That file used to read competitors' handles, solve counts and pagination too; the standings scrape is gone, which is what the rename recorded.)
+Note the Codeforces HTML client (in `codeforces/gyms/sources.js`) sends cookies, but the one page it still reads — `/gym/<id>`, read by `scrapers/problems-page.js` — yields only the contest name and its problem list, nothing about the viewer. So it needs no identity, and neither does AtCoder's public tasks page. (That file used to read competitors' handles, solve counts and pagination too; the standings scrape is gone, which is what the rename recorded.)
 
-### Platform adapters
+### Platforms
 
-The registry is *pure* — URLs, identity, capabilities — so anything can import it. Network work lives behind an **adapter**, resolved by `core/platforms/adapters.js`. The split is deliberate: `backup-validation.js` imports the registry, and must not drag the network stack in with it.
+The registry is *pure* — URLs, identity, capabilities — so anything can import it. Network
+work lives behind a **platform instance**, one per site, held by `core/platforms/platforms.js`.
+The split is deliberate: `backup-validation.js` imports the registry, and must not drag the
+network stack in with it.
 
-**There is no per-platform `adapter.js`.** Each platform supplies modules and
-`core/platforms/pipeline.js` composes them; `adapters.js` is the manifest that does
-the wiring, and reads in one glance as which platform provides what.
+**Every platform extends `Platform` (`core/platforms/platform.js`), and the base is where the
+contract lives** — not in a test, not in a destructure. It names every hook a platform
+implements, refuses at construction a subclass missing one or one whose `canEstimate`
+disagrees with whether it estimates, and checks every shape that crosses the boundary,
+naming the platform when one is wrong. Before it, each folder had the same seven file names
+and a different design inside: three session shapes, two ways of reaching the site, four
+`fetchContest` signatures, a `field.js` that meant something different in each folder.
 
-| module | supplies | required |
+What callers use — the orchestrators and the settings page:
+
+| method | answers |
+|---|---|
+| `createSession()` / `createSessionFrom(values)` | a Session, from saved or unsaved settings. **The orchestrator never sees a credential.** Settings verifies what you *typed*, so a wrong key tells you before you rely on it. |
+| `verifyIdentity(session)` | `{username, rating}`, or a throw whose **message is the user-facing verdict**, in Settings and in the queue's status strip alike |
+| `describeIdentity(identity)` | how Settings names the account — "Connected as X", or "Signed in as X" on CodeChef, where the browser session *is* the identity |
+| `fetchContestRecord({contestId, subtype, session, onProgress})` | the whole add: one of the five statuses, with the stored-shape contest on `ready` |
+| `fetchSolvedKeys(session, contests, onProgress)` | a Set of `descriptor.solvedKey` values |
+| `syncMetadata(session, contests, onProgress)` | fills in what arrives after the add |
+| `reset(spacingMs)` | the one test seam, replacing five per-platform ones |
+
+What a platform implements:
+
+| hook | returns | required |
 |---|---|---|
-| `identity.js` | `createSession`, `createSessionFrom`, `verifyIdentity`, `describeIdentity` | yes |
-| `problems.js` | `fetchContest`, `syncMetadata` | yes |
-| `submissions.js` | `fetchAccepted` | yes |
-| `estimator.js` | `fill` | only where a platform has one |
+| `static settingsSection` | the slug of its section in `settings/schema.js`; the base reads that section's slugs, so a slug is declared once | yes |
+| `buildSession(values)` | `{ handle, sources, ... }` — **the site's `Source` rides on the session**, so every read goes through `session.sources` and a fake is injected the same way on every platform | yes |
+| `identify(session)` | `{username, rating}` | yes |
+| `fetchContest({contestId, subtype, session, onProgress})` | a status, or `{ id, name, problems, startTimeSeconds, publishedDataCheckedAt, sourceId?, context? }` | yes |
+| `fetchAccepted(session, contests, onProgress)` | `{contest: {id}, problem}` pairs — never a bare `null` contest | yes |
+| `readField({contest, context, session, onProgress})` | what the estimator fits against; or a status — `sourceUnreachable` where the data will come, `unavailable` where it never will; or null when there was nothing to measure | iff `canEstimate` |
+| `estimate(contest, field)` | fills the gaps in place; **pure** | iff `canEstimate` |
+| `syncMetadata`, `describeIdentity` | overrides | optional |
 
-**The trunk owns exactly four things**, and the rule that decides is CLAUDE.md's own
-naming rule applied to steps — *a step must mean the same thing on every platform,
-or it is too coarse*: the stored contest shape, the per-problem defaults, the
-estimator hand-off, and mapping accepted problems through `descriptor.solvedKey`.
-Before it, all three were triplicated — each platform's adapter wrote
-`platform: "codeforces"` as a literal beside a descriptor that knew its own id.
+**The base owns exactly what means the same thing everywhere** — this file's naming rule
+applied to steps: the stored contest shape (`buildContestRecord`), the per-problem defaults,
+the `isSourceUnreachable` → `sourceUnreachable` translation, the `readField → estimate`
+composition (`estimateMissing`, which a re-check reuses), and mapping accepted pairs through
+`descriptor.solvedKey`. **Every gate stays inside `fetchContest`**, returned as one of the
+five statuses; the base passes one through. Codeforces has five decision points, AtCoder two,
+CodeChef resolves a division first, and none of that reaches the base. **The gap policy is
+deliberately not in the base** — `contest-manager.js` applies it against
+`capabilities.canEstimate`, and two places would be free to disagree.
 
-**One more thing moved into the trunk since: the `isSourceUnreachable`
-translation.** Three platforms each turned that flag into `sourceUnreachable`
-themselves, and two of the three were the same six lines. The platform's job is
-to *flag* the error at the point that knows — a Cloudflare challenge in
-`codeforces-gyms/sources.js`, a failed problem fetch in `codechef/sources.js` — not to
-remember which of the five statuses a flag maps to. `pipeline.js` reads it, and
-anything unflagged still escapes, which is what keeps an unrecognised exception
-a bug rather than a case. A platform may still return the status itself where it
-has something better to say: CodeChef does, naming the contest it gave up on and
-abandoning the remaining per-problem requests rather than spending them on an
-add that is going to be discarded.
-
-**Every gate stays inside `problems.fetchContest`**, returned as one of the five
-`contest-status.js` values. Codeforces has five decision points, AtCoder two, and
-CodeChef resolves a division first; none of that reaches the trunk, which only
-passes a status through. **The gap policy is deliberately not in the trunk either** —
-`contest-manager.js` applies it against `capabilities.canEstimate`, and putting it
-in both would be two places free to disagree.
-
-**Enforcement is the call site, not machinery.** `buildAdapter` destructures what it
-needs and the trunk calls `problems.fetchContest(...)`, so a platform missing a piece
-fails at import, where the contract is stated. No manifest check, validator or
-directory walk is involved. `estimator` really is optional — CodeChef publishes
-`difficulty_rating` and passes none.
-
-The composed adapter exposes six things, two of them optional:
-
-- `createSession()` — loads whatever that site needs to authenticate, from saved settings. **The orchestrator never sees a credential.**
-- `createSessionFrom(values)` — the same session from a slug→value map that has *not* been saved. Settings verifies what you typed rather than what is stored, so a wrong key tells you before you come to rely on it; this is what lets it do that without reaching past the adapter into a platform's API client, which is what it used to do. `createSession()` is now this function over saved values, so the two cannot diverge.
-- `fetchContestRecord({contestId, subtype, session, onProgress})` — the entire acquisition pipeline behind one call, returning a stored-shape contest whose problems all carry `rating`, `ratingSource`, `tags` and `officialSolves`.
-- `fetchSolvedKeys(session, onProgress)` — a Set of `platform.solvedKey(...)` values.
-- `verifyIdentity(session)` — `{username, rating}` or a throw, run before any user-specific read. Its **message is the user-facing verdict**, in Settings and in the queue's status strip alike; see the identity section below.
-- `syncMetadata(session, contests, onProgress)` — optional; fills in data that only arrives later.
-- `describeIdentity(identity)` — optional; how Settings names the resolved account. Defaults to *"Connected as X"*; CodeChef overrides it to *"Signed in as X"* because there the browser session **is** the identity. It lives on the adapter so that distinction is not a branch on the platform in shared code.
-
-`contest-manager.js` is now just the orchestrator: match the URL, pick the adapter, mark solved, decide whether the record is complete enough to store. Everything Codeforces-specific — the signed API, the standings scrape, the Elo estimator — sits under `core/platforms/codeforces-official/` and `core/platforms/codeforces-gyms/`. Adding a platform means writing four small modules and one entry in `adapters.js`, not editing the orchestrator.
+`contest-manager.js` is just the orchestrator: match the URL, pick the platform, mark solved,
+decide whether the record is complete enough to store. Adding a platform is a folder (below),
+one line in `registry.js`, one in `platforms.js`, and a settings section; the base refuses at
+construction if a hook is missing.
 
 #### The shape of a platform folder
 
-Four files are the contract above; the rest is convention. **Where a platform does
-the thing, the file carries the name, so the parallel is visible from a directory
-listing; where it does not, the file is simply absent** — and the absence says
-something too. `codeforces-official/` having no `scrapers/` is how you can see at a
-glance that it never touches HTML — the only such signal left, now that one
-`sources.js` per platform means a *file name* can no longer carry it.
-
-**The root is a closed set of nine names**, and `module-boundaries.test.js` fails on
-a tenth. Anything a platform can have *N* of lives in a folder named for its kind, so
-`ls` says which is which:
+**The root is a closed set of five names**, and `module-boundaries.test.js` fails on a sixth.
+Anything a platform can have *N* of lives in a folder named for its kind, so `ls` says which
+is which:
 
 | file | role | where |
 |---|---|---|
-| `descriptor.js` | registers the platform | always |
-| `identity.js` | session and `verifyIdentity` | always |
-| `problems.js` | `fetchContest`, `syncMetadata` | always |
-| `submissions.js` | `fetchAccepted` | always |
-| `estimator.js` | `fill` — fit the difficulties the site did not publish | **iff `canEstimate`** |
-| `field.js` | standings → the data the estimator fits against | where it estimates |
-| `sources.js` | the client, and every endpoint this platform reads | where it reads anything |
+| `descriptor.js` | what the registry needs; pure | always |
+| `platform.js` | `class X extends Platform` — the contract, nothing else | always |
+| `sources.js` | `class XSources extends Source` — the site's reads; nothing else exported but at most a singleton `sources` | always |
+| `field.js` | `readField` — the I/O that produces what the estimator fits against | iff `canEstimate` |
+| `estimator.js` | `estimate` — pure; imports no source, client or field | iff `canEstimate` |
 
 | folder | one file per | today |
 |---|---|---|
-| `scrapers/` | page scraped | 6 |
-| `sync/` | pass filling in data that arrives after the add | 5 |
+| `scrapers/` | page scraped — a `Scraper` subclass each | 6 |
+| `sync/` | pass filling in data that arrives after the add — each exports exactly `sync(session, contests, onProgress)` | 5 |
 
-**This was half-done for a while, and the missing half cost something.** Parsers got
-a folder; everything else open-ended stayed loose at the root, where a contract name
-and a platform's own invention looked alike — and with no folder name to contradict
-them, two inventions misled for months. `contest-submissions.js` sat one letter from
-`submissions.js` doing something unrelated: `submissions.js` reads *your* accepted
-submissions account-wide to clear the queue, while that one paged `contest.status`
-for *everyone's*, to rebuild a gym whose standings are hidden. And `solve-stats.js`
-returned a contest's name, problems, ratings, tags, start time, phase and the raw
-standings payload — counts were one field of six. Both are now named for the endpoint
-they read, inside `sources.js`.
+**A base folder holds what two platforms share.** `codeforces/` is one: its `platform.js`
+exports a class no platform is built from and two extend, and it carries `sources.js`,
+`estimator.js`, `field.js`, `sync/` and `site.js` — the descriptor pieces its platforms
+spread — with `official/` and `gyms/` beneath it. It has no `descriptor.js`, because it is not
+a platform and the registry must not be able to list it. `module-boundaries.test.js`
+classifies every folder under `core/platforms/` from what `platforms.js` registers — a
+platform folder, a base folder, or an offender — and keys every other check on that, so no
+check assumes a folder is named after its id.
 
-Four of those rows are load-bearing rather than tidy:
+Rules that hold, each pinned by a test that was seen to fail:
 
-- **`estimator.js` exists exactly where `canEstimate` is true**, and
-  `module-boundaries.test.js` fails otherwise. They are two declarations of one
-  fact: claiming the capability with no estimator refuses every add, and
-  estimating without claiming it stores `???` beside numbers already worked out.
-  It only became true when AtCoder flipped.
-- **Nothing in a `scrapers/` folder fetches** — no client import, no bare
-  `fetch`, also pinned. That is what lets every scraper run in Node against
-  `linkedom` with no network stack, which is most of the coverage these platforms
-  have, and reaching for the client from inside one is the shortest path to losing
-  it silently. **The assertion carries more weight than the folder name does**,
-  because "scraper" implies fetching to most readers — the only thing keeping that
-  unambiguous is that nothing else in the tree claims the word. The fetch half is
-  `sources.js`.
-- **A scraper owns one page, and `scrape(doc)` returns that page's facts or null.**
-  `Scraper` in `core/platforms/scraper.js` states it; the folder used to be six
-  files sharing nothing but a directory. The assembly of a page's facts lived in
-  what is now `sources.js`, which is why "what do these have in common" had no good
-  answer — it had been moved out. Statics, not instances: scraping is pure and
-  nothing needs `new`. `page-globals.js` is named for a fragment rather than a page
-  because AtCoder emits its marker on every page it serves; it is a scraper like
-  the rest.
+- **Nothing in a `scrapers/` folder fetches**, and every file there exports one `Scraper`
+  subclass with `scrape(doc)` overridden and its selectors declared. That is what lets every
+  scraper run in Node against `linkedom` with no network stack, which is most of the coverage
+  these platforms have.
+- **A source singleton is reached through the session, never imported.** A platform's class
+  attaches it to the session it builds; a module that imported it instead would work in
+  production and be untestable.
+- **An estimator is pure.** `field.js` reads and answers a status when it cannot;
+  `estimator.js` fits what it read. The base refuses half an estimator, and the two files
+  exist — in the platform's folder or its base's — iff `canEstimate`. Claiming the capability
+  with no estimator refuses every add; estimating without claiming it stores `???` beside
+  numbers already worked out.
+- **`DOMParser` is constructed in exactly one place**, `services/site-client.js#getDocument`;
+  a scraper only ever receives a finished `Document`.
+- **Codeforces signs in exactly one place**, `codeforces/sources.js`.
 
-  **The name took five passes and this is the last one** — `scrapers/` →
-  `html-parsers/` → `dom-parsers/` → `dom-readers/` → `scrapers/`. Three of those
-  described something the folder does not do. Nothing in it **parses**: the
-  string→`Document` step happens once, in `site-client.js#getDocument`, using the
-  browser's real `DOMParser`, so these classes only ever receive a finished
-  `Document`. Nothing in it **reads** in the I/O sense either, and "reader"
-  understated what they do besides. It kept moving because the *other* half was
-  misnamed: a `scraping.js` that fetched and delegated, holding the word while
-  doing none of the work. Splitting fetch (`sources.js`) from extract
-  (`scrapers/`) is what made one name fit.
-- **A source owns one site's reads, and `Source` in `core/platforms/source.js` is
-  what they extend.** It holds the client, joins paths onto an origin, and hands
-  back text, JSON or a `Document`. It absorbed five hand-rolled reset seams, two
-  TTL memos and four copies of the accessors — but only once `api.js` folded in;
-  measured against the old layout, where the client sat in a separate file, a
-  base would have carried nothing, and this file said so.
-
-  **It is instantiable where `Scraper` is statics-only**, and that asymmetry is
-  the point rather than an inconsistency. Scraping is pure — a `Document` in,
-  facts out — so a scraper needs no state and no `new`. A source holds a client,
-  sometimes a cache, and on Codeforces a **key pair**: `identity.js` builds one
-  per credential set and Settings builds a second to check credentials you have
-  typed but not saved. Platforms with no credentials export a singleton, so their
-  callers still never write `new` either.
-- **`estimator.js` is *not* pure**: it acquires the field it fits against
-  (`codeforces-gyms/field.js` calls `getContestStandings`, AtCoder's fetches
-  `standings/json`). Only the models under `core/rating-models/` are pure.
+**`Scraper` and `Source` are the two other bases.** A scraper owns one page: `scrape(doc)`
+returns that page's facts or null, never a plausible default — the old code left solve counts
+at `0` when a totals row went missing and stored confidently wrong ratings. Statics, because
+scraping is pure and nothing needs `new`. `page-globals.js` is named for a fragment rather
+than a page because AtCoder emits its marker on every page it serves; it is a scraper like the
+rest, reading a `<script>` element. A source owns one site's reads: endpoints as methods,
+what an answer's fields mean as statics (`CodeChefSources.parseDifficulty`, `ACCEPTED`), and
+it is instantiable because on Codeforces it holds a **key pair** — `buildSession` builds one
+per credential set, and Settings builds a second to check credentials typed but not saved.
+Platforms without credentials export a singleton.
 
 Two files earn their own name by cadence rather than by subject.
 `codechef/sync/published-data.js` and `codechef/sync/practice-flags.js` are both re-checks
-run from one `syncMetadata`, and they are separate files because they differ in
-every way that matters — weekly against every refresh, write-once against both
-directions, gated on a timestamp against gated on the flags already stored.
-Sharing a file invites sharing a gate, and the slower pass would then suppress
-the faster.
+run from one `syncMetadata`, and they are separate files because they differ in every way
+that matters — weekly against every refresh, write-once against both directions, gated on a
+timestamp against gated on the flags already stored. Sharing a file invites sharing a gate,
+and the slower pass would then suppress the faster.
 
 `progress-manager.js#updateSolvedStatus()` loops over every platform with tracked contests, **isolating failures**: one site being down or unconfigured must not stop the others, and if *every* platform fails it returns before the write so a bad sync can't touch storage. `applySolvedStatus()` is split out and pure because it's the step that fails quietly.
 
@@ -392,7 +353,7 @@ Four things are easy to get wrong:
 - **Entering the state is a flag on the error, never a message match** — `error.isNotPublishedYet`, the same idiom as CodeChef's `isIdentityMismatch`. A copy edit to "doesn't list contest" must not silently turn a contest that would have resolved into one that is never retried. `error.isAlreadySolved` exists for the same reason on the other side.
 - **It must not be logged as a fault.** `console.error` from an extension page is filed under `chrome://extensions` as an extension error, with a stack trace and a red badge — once on the add, then again on *every refresh* for as long as it waits. So `contest-manager.js` logs it at **`info`** when `isNotPublishedYet` is set, and errors as before for everything else. `warn` is not enough — that page collects error *and* warning levels, so downgrading to `console.warn` only changed the icon from a red circle to a yellow triangle, and the test that watched `console.error` alone passed while the entry was still being filed. `tests/waiting-quiet.test.js` drives the real `processNewContest` for both halves of that branch, since the logging is in its catch.
 
-  **The same trap is still live in one place, knowingly.** `codeforces-official/api.js` logs every failed API call at `console.error`, so typing a wrong key into Settings and pressing *Test connection* files an extension error against the extension — a red badge for what is just a typo the page already explained. It was left alone because it is not only a Settings path: the same line fires when a sync genuinely fails, where an error *is* the right level. Splitting the two means deciding at the call site rather than in the client. Worth doing, not urgent.
+  **The same trap is still live in one place, knowingly.** `codeforces/sources.js` logs every failed API call at `console.error`, so typing a wrong key into Settings and pressing *Test connection* files an extension error against the extension — a red badge for what is just a typo the page already explained. It was left alone because it is not only a Settings path: the same line fires when a sync genuinely fails, where an error *is* the right level. Splitting the two means deciding at the call site rather than in the client. Worth doing, not urgent.
 - **A retry drops an entry only when it will never resolve** — added, already tracked, or every problem solved. **Every other failure keeps it waiting.** `processNewContest` verifies identity before it fetches anything, so a 503 or an expired session throws something that is *not* a publication delay; dropping on that would lose the wait to a network blip, silently. The recorded `lastError` renders on the row, which is the only thing that tells a stuck entry from a young one.
 
 The retry runs **before** `updateSolvedStatus` in the shell's refresh, so a contest added here gets its solved status marked and lands in the same backup write rather than sitting a refresh behind. Failures are isolated per entry, the way `progress-manager` isolates them per platform. `retryWaitingContests(onProgress, {addContest})` takes the adder as a **test seam** — production always passes `processNewContest`, and `tests/waiting-contests.test.js` substitutes it so the outage case can be exercised without a network stack standing in for one.
@@ -484,7 +445,7 @@ Things that are easy to get wrong:
 - **The estimator bounds where the source refuses**, which is what makes the flip
   safe. AtCoder Problems declines in four situations — nobody solved it, everyone
   did, fewer than forty usable rows, a fit past the ceiling — and each is a
-  situation `codeforces-official/estimator.js` answers with a bound instead
+  situation `codeforces/estimator.js` answers with a bound instead
   (`actualSolves === 0 ? 0.5`, the 800 floor, gyms of 5–76 parties). Same maths,
   opposite policy, so a problem was rateable on one site and not the other for no
   reason a user could act on. `fitTask` bounds now. **The port guarantee is
@@ -601,16 +562,14 @@ A `contest.practiceSyncedAt` stamp existed briefly, so a one-time backfill could
 
 Note the expansion's opt-in is the one part of this **no unit test reaches** — removing it leaves the whole suite green. `npm run smoke` covers it: the store seeds START252D with an unmirrored problem, and the run fails unless the queue omits it while the contest's expansion lists it with exactly one mark. Confirmed the usual way, by removing each piece and watching the run report the original symptom.
 
-### Codeforces is two platforms, `codeforces-official` and `codeforces-gyms`
+### Codeforces is one base and two platforms
 
-They were one platform with two subtypes, and six modules independently asked
-which one they had — `problems.js`, `solve-stats.js` (now `sources.js`), `estimator.js`,
-`problemset-sync.js` (now `sync/published-data.js`), `start-times.js` and `scraping.js` (now `sources.js`) — six conditions that had
-to agree with nothing checking that they did. One of them had already failed
-that way: `needsSync` read `contest.type !== "OFFICIAL"` on a record built before
-`type` was stamped on it, so every official add silently skipped its published
-ratings. **The folder answers that question now**, and every one of those
-branches is gone.
+`codeforces/official/` and `codeforces/gyms/` are separate platforms. They were one platform
+with two subtypes, and six modules independently asked which one they had — six conditions
+that had to agree with nothing checking that they did. One had already failed that way:
+`needsSync` read `contest.type !== "OFFICIAL"` on a record built before `type` was stamped on
+it, so every official add silently skipped its published ratings. **The folder answers that
+question now**, and every one of those branches is gone.
 
 They are genuinely different pipelines, not two flavours of one:
 
@@ -622,80 +581,48 @@ They are genuinely different pipelines, not two flavours of one:
 | API methods | `getPublicContestStandings`, `getContestRatingChanges`, `getProblemsetProblems` | `getContestStandings`, `getContestStatus` |
 | HTML | **none at all** | none, unless the standings are hidden |
 
-Three API methods each, disjoint. The user-visible consequence is that **an official add needs
-no codeforces.com tab open** — every call on that path is either the signed JSON API or the
-unsigned `contest.standings`, and neither is challenged. A gym add still needs one.
-**`codeforces-official/` carries no `scrapers/` folder at all**, which is asserted
-structurally in
-`module-boundaries.test.js` as well as dynamically in the adapter tests.
-
-**What they share is an account, not code.** One handle, one key pair, one
-settings section — which is what `core/settings/schema.js` exists for. There is
-deliberately **no shared folder between them**. `module-boundaries.test.js`
-asserts they never import each other, and that a folder under `core/platforms/`
-has a `descriptor.js` **iff** it is registered — which is what stops a
-`codeforces-common/` reappearing, since a folder without a descriptor is not a
-platform and there is nowhere else for one to sit.
-
-**The duplication is larger than this file used to claim, and now measured.** It
-said "`identity.js`, `submissions.js` and the signing half of what is now
-`sources.js`, ~180
-lines each way" — right about those three (96 + 33 + 55 = 184) and wrong about
-the total, which is **744 identical lines, ~245 of them substantive code**:
-
-| duplicated verbatim | lines |
-|---|---|
-| `identity.js` — whole file, same md5 | 96 |
-| `descriptor.js` — `ratingBands`, `ratingBandClass`, `hostPermissions`, icon | 60 |
-| `sources.js` — `_callMethod` + `_sha512` | 55 |
-| `estimator.js` — `estimateProblemRating` | 49 |
-| `field.js` — `ratePartyList` | 42 |
-| `sources.js` — `populateSolveCountsFromApi` + tail of the applier | 39 |
-| `submissions.js` — whole file, same md5 | 33 |
-
-Almost none of it can move: it reads the Codeforces API shape or signs its
-requests, so `core/` cannot hold it either. **So the copies are pinned instead
-of removed.** `module-boundaries.test.js` asserts `identity.js` and
-`submissions.js` stay *byte*-identical across the two folders, and that
-`_callMethod` and `_sha512` match — scoped to those two methods, since the
-endpoint halves genuinely differ. A file that ever *ought* to diverge is a sign
-it has taken on something belonging to one platform alone.
-
-Three comments used to say `tests/codeforces-signing.test.js` already did this.
-**No such file has ever existed**, and the claim outlived several readings —
-which is the argument for the pin, not against it.
+**What they share is an account and a site, and it is inherited, not copied.**
+`codeforces/platform.js` holds identity and the submission stream; `codeforces/sources.js`
+the signed client, the signing (SHA-512 over `rand/method?sortedParams#secret`),
+`user.status`, `user.info`, and the applier that takes a standings response's published
+ratings and tags; `codeforces/estimator.js` the fit both run; `codeforces/field.js` the
+party-to-rating step both fields end in; `codeforces/site.js` the origin, mark, host
+permission, rank colours and keys both descriptors spread. Until this existed the two folders
+held 744 byte-identical lines with a test forbidding them to diverge. **They import the base
+and never each other**, which `module-boundaries.test.js` pins.
 
 Three consequences worth knowing before changing anything here:
 
-- **The duplicated `user.status` fetch is load-bearing.** `progress-manager.js`
-  loops platforms, so a refresh reads the whole account's submissions twice.
-  That is not waste to be optimised away: the response carries no gym/official
-  marker, so each adapter stamps its own `solvedKey` prefix on the same stream
-  and `applySolvedStatus` looks up by the prefix of the platform that *owns* the
+- **The duplicated `user.status` fetch is load-bearing.** `progress-manager.js` loops
+  platforms, so a refresh reads the whole account's submissions twice. The response carries
+  no gym/official marker, so each platform stamps its own `solvedKey` prefix on the same
+  stream and `applySolvedStatus` looks up by the prefix of the platform that *owns* the
   contest. Skip either fetch and that platform's solves stop clearing.
-- **The signing routine is the one duplication with a real failure mode** — a
-  fix landing in one file only. `tests/codeforces-api.test.js` pins the two
-  clients against each other on both the signature's shape and the parameter set
-  they append, since a wrong `apiSig` returns an ordinary `FAILED` and nothing
-  else would notice.
-- **They must not get separate request budgets.** Both clients name
-  `budget: "codeforces-api"` on `createPacer`; without it, two clients each
-  honouring a 2 s gap serve one request per second to codeforces.com.
+- **They share one request budget.** The signed client is one object in the base, named
+  `budget: "codeforces-api"`; without that, two clients each honouring a 2 s gap would serve
+  one request per second to codeforces.com.
+- **The signed API never refuses at the transport** — a bad key is a 200 with
+  `status: "FAILED"` — so it goes through `site-client.js` with a direct `fetchImpl` and a
+  no-op `refusal`, and `tests/codeforces-api.test.js` pins the string that is hashed, since a
+  wrong `apiSig` is indistinguishable from a bad key. **One method is deliberately unsigned**:
+  `getPublicContestStandings`, because Codeforces serves a non-gym standings only to an
+  anonymous request with no extra parameters, and signing appends two. That method is also the
+  one no adapter test reaches, since they all stub the service — which is how it once shipped
+  calling a pacer that no longer existed. The API test now drives it through a fetch stub.
 
-`computeTeamRating` went to `core/rating-models/team-rating.js` rather than being
-duplicated, because it is maths both fields depend on and two copies of a binary
-search are two things free to disagree about what a team is worth.
-
-### Data acquisition on Codeforces: two platforms, two channels
-
-1. **Signed API** (`core/platforms/codeforces-official/api.js`) — builds the `apiSig` (SHA-512 over `rand/method?sortedParams#secret`) via `crypto.subtle`. Used for `user.status`, `contest.ratingChanges`, `contest.standings`, `user.info`. **One method is deliberately unsigned**: `getPublicContestStandings`, because Codeforces serves a non-gym standings only to an anonymous request with no extra parameters, and signing appends two.
-2. **HTML scraping** (`core/platforms/codeforces-gyms/sources.js` → `codeforces-gyms/http.js`, reading in `codeforces-gyms/scrapers/problems-page.js`) — **one page, for one case.** A gym whose standings the setter hid answers `FAILED` to `contest.standings`, and the `/gym/<id>` problems page is the only page those contests still render. It is the definitive problem list, and cannot be replaced by deriving one from the submissions: a problem nobody attempted appears in none of them, so the contest would come out silently short.
-
-   **Everything else on Codeforces is now JSON.** Three scrapes went, in order. The official *roster*: `contest.standings` was fetched regardless, so reading the page for the same facts was paying twice — no bytes saved (~760 KB against 6.5–8.5 MB either way), but it removed the failure mode, since a Cloudflare challenge there broke official adds outright. The official *field sampling*: it walked ~32 paginated standings pages to stratify a rank-ordered list that was already in the response. And the gym *roster*, for the same reason as the official one — the next line fetched `contest.standings` anyway, and `populateSolveCountsFromApi` overwrote the counts the page had just been parsed for.
-
-   **The recorded reason for the gym scrape did not survive checking.** It said "a gym's roster has no API source: its standings need signing". Needing a key is not an obstacle when the key is in hand, and that call is signed and works. Verified against real gyms — 100001, 102253, 702859 — `contest.standings` returns `contest.name` and a `problems[]` where every entry carries an index and a name. A hidden gym (712373) returns `FAILED — contestId: Standings are not available`, which `api.js#getContestStandings` matches **once** and converts to `isStandingsHidden`, so nothing downstream reads prose. That match is the one place a message comparison is unavoidable: Codeforces gives no distinct status code for it.
-
-   The consequence worth knowing: **an add needs no codeforces.com tab** unless the gym's standings are hidden. `tests/module-boundaries.test.js` pins it structurally — `codeforces-gyms/sources.js` must make exactly one page read, and its URL must not be a standings page. It used to count importers of `http.js`; with the client folded in there is no such file, so it counts the reads themselves, which is what it was always about.
+**The one page Codeforces still reads** is `/gym/<id>`, for a gym whose standings the setter
+hid: it answers `FAILED` to `contest.standings`, and the problems page is the only page such
+a contest renders. It is the definitive problem list — a problem nobody attempted appears in
+no submission, so a list rebuilt from `contest.status` would come out silently short.
+`GymSources#getDocument` is how that page is read, through the HTML client with the session
+cookie and throttling tuned against the live site; `module-boundaries.test.js` pins that
+`gyms/sources.js` makes exactly one page read and that it is not a standings page. So **an
+add needs no codeforces.com tab** unless the gym's standings are hidden. Three scrapes went
+before that: the official roster and its field sampling (both already in `contest.standings`),
+and the gym roster (the same call was made anyway, and the API's counts overwrote the page's).
+The recorded reason for the gym scrape — "a gym's roster has no API source: its standings
+need signing" — did not survive checking: needing a key is not an obstacle when the key is in
+hand.
 
 ### Requests go through a page, not from the panel
 
@@ -735,10 +662,7 @@ stay green.
 `site-client` answers three ways, and between them they cover what the consumers
 want: `get` a string, `getJson` an object, **`getDocument` a `Document`** —
 which is what everything in a `scrapers/` folder takes. That last one is why
-`DOMParser` no longer appears in platform code, with one deliberate exception:
-`atcoder/identity.js` reads one fetched page both ways, as a string for the
-`userScreenName` global and as a DOM for the rating, so parsing there saves a
-second request.
+`DOMParser` no longer appears in platform code at all.
 
 Four things about it are load-bearing:
 
@@ -777,7 +701,7 @@ publication check, where holding "not published yet" strands a contest for the
 length of the window. It does **not** dedupe in-flight requests, which is what
 the copies it replaced also did not do. Arguments after the key are forwarded to
 the loader and take no part in the keying; that is how one problemset is cached
-across every `CodeforcesService` while the instance that asked still signs the
+across every `CodeforcesSources` while the instance that asked still signs the
 call. Neither copy had any test at all — a cache that never hits is invisible in
 the result and visible only in the request count — so `tests/ttl-cache.test.js`
 drives a stubbed clock and was confirmed by breaking it both ways, never hitting
@@ -789,8 +713,8 @@ and never expiring.
 |---|---|
 | `atcoder/sources.js` | `gapMs: 1500`, `credentials: "include"` |
 | `codechef/sources.js` | `gapMs: 1500`, `credentials: "include"` |
-| `codeforces-gyms/sources.js` (the HTML half) | `gapMs: [1000, 2500]`, `measureFrom: "end"`, `cooldown: { everyNth: 15, gapMs: [6000, 12000] }`, `credentials: "include"` |
-| both `codeforces-*/sources.js` (the signed half) | `gapMs: 2000`, `budget: "codeforces-api"`, `credentials: "omit"` |
+| `codeforces/gyms/sources.js` (the HTML client) | `gapMs: [1000, 2500]`, `measureFrom: "end"`, `cooldown: { everyNth: 15, gapMs: [6000, 12000] }`, `credentials: "include"` |
+| `codeforces/sources.js` (the signed API, both platforms) | `gapMs: 2000`, `budget: "codeforces-api"`, `credentials: "omit"` |
 
 Each caller makes its own pacer, so budgets are independent — `HttpClient`'s counter was a single static shared by everything, which is now per-instance state and structurally impossible to cross.
 
@@ -804,7 +728,7 @@ Requests queue through a promise chain rather than each checking the clock. `Htt
 
 What that does *not* reach is the waiting branches: those contests were already published, so the problemset gate passed immediately and the gym phase check saw a finished contest. A round fresh enough that Codeforces has not indexed it yet is still the only way to see `notPublishedYet` fire on the add path.
 
-Codeforces' own half stays in `codeforces-gyms/http.js`: `credentials: "include"` so the user's session cookie is sent, plus 403 / "Just a moment" detection that surfaces a "visit codeforces.com" error.
+Codeforces' HTML client, in `codeforces/gyms/sources.js`, sets `credentials: "include"` so the user's session cookie is sent, plus 403 / "Just a moment" detection that surfaces a "visit codeforces.com" error.
 
 **A Cloudflare challenge now waits rather than failing the add.** It used to throw
 bare from the HTML client, and nothing converted it — so `contest-manager.js` never set
@@ -814,7 +738,7 @@ red message and press Add again, at the one moment they least wanted to.
 (*"We failed to ask — network, 403, anything. Not 'there is no answer'"*); only the
 wiring was missing. The block is now flagged `isSourceUnreachable` — a flag rather
 than a message match, the same idiom as `isStandingsHidden` — and
-`codeforces-official/problems.js` turns it into that status. Both halves are confirmed the
+the `Platform` base turns it into that status. Both halves are confirmed the
 usual way: removing either makes a test report the original symptom. Note only the
 challenge is reclassified; a layout change or a genuine fault still escapes, or the
 distinction that makes an escaping exception a bug would be lost. The cooldown logs at `console.info` rather than `console.warn`, because `chrome://extensions` collects warnings alongside errors and a normal add was otherwise filing a row there every 15 requests — the same trap the waiting-contest logging was fixed for.
@@ -839,20 +763,20 @@ with one of the five statuses above. Given a `/contest/<id>` or `/gym/<id>` URL:
      object, or from the problems-page sidebar (`.contest-state-phase`) when standings are hidden.
      Still running → `notEndedYet`. An unreadable phase proceeds: refusing on a label we can't read
      would make a contest unaddable for a reason we can't state.
-2. `platforms/codeforces-official/sources.js` — scrape problems from the standings header row. Official
+2. `codeforces/official/sources.js#contestFromStandings` — read the problems off `contest.standings`. Official
    contests read solve counts from the "Accepted" totals row; gyms instead count
    `bestSubmissionTimeSeconds` in `contest.standings`, excluding ghost parties. Returns
    `solveCountsRead`, false when the totals row wouldn't parse.
-3. `platforms/codeforces-official/sources.js#applyStandingsProblemData` — apply Codeforces' published ratings and tags, off the standings response already in hand.
+3. `codeforces/sources.js#applyStandingsProblemData` — apply Codeforces' published ratings and tags, off the standings response already in hand.
    Anything rated here needs no estimate, which is why it runs *before* the expensive steps.
-4. `platforms/codeforces-gyms/field.js` — produce the participant rating distribution, as
+4. `field.js#readField` — produce the participant rating distribution, as
    **strata**: `{ strata: [{ ratings, scale }] }`, where `scale` is how many real competitors one
    read competitor stands for. Official: `contest.ratingChanges` `oldRating`s at scale 1; if empty,
    fall back to sampling the standings (below). Gym/ICPC: build from `contest.standings`, collapsing
    each team into one effective rating via `computeTeamRating` (binary search for R where the
    product of per-member loss probabilities is 0.5). Hidden-standings gyms recover the same field
    from who submitted, via `getGymRatingDistFromParties`.
-5. `codeforces-official/estimator.js` over `rating-models/rasch.js` — binary-search the rating R whose Elo-expected solve count, summed over
+5. `codeforces/estimator.js` over `rating-models/rasch.js` — binary-search the rating R whose Elo-expected solve count, summed over
    the strata and weighted by each one's scale, matches actual solves; round to the nearest 100,
    floor 800. Zero solves targets 0.5 expected solves rather than 0 — which drives the estimate to
    the **ceiling**, not the floor.
@@ -932,9 +856,9 @@ inside the bracket, so they differ in path, not result. `Math.floor` is kept for
 fidelity to the source and for line-by-line diffability, not for safety — don't
 record it as a trap.
 
-### Sampling the field (`codeforces-official/field.js`)
+### Sampling the field (`codeforces/official/field.js`)
 
-When `contest.ratingChanges` is empty — exactly the freshly-finished contest you most want to upsolve — the participant distribution comes from the standings **rows**, which `problems.js` already fetched for the roster and passes along in `context`. So the rows are free; what is not free is turning them into ratings, at one throttled `user.info` per 250 handles. A 15,000-entrant Div. 3 is ~60 calls where a sample of ~1,500 is seven. `stratifyRows` takes that sample.
+When `contest.ratingChanges` is empty — exactly the freshly-finished contest you most want to upsolve — the participant distribution comes from the standings **rows**, which `fetchContest` already fetched for the roster and passes along in `context`. So the rows are free; what is not free is turning them into ratings, at one throttled `user.info` per 250 handles. A 15,000-entrant Div. 3 is ~60 calls where a sample of ~1,500 is seven. `stratifyRows` takes that sample.
 
 **This used to read ~32 paginated standings pages over the throttled HTML client**, and the strata are unchanged — only the source is. Everything that went with it was a consequence of pagination rather than of sampling: the page-count sanity guard, the partial-last-page measurement, the walk-every-page fallback. A row count is authoritative, so none of them has anything left to guard against. It also removed the last Cloudflare-exposed request on the official path, and a second ~8.5 MB fetch of a response already in memory (`getPublicContestStandings` is not cached; only the problemset is, for 60 s).
 
@@ -966,7 +890,7 @@ became a waiting entry. It now answers `notEndedYet` while running and `unavaila
 with no visible field. Verified on gym 712373.
 
 **`contest.status` still answers**, and it carries everything the standings response was mined for.
-`platforms/codeforces-gyms/sources.js` derives it — `summariseSubmissions` is pure over the submission array so it tests
+`codeforces/gyms/sources.js` derives it — `GymSources.summariseSubmissions` is pure over the submission array so it tests
 without a network stack. Against 712373's real 103 rows it reproduces the contest page exactly —
 A x12, B x12, C x12, D x4, E x6, F x1 — which is the fixture `tests/fixtures/gym-standings-hidden.json`
 and the thing `tests/contest-submissions.test.js` pins.
@@ -995,7 +919,7 @@ Five things there are easy to get wrong:
   unexercised there.
 - **With no official submissions at all, `solveCountsRead` is false.** All-zero counts are
   indistinguishable from "nobody solved anything", and handing those to the estimator floors every
-  problem at 800 (`codeforces-official/estimator.js`, the floor and zero-solve target) rather than refusing.
+  problem at 800 (`codeforces/estimator.js`, the floor and zero-solve target) rather than refusing.
 
 The field is recovered from who submitted, through `getGymRatingDistFromParties`. Everything below
 the handles — `user.info` chunking, `computeTeamRating`, the strata shape — is shared with the
@@ -1033,9 +957,9 @@ from the captured sidebar markup.
 
 **This file used to claim the extension "only gets through because it runs inside a browser with a real session." That was wrong**, and measurement showed it: the panel's requests were never authenticated at all. They worked only because Codeforces was not challenging anonymous traffic, and began failing the moment that changed — no code change was involved, and `git log` confirms it, the last commit touching that path predating the last successful add by four days. See **Requests go through a page, not from the panel** for the measurement and what it forced.
 
-The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/scraping.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live standings page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: an understated page count either takes the walk-every-page branch or trips the `hasPageLink` guard (slow but correct), a missing contest name falls back to `Contest <id>`, and an unreadable totals row refuses loudly. The residual risk is a slow add, not a wrong rating. Adding a just-finished contest in the real extension is the only way to confirm it.
+The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/gym-hidden-standings.test.js`, `tests/problems-page.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live standings page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: an understated page count either takes the walk-every-page branch or trips the `hasPageLink` guard (slow but correct), a missing contest name falls back to `Contest <id>`, and an unreadable totals row refuses loudly. The residual risk is a slow add, not a wrong rating. Adding a just-finished contest in the real extension is the only way to confirm it.
 
-### Scraped markup is quarantined in `codeforces-gyms/scrapers/`
+### Scraped markup is quarantined in `codeforces/gyms/scrapers/`
 
 Every CSS selector and parsing rule for Codeforces' HTML lives in that folder — today one file, `problems-page.js`, for the one page still read — with ordered fallback chains (contest name tries `.contest-name`, then `.caption`, then `<title>`). A CF layout change should be a one-file fix.
 
@@ -1107,9 +1031,9 @@ The tag source differs by contest type:
 
   **Don't add a recurring gym re-check.** A gym rating is inherited from an already-rated archive problem, so unlike CF's editable tags it never appears later. Re-checking would cost one `contest.standings` per gym per refresh forever, and the gyms with no rated problems would never resolve — the same sweep the CodeChef practice-flag section argues against.
 
-  Note this shrinks `needsEstimate`, so a fully-rated gym skips `estimateMissingRatings` entirely.
+  Note this shrinks `needsEstimate`, so a fully-rated gym skips the estimator entirely.
 
-  **That duplicate `contest.standings` fetch is gone.** `sources.js` fetches the response to count gym solves and now returns it; `problems.js` carries it in `acquired.context` and `estimator.js` hands it to `getGymRatingDist`, which takes an optional pre-fetched payload. It is passed, never stored — the built contest is what reaches `chrome.storage`, and a whole gym's field has no business there. Two things worth knowing before assuming it applied more widely: it was **gym-only**, since `readSolveStats` scrapes HTML for official rounds and `getOfficialRatingDist` reads `ratingChanges` instead; and the hidden-standings path has no such response to pass, so it still fetches. `codeforces-adapter.test.js` counts the calls, because nothing about a correct rating says how many requests produced it — this could otherwise regress silently forever.
+  **That duplicate `contest.standings` fetch is gone.** `GymSources#contestFromStandings` fetches the response to count gym solves and returns it; `fetchContest` carries it in `context` and `gyms/field.js#readField` measures the field from it rather than fetching again. It is passed, never stored — the built contest is what reaches `chrome.storage`, and a whole gym's field has no business there. Two things worth knowing before assuming it applied more widely: the official field reads `ratingChanges` first and falls back to the same carried response; and the hidden-standings path has no such response to pass, so it still fetches. `codeforces-adapter.test.js` counts the calls, because nothing about a correct rating says how many requests produced it — this could otherwise regress silently forever.
 
   Worth knowing before trusting the number: a setter *can* keep the rating and replace the statement — CF supports it directly ([Rewrite Statements in Mashups](https://codeforces.com/blog/entry/84795)), to stop trainees googling the editorial. The official test set is unchanged and the form warns when the formulas differ, so the rating still describes the problem being judged; the residual risk is a rewrite that quietly strips a hint. Of the 62, 55 match exactly one archive problem by name with an identical rating and zero disagreements, and a re-*upload* of a rated contest inherits nothing at all (gym 100001 has no ratings and its problem name drifted to "Spreadsheets").
 
@@ -1140,7 +1064,7 @@ Three details are deliberate:
   every contest to 1970, which silently puts the whole queue past the cutoff and
   disables the re-check entirely — a failure with no symptom except ratings that
   quietly stop converging. `tests/platform-sync-isolation.test.js` pins it.
-- **There is no per-refresh cap**, unlike `atcoder/problems.js`, and that is a
+- **There is no per-refresh cap**, unlike AtCoder's `syncMetadata`, and that is a
   decision rather than an omission. A cap interacts badly with the cutoff: with
   several stale contests and an infrequent refresher, a capped rotation gives
   each contest one look every few refreshes, and one that loses that race ages
@@ -1149,7 +1073,7 @@ Three details are deliberate:
   work between them, and the steady state is small, since only a round added
   within days of running is stale at all.
 
-The add does **not** run this pass. `readSolveStats` has already applied every
+The add does **not** run this pass. `contestFromStandings` has already applied every
 rating and tag the standings carry, so calling it again would re-fetch the same
 ~6.5 MB response to learn nothing — which is why the add stamps
 `publishedDataCheckedAt: Date.now()` rather than `null`.
@@ -1167,7 +1091,7 @@ CF tags are editable after publication, so a problem can gain tags days later �
 
 ### Start times
 
-`platforms/codeforces-official/sync/start-times.js` fills `contest.startTimeSeconds`, which orders the contest list. Contest IDs are *not* chronological (2205 ran a day before 2200), so sorting by ID is not a substitute.
+`codeforces/sync/start-times.js` — and the gym pass that extends it — fills `contest.startTimeSeconds`, which orders the contest list. Contest IDs are *not* chronological (2205 ran a day before 2200), so sorting by ID is not a substitute.
 
 - **Official** — `contest.list`, one ~400 KB request. A finished contest's start time never changes, so unlike tags there's no re-check: a contest is asked about once and only if the field is missing.
 - **Gym** — `contest.list?gym=true`, but private gyms and mashups (the 6xxxxx IDs) don't appear there at all. Those are covered at add time from `standings.contest.startTimeSeconds`, which `sources.js` already has in hand. Anything still unresolved sorts to the bottom rather than being treated as ancient.
@@ -1372,8 +1296,8 @@ The rank-band colours live in `--band-*` variables so the histogram fills (`.ban
 per field — and `core/settings/store.js` reads and writes by slug, routing each
 to `chrome.storage.local` or IndexedDB from the field's declared `store`.
 Anything that needs a value asks for the slug, the way a WordPress theme calls
-`get_option`. `core/platforms/*/identity.js` names the slugs it wants and nothing
-else; `options/index.html` holds only the intro and the Backup section, and
+`get_option`. Each platform names its settings section, and the `Platform` base reads
+that section's slugs; `options/index.html` holds only the intro and the Backup section, and
 `options/sections.js` renders the rest.
 
 **A section is a credential set, not a platform**, and that is the whole point.
@@ -1394,7 +1318,7 @@ each had their own. `tests/options-settings.test.js` asserts the rendering, and
 slug — a duplicate slug means two inputs writing one storage key.
 
 **`schema.js` is the third module allowed to name a platform**, alongside
-`registry.js` and `adapters.js`, because `verify.adapter` has to. The exception
+`registry.js` and `platforms.js`, because `verify.adapter` has to. The exception
 is scoped to that one file and recorded in `module-boundaries.test.js`'s
 `ALLOWED`; `store.js` and `options.js` route by slug and by section and still
 fail the test if they name one. Confirmed by adding a platform name to

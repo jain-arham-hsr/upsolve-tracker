@@ -79,7 +79,7 @@ export class CodeChefSources extends Source {
          *
          * Note this is *not* how a signed-out session shows up: that returns a
          * perfectly good 200 with an empty solved list, which is why
-         * `submissions.js` verifies identity rather than trusting the payload.
+         * `fetchAccepted` verifies identity rather than trusting the payload.
          * Two different refusals, and conflating them is how the platform became
          * untrackable once before.
          */
@@ -188,9 +188,9 @@ export class CodeChefSources extends Source {
    * false negative costs one refresh. `2` is Partially Correct and is excluded for
    * the same reason `partially_solved` always was.
    *
-   * It lives here rather than in either caller because both halves need it:
-   * `problems.js` reads it off the contest payload and `submissions.js` off the
-   * practice listing. Duplicating a magic number across the two is how they drift.
+   * On the source because both halves of the platform need it: `fetchContest`
+   * reads it off the contest payload and `fetchAccepted` off the practice
+   * listing. Duplicating a magic number across the two is how they drift.
    */
   static ACCEPTED = 1;
 

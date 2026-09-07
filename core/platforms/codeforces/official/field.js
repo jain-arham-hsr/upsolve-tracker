@@ -129,7 +129,7 @@ async function sampleOfficialStandings(sources, standings, onProgress) {
  * walk-every-page fallback — all of them consequences of pagination rather than
  * of sampling. Reading the rows the API already returned removes every one of
  * them, removes the last Cloudflare-exposed request on the official path, and
- * costs nothing extra: `problems.js` fetches that response for the roster
+ * costs nothing extra: `fetchContest` fetches that response for the roster
  * regardless and now passes it along.
  *
  * `BLOCK` is still 50 because that is what a standings page held, and the
