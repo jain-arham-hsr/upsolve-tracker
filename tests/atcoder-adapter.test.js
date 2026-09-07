@@ -18,13 +18,13 @@ import { DOMParser } from "linkedom";
 globalThis.DOMParser = DOMParser;
 
 const { getAdapter } = await import("../core/platforms/platforms.js");
-const { resetHttpState } = await import("../core/platforms/atcoder/sources.js");
+const { sources, resetHttpState } = await import("../core/platforms/atcoder/sources.js");
 const platform = getAdapter("atcoder");
 const fetchContestRecord = (...args) => platform.fetchContestRecord(...args);
 const fetchSolvedKeys = (...args) => platform.fetchSolvedKeys(...args);
 const syncMetadata = (...args) => platform.syncMetadata(...args);
 
-const SESSION = { handle: "tourist" };
+const SESSION = { handle: "tourist", sources };
 
 const tasksPage = (rows) => `<html><body>
   <a class="contest-title" href="/contests/abc432">Example Contest 432</a>
@@ -193,7 +193,7 @@ test("signed out fails loudly instead of reporting nothing solved", async () => 
 });
 
 test("no handle means no request and no keys", async () => {
-  const keys = await fetchSolvedKeys({ handle: null }, [{ id: "abc432" }]);
+  const keys = await fetchSolvedKeys({ handle: null, sources }, [{ id: "abc432" }]);
   assert.equal(keys.size, 0);
   assert.deepEqual(requested, []);
 });

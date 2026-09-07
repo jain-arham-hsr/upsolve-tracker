@@ -29,14 +29,14 @@
  *
  * @returns {Promise<number>} How many contests were resolved.
  */
-export async function syncStartTimes(cfService, contests, onProgress = () => {}) {
+export async function syncStartTimes(sources, contests, onProgress = () => {}) {
   const pending = contests.filter((contest) => !contest.startTimeSeconds);
   if (pending.length === 0) return 0;
 
   onProgress("Looking up contest dates…");
 
   const startTimes = new Map();
-  await collectInto(startTimes, cfService);
+  await collectInto(startTimes, sources);
 
   let resolved = 0;
   pending.forEach((contest) => {
@@ -48,7 +48,7 @@ export async function syncStartTimes(cfService, contests, onProgress = () => {})
   });
 
   resolved += await resolveGymsIndividually(
-    cfService,
+    sources,
     pending.filter((contest) => !contest.startTimeSeconds),
     onProgress,
   );
@@ -65,7 +65,7 @@ export async function syncStartTimes(cfService, contests, onProgress = () => {})
  * though the public list can't see them. One call each, spaced out, and only
  * ever for contests the bulk lists failed to resolve.
  */
-async function resolveGymsIndividually(cfService, gyms, onProgress) {
+async function resolveGymsIndividually(sources, gyms, onProgress) {
   if (gyms.length === 0) return 0;
 
   let resolved = 0;
@@ -75,7 +75,7 @@ async function resolveGymsIndividually(cfService, gyms, onProgress) {
     // this loop used to hold itself — so it counts itself off.
     onProgress(`Dating gym ${index + 1} of ${gyms.length}…`);
     try {
-      const standings = await cfService.getContestStandings(contest.id);
+      const standings = await sources.getContestStandings(contest.id);
       const startTime = standings?.contest?.startTimeSeconds;
       if (startTime) {
         contest.startTimeSeconds = startTime;
@@ -92,9 +92,9 @@ async function resolveGymsIndividually(cfService, gyms, onProgress) {
   return resolved;
 }
 
-async function collectInto(startTimes, cfService) {
+async function collectInto(startTimes, sources) {
   try {
-    const list = await cfService.getContestList();
+    const list = await sources.getContestList();
     (list ?? []).forEach((contest) => {
       if (contest.startTimeSeconds) {
         startTimes.set(String(contest.id), contest.startTimeSeconds);

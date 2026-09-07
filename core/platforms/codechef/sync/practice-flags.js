@@ -10,7 +10,6 @@
  * Sharing a file invites sharing a gate, and the slower pass would then
  * suppress the faster.
  */
-import { sources } from "../sources.js";
 
 /**
  * Some old problems were never mirrored into CodeChef's practice archive.
@@ -63,7 +62,7 @@ export function practiceFlag(problem) {
  * which does not happen; paying a request per contest per refresh to look for
  * it would be the sweep this client exists to avoid.
  */
-export async function refreshPracticeFlags(contests, onProgress = () => {}) {
+export async function refreshPracticeFlags(session, contests, onProgress = () => {}) {
   const pending = contests.filter((contest) =>
     contest.problems.some((problem) => problem.upsolvable === false),
   );
@@ -73,7 +72,7 @@ export async function refreshPracticeFlags(contests, onProgress = () => {}) {
 
   for (const contest of pending) {
     try {
-      const payload = await sources.contest(contest.id);
+      const payload = await session.sources.contest(contest.id);
       const problems = payload?.problems ?? {};
 
       for (const problem of contest.problems) {

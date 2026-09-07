@@ -22,7 +22,7 @@
  */
 export async function fetchAccepted(session, _contests, onProgress = () => {}) {
   onProgress("Checking your submissions…");
-  const submissions = await session.service.getUserStatus(session.handle);
+  const submissions = await session.sources.getUserStatus(session.handle);
 
   return submissions
     .filter((submission) => submission.verdict === "OK")

@@ -12,7 +12,6 @@
  * running from `syncMetadata`: it has a different cadence, a different cost
  * argument and writes in both directions. See `practice-flags.js`.
  */
-import { sources } from "../sources.js";
 
 /**
  * `difficulty_rating` arrives as a string and uses two out-of-band values:
@@ -70,7 +69,7 @@ const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
  * @returns {number} problems updated. Nothing in production reads it; it exists
  *   so the tests can tell a real update from a no-op.
  */
-export async function syncPublishedDifficulty(contests, onProgress = () => {}) {
+export async function syncPublishedDifficulty(session, contests, onProgress = () => {}) {
   const now = Date.now();
   let updated = 0;
 
@@ -87,7 +86,7 @@ export async function syncPublishedDifficulty(contests, onProgress = () => {}) {
 
       onProgress(`Re-checking ${problem.index}…`);
       try {
-        const detail = await sources.problem(contest.id, problem.index);
+        const detail = await session.sources.problem(contest.id, problem.index);
         const rating = parseDifficulty(detail?.difficulty_rating);
         if (rating === null) continue;
 

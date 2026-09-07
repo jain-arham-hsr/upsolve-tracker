@@ -363,8 +363,8 @@ export function resetApiState(spacingMs = 0) {
  * @param {string} contestId
  * @param {CodeforcesService} this
  */
-export async function readSolveStats(contestId, cfService) {
-  const standings = await cfService.getPublicContestStandings(contestId);
+export async function readSolveStats(contestId, sources) {
+  const standings = await sources.getPublicContestStandings(contestId);
 
   const problems = (standings?.problems ?? []).map((problem) => ({
     index: problem.index,
@@ -430,8 +430,8 @@ export async function readSolveStats(contestId, cfService) {
  *
  * Gyms are absent from the problemset entirely and must never be asked.
  */
-export async function isInProblemset(cfService, contestId) {
-  const problemset = await cfService.getProblemsetProblems();
+export async function isInProblemset(sources, contestId) {
+  const problemset = await sources.getProblemsetProblems();
   const wanted = String(contestId);
   return (problemset?.problems ?? []).some(
     (problem) => String(problem.contestId) === wanted,

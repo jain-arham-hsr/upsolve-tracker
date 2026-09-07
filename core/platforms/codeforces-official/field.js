@@ -21,13 +21,13 @@ import { fullField } from "../../rating-models/rating-distribution.js";
  *   here cost a second ~8.5 MB response for bytes already in memory.
  */
 export async function getOfficialRatingDist(
-  cfService,
+  sources,
   contestId,
   standings = null,
   onProgress = () => {},
 ) {
   try {
-    const ratingChanges = await cfService.getContestRatingChanges(contestId);
+    const ratingChanges = await sources.getContestRatingChanges(contestId);
     if (ratingChanges?.length > 0) {
       return fullField(ratingChanges.map((user) => user.oldRating));
     }
@@ -41,10 +41,10 @@ export async function getOfficialRatingDist(
   console.warn(
     `[Rating Dist] ratingChanges empty for ${contestId}. Falling back to standings.`,
   );
-  return sampleOfficialStandings(cfService, standings, onProgress);
+  return sampleOfficialStandings(sources, standings, onProgress);
 }
 
-async function sampleOfficialStandings(cfService, standings, onProgress) {
+async function sampleOfficialStandings(sources, standings, onProgress) {
   try {
     const { groups, total } = stratifyRows(standings?.rows);
     if (groups.length === 0) {
@@ -57,7 +57,7 @@ async function sampleOfficialStandings(cfService, standings, onProgress) {
     // One lookup pass over every sampled party, then split back into strata, so
     // the rate-limited `user.info` chunking does not happen twice.
     const rated = await ratePartyList(
-      cfService,
+      sources,
       groups.flatMap((group) => group.parties),
     );
 
@@ -89,7 +89,7 @@ async function sampleOfficialStandings(cfService, standings, onProgress) {
  * hidden-standings one off contest.status. Here it serves the sampled official
  * field. Change one copy and you must change the other.
  */
-async function ratePartyList(cfService, parties) {
+async function ratePartyList(sources, parties) {
   const allHandles = [
     ...new Set(parties.flat().filter(Boolean)),
   ];
@@ -104,7 +104,7 @@ async function ratePartyList(cfService, parties) {
 
   for (let i = 0; i < allHandles.length; i += chunkSize) {
     try {
-      const usersInfo = await cfService.getUsersInfo(
+      const usersInfo = await sources.getUsersInfo(
         allHandles.slice(i, i + chunkSize),
       );
       usersInfo?.forEach((u) => {

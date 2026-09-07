@@ -81,7 +81,7 @@ export function estimateProblemRating(distribution, actualSolves) {
  * unrated problem means.
  */
 export async function fill({ contest, context, session, onProgress = () => {} }) {
-  const { service } = session;
+  const { sources } = session;
   const { solveCountsRead, partyHandles, standings } = context;
 
   const needsEstimate = contest.problems.filter((problem) => problem.rating === null);
@@ -107,10 +107,10 @@ export async function fill({ contest, context, session, onProgress = () => {} })
     const distribution = partyHandles
       ? // Standings hidden: contest.standings answers FAILED, so the field was
         // recovered from who submitted instead.
-        await getGymRatingDistFromParties(service, partyHandles)
+        await getGymRatingDistFromParties(sources, partyHandles)
       : // `solve-stats.js` already fetched this response to count solves, so
         // reuse it rather than paying for the same call twice.
-        await getGymRatingDist(service, contest.id, standings);
+        await getGymRatingDist(sources, contest.id, standings);
 
     console.log(
       `[Codeforces] Distribution: ${distributionSize(distribution)} competitors read, ` +

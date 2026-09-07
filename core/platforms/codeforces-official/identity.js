@@ -63,7 +63,7 @@ export function createSessionFrom(values) {
   }
 
   return {
-    service: new CodeforcesService(apiKey, apiSecret),
+    sources: new CodeforcesService(apiKey, apiSecret),
     handle: values["upsolve_tracker.handle"],
   };
 }
@@ -82,7 +82,7 @@ export async function verifyIdentity(session) {
 
   // The API answers a bad handle with a FAILED status, which the service turns
   // into a throw — so an unknown handle never reaches the next line.
-  const users = await session.service.getUsersInfo([session.handle]);
+  const users = await session.sources.getUsersInfo([session.handle]);
   const user = users?.[0];
 
   if (!user?.handle) {

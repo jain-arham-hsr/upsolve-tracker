@@ -27,7 +27,6 @@
 import { sourceUnreachable } from "../../contest-status.js";
 import { fitDifficulty } from "../../rating-models/rasch.js";
 import { fitWithUpperAsymptote } from "../../rating-models/rasch-upper-asymptote.js";
-import { sources } from "./sources.js";
 import { buildRows, selectDataset, toAbilities, isAgcFirstProblem } from "./field.js";
 
 /** AtCoder's own scale: base 6 over 400, the same constants its ratings use. */
@@ -46,11 +45,11 @@ const MAX_DIFFICULTY = 6000;
  * introduced. Note the opposite choice is made for *submissions*, which fail
  * loudly: a missing difficulty is visible in the queue, a missing solve is not.
  */
-export async function fill({ contest, onProgress = () => {} }) {
+export async function fill({ contest, session, onProgress = () => {} }) {
   let standings = null;
   try {
     onProgress("Reading the standings…");
-    standings = await sources.standings(contest.id);
+    standings = await session.sources.standings(contest.id);
   } catch (error) {
     // **Not the same as "this problem has no difficulty".** Signed out, the
     // refusal hook turns AtCoder's `/login` redirect into a throw; a network

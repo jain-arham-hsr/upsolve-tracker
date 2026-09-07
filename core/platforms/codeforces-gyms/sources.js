@@ -294,24 +294,24 @@ export class CodeforcesService extends Source {
  * is not challenged and goes through the pacer rather than the page transport.
  *
  * @param {string} contestId
- * @param {CodeforcesService} cfService
+ * @param {CodeforcesService} sources
  * @returns {{ contestName: string, problems: object[], tagsSynced: boolean,
  *   startTimeSeconds: number|null, solveCountsRead: boolean,
  *   partyHandles: string[][]|null, finished: boolean|null, standings: object }}
  *   `partyHandles` is null except on the hidden-standings fallback, where it is
  *   the field the estimator would otherwise read from standings.
  */
-export async function readSolveStats(contestId, cfService) {
+export async function readSolveStats(contestId, sources) {
   let standings;
   try {
-    standings = await cfService.getContestStandings(contestId);
+    standings = await sources.getContestStandings(contestId);
   } catch (error) {
     // Opens only where the add would otherwise fail outright: a gym whose
     // standings Codeforces has hidden. Anything else — a network fault, a bad
     // key — rethrows untouched, since routing around one would turn a broken
     // request into a silently shorter contest.
     if (!error.isStandingsHidden) throw error;
-    return statsFromContestStatus(contestId, cfService, error);
+    return statsFromContestStatus(contestId, sources, error);
   }
 
   const problems = (standings?.problems ?? []).map((problem) => ({
@@ -379,11 +379,11 @@ export async function readSolveStats(contestId, cfService) {
  * supplies everything else.
  *
  * @param {string} contestId
- * @param {CodeforcesService} cfService
+ * @param {CodeforcesService} sources
  * @param {Error} standingsError - what the standings scrape threw, so a
  *   failure here can name the original cause rather than replacing it.
  */
-async function statsFromContestStatus(contestId, cfService, standingsError) {
+async function statsFromContestStatus(contestId, sources, standingsError) {
   const page = await scrapeProblemsPage(contestId);
 
   // Never fall back to a submission-derived list: it would look like a
@@ -397,7 +397,7 @@ async function statsFromContestStatus(contestId, cfService, standingsError) {
   }
 
   const derived = summariseSubmissions(
-    await fetchContestSubmissions(cfService, contestId),
+    await fetchContestSubmissions(sources, contestId),
   );
 
   page.problems.forEach((problem) => {
@@ -534,16 +534,16 @@ const MAX_SUBMISSIONS = 50000;
 /**
  * Every submission to a contest, paged.
  *
- * @param {CodeforcesService} cfService
+ * @param {CodeforcesService} sources
  * @param {string|number} contestId
  * @returns {Promise<object[]>}
  */
-export async function fetchContestSubmissions(cfService, contestId) {
+export async function fetchContestSubmissions(sources, contestId) {
   const submissions = [];
   let from = 1;
 
   while (true) {
-    const page = await cfService.getContestStatus(contestId, {
+    const page = await sources.getContestStatus(contestId, {
       from,
       count: PAGE_SIZE,
     });

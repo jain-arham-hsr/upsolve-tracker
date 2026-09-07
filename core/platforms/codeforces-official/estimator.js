@@ -81,7 +81,7 @@ export function estimateProblemRating(distribution, actualSolves) {
  * `contest-manager.js` handles under its general gap policy.
  */
 export async function fill({ contest, context, session, onProgress = () => {} }) {
-  const { service } = session;
+  const { sources } = session;
   const { standings } = context;
 
   const needsEstimate = contest.problems.filter((problem) => problem.rating === null);
@@ -94,7 +94,7 @@ export async function fill({ contest, context, session, onProgress = () => {} })
   // `ratingChanges` is empty, and passing it rather than re-fetching removes a
   // second ~8.5 MB request.
   const distribution = await getOfficialRatingDist(
-    service,
+    sources,
     contest.id,
     standings,
     onProgress,

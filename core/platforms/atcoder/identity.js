@@ -24,7 +24,7 @@ export async function createSession() {
 
 /** The same session from unsaved values, so Settings can verify what you typed. */
 export function createSessionFrom(values) {
-  return { handle: values[HANDLE_KEY] };
+  return { handle: values[HANDLE_KEY], sources };
 }
 
 /**
@@ -74,7 +74,7 @@ export async function verifyIdentity(session) {
   // `new DOMParser()` outside `site-client.js` went with the split.
   let doc;
   try {
-    doc = await sources.document(`/users/${encodeURIComponent(session.handle)}`);
+    doc = await session.sources.document(`/users/${encodeURIComponent(session.handle)}`);
   } catch (error) {
     if (error?.status === 404) {
       throw new Error(`AtCoder has no user "${session.handle}".`);

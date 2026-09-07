@@ -1,7 +1,7 @@
 import { computeTeamRating } from "../../rating-models/team-rating.js";
 import { fullField } from "../../rating-models/rating-distribution.js";
 
-export async function getGymRatingDist(cfService, contestId, standings = null) {
+export async function getGymRatingDist(sources, contestId, standings = null) {
   // Gym standings arrive whole from the API, so there's nothing to sample.
   //
   // `standings` lets the caller hand over a response it already paid for.
@@ -10,7 +10,7 @@ export async function getGymRatingDist(cfService, contestId, standings = null) {
   // per gym add, for bytes already in memory. Optional rather than required:
   // the hidden-standings path has no such response to pass, and neither does a
   // caller that only wants the field.
-  return fullField(await getRatingsFromStandings(cfService, contestId, standings));
+  return fullField(await getRatingsFromStandings(sources, contestId, standings));
 }
 
 /**
@@ -25,14 +25,14 @@ export async function getGymRatingDist(cfService, contestId, standings = null) {
  * parties that submitted at least once. A party that entered and submitted
  * nothing solved nothing either, so the solve counts stay consistent with it.
  *
- * @param {CodeforcesService} cfService
+ * @param {CodeforcesService} sources
  * @param {string[][]} partyHandles - member handles, one array per party
  */
-export async function getGymRatingDistFromParties(cfService, partyHandles) {
+export async function getGymRatingDistFromParties(sources, partyHandles) {
   if (!partyHandles?.length) return fullField([]);
 
   try {
-    return fullField(await ratePartyList(cfService, partyHandles));
+    return fullField(await ratePartyList(sources, partyHandles));
   } catch (error) {
     console.warn(
       `[Rating Dist] Submission-derived field failed:`,
@@ -50,7 +50,7 @@ export async function getGymRatingDistFromParties(cfService, partyHandles) {
  * Duplicated verbatim in `codeforces-official/field.js` too, for the sampled
  * official field. Change one copy and you must change the other.
  */
-async function ratePartyList(cfService, parties) {
+async function ratePartyList(sources, parties) {
   const allHandles = [
     ...new Set(parties.flat().filter(Boolean)),
   ];
@@ -65,7 +65,7 @@ async function ratePartyList(cfService, parties) {
 
   for (let i = 0; i < allHandles.length; i += chunkSize) {
     try {
-      const usersInfo = await cfService.getUsersInfo(
+      const usersInfo = await sources.getUsersInfo(
         allHandles.slice(i, i + chunkSize),
       );
       usersInfo?.forEach((u) => {
@@ -87,9 +87,9 @@ async function ratePartyList(cfService, parties) {
   });
 }
 
-async function getRatingsFromStandings(cfService, contestId, prefetched = null) {
+async function getRatingsFromStandings(sources, contestId, prefetched = null) {
   try {
-    const standings = prefetched ?? (await cfService.getContestStandings(contestId));
+    const standings = prefetched ?? (await sources.getContestStandings(contestId));
 
     if (!standings?.rows?.length) {
       console.warn(
@@ -99,7 +99,7 @@ async function getRatingsFromStandings(cfService, contestId, prefetched = null) 
     }
 
     return ratePartyList(
-      cfService,
+      sources,
       standings.rows.map((row) => row.party.members.map((m) => m.handle)),
     );
   } catch (error) {

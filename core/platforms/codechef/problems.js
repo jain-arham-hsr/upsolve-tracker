@@ -9,7 +9,7 @@
  * tags appear on no bulk or contest-level response, signed in or not. That is
  * ~9 for a Starters division, still fewer than a Codeforces add.
  */
-import { sources, ACCEPTED } from "./sources.js";
+import { ACCEPTED } from "./sources.js";
 import { parseDifficulty, cleanTags, syncPublishedDifficulty } from "./sync/published-data.js";
 import { practiceFlag, refreshPracticeFlags } from "./sync/practice-flags.js";
 import {
@@ -55,7 +55,7 @@ export async function fetchContest({
   for (const [index, problem] of problems.entries()) {
     onProgress(`Reading problem ${index + 1} of ${problems.length}…`);
     try {
-      built.push(await buildProblem(payload.code, problem, solved));
+      built.push(await buildProblem(session.sources, payload.code, problem, solved));
     } catch (error) {
       if (!error?.isSourceUnreachable) throw error;
       // Fail fast: the remaining requests would be spent on an add that is
@@ -90,7 +90,7 @@ export async function fetchContest({
  * they competed in.
  */
 async function resolveDivision(contestId, session, onProgress) {
-  const contest = await sources.contest(contestId);
+  const contest = await session.sources.contest(contestId);
   if (!contest.is_a_parent_contest) return { code: contestId, contest };
 
   const children = Object.values(contest.child_contests ?? {});
@@ -123,7 +123,7 @@ async function resolveDivision(contestId, session, onProgress) {
   }
 
   onProgress(`Using ${match.contest_code} (${match.div?.name ?? "your division"})…`);
-  return { code: match.contest_code, contest: await sources.contest(match.contest_code) };
+  return { code: match.contest_code, contest: await session.sources.contest(match.contest_code) };
 }
 
 /**
@@ -138,7 +138,7 @@ function solvedCodes(contest) {
   return new Set(Object.keys(contest?.problemsstats?.solved ?? {}));
 }
 
-async function buildProblem(contestCode, problem, solved) {
+async function buildProblem(sources, contestCode, problem, solved) {
   const code = problem.code;
   let rating = null;
   let tags = [];
@@ -191,7 +191,7 @@ async function buildProblem(contestCode, problem, solved) {
  *   reads it; it exists so the tests can tell a real update from a no-op.
  */
 export async function syncMetadata(session, contests, onProgress = () => {}) {
-  const mirrored = await refreshPracticeFlags(contests, onProgress);
-  const rated = await syncPublishedDifficulty(contests, onProgress);
+  const mirrored = await refreshPracticeFlags(session, contests, onProgress);
+  const rated = await syncPublishedDifficulty(session, contests, onProgress);
   return mirrored + rated;
 }

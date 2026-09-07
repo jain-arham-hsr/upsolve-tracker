@@ -27,7 +27,7 @@ import { notEndedYet } from "../../contest-status.js";
  *   reaches it without being fetched twice.
  */
 export async function fetchContest({ contestId, session, onProgress = () => {} }) {
-  const { service } = session;
+  const { sources } = session;
 
   onProgress("Reading the standings…");
   const {
@@ -39,7 +39,7 @@ export async function fetchContest({ contestId, session, onProgress = () => {} }
     partyHandles,
     finished,
     standings,
-  } = await readSolveStats(contestId, service);
+  } = await readSolveStats(contestId, sources);
 
   // A running gym has visible standings carrying partial solve counts, so the
   // estimator would fit them and store inflated difficulties — and a gym is the
@@ -66,7 +66,7 @@ export async function fetchContest({ contestId, session, onProgress = () => {} }
   // No problemset sync here: gyms are absent from problemset.problems entirely.
   // Their tags and published ratings come off the standings response instead,
   // which `solve-stats.js` has already applied by this point.
-  await syncStartTimes(service, [record], onProgress);
+  await syncStartTimes(sources, [record], onProgress);
 
   return {
     ...record,
@@ -86,5 +86,5 @@ export async function fetchContest({ contestId, session, onProgress = () => {} }
  * the helper matches on bare contest ids.
  */
 export async function syncMetadata(session, contests, onProgress = () => {}) {
-  await syncStartTimes(session.service, contests, onProgress);
+  await syncStartTimes(session.sources, contests, onProgress);
 }

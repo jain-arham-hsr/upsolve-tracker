@@ -111,7 +111,7 @@ const record = async (service) => {
   const result = await fetchContestRecord({
     contestId: "702859",
     subtype: "GYM",
-    session: { service },
+    session: { sources: service },
   });
   if (result.status !== "ready") {
     throw Object.assign(new Error(result.reason), { contestStatus: result.status });
@@ -248,7 +248,7 @@ test("a hidden-standings gym with nothing to estimate never asks for the field",
 // ---------------------------------------------------------------------------
 
 const status = (args, service) =>
-  fetchContestRecord({ session: { service }, ...args });
+  fetchContestRecord({ session: { sources: service }, ...args });
 
 test("an official round Codeforces has not published waits, and is not scraped", async () => {
   // The scrape is the expensive half — tens of deliberately throttled requests.
@@ -356,7 +356,7 @@ test("a blocked scrape answers sourceUnreachable, and that status waits", async 
     contestId: "702859",
     subtype: "GYM",
     session: {
-      service: {
+      sources: {
         getContestStandings: async () => {
           throw Object.assign(new Error("contestId: Standings are not available"), {
             isStandingsHidden: true,
@@ -383,7 +383,7 @@ test("a scrape failure that is not a block still escapes", async () => {
         contestId: "702859",
         subtype: "GYM",
         session: {
-          service: {
+          sources: {
             getContestStandings: async () => {
               throw Object.assign(new Error("contestId: Standings are not available"), {
                 isStandingsHidden: true,
@@ -412,7 +412,7 @@ test("an official contest takes Codeforces' published ratings, not estimates", a
     contestId: "2197",
     subtype: "OFFICIAL",
     session: {
-      service: {
+      sources: {
         getProblemsetProblems: async () => ({
           problems: INDEXES.map((index, i) => ({
             contestId: 2197,
@@ -491,7 +491,7 @@ test("a shared Div 1 / Div 2 problem takes its published rating, not an estimate
     contestId: "2197",
     subtype: "OFFICIAL",
     session: {
-      service: {
+      sources: {
         // Only A is filed under this contest; B and C live under the Div 1 twin.
         getProblemsetProblems: async () => ({
           problems: [{ contestId: 2197, index: "A", rating: 800, tags: ["math"] }],
@@ -534,7 +534,7 @@ test("losing the standings answers sourceUnreachable, so the add retries", async
     contestId: "2197",
     subtype: "OFFICIAL",
     session: {
-      service: {
+      sources: {
         getProblemsetProblems: async () => ({
           problems: [{ contestId: 2197, index: "A", rating: 800, tags: [] }],
         }),
@@ -569,7 +569,7 @@ test("the official path makes no HTML request at all, estimator included", async
     contestId: "2197",
     subtype: "OFFICIAL",
     session: {
-      service: {
+      sources: {
         getProblemsetProblems: async () => ({
           problems: [{ contestId: 2197, index: "A", rating: 800, tags: ["math"] }],
         }),

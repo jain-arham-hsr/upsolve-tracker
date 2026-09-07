@@ -9,16 +9,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { Platform, DESCRIPTOR_MEMBERS } from "../core/platforms/platform.js";
+import { Source } from "../core/platforms/source.js";
 import { atcoder } from "../core/platforms/atcoder/descriptor.js";
 import { codechef } from "../core/platforms/codechef/descriptor.js";
 import { READY, SOURCE_UNREACHABLE, notEndedYet } from "../core/contest-status.js";
+
+/** A Source with a client that is never called. */
+const FAKE_SOURCE = new Source({ client: { reset() {} } });
 
 /** The smallest complete subclass, over a real descriptor. */
 function complete(descriptor = codechef, overrides = {}) {
   return class Fake extends Platform {
     static settingsSection = descriptor.id === "atcoder" ? "atcoder" : "codechef";
     constructor() { super(descriptor); Object.assign(this, overrides); }
-    buildSession(values) { return { handle: values["upsolve_tracker.codechef_handle"] ?? "me" }; }
+    buildSession(values) {
+      return { handle: values["upsolve_tracker.codechef_handle"] ?? "me", sources: FAKE_SOURCE };
+    }
     async identify() { return { username: "me", rating: 1500 }; }
     async fetchContest({ contestId }) {
       return {
@@ -76,10 +82,17 @@ test("the slugs come from the schema section, declared once", () => {
   assert.deepEqual(new Fake().settingSlugs, ["upsolve_tracker.atcoder_handle"]);
 });
 
-test("a session with no handle field is refused at the boundary", async () => {
-  const Fake = complete();
-  Fake.prototype.buildSession = () => ({ signedIn: true });
-  await assert.rejects(() => new Fake().createSessionFrom({}), /codechef built a session with no handle/);
+test("a session with no handle field, or no Source, is refused at the boundary", async () => {
+  const NoHandle = complete();
+  NoHandle.prototype.buildSession = () => ({ signedIn: true, sources: FAKE_SOURCE });
+  await assert.rejects(() => new NoHandle().createSessionFrom({}), /codechef built a session with no handle/);
+
+  // A plain object with the right methods is not enough: the seam every
+  // platform shares is a Source, and a session that carries something else
+  // has reached the site some other way.
+  const NoSource = complete();
+  NoSource.prototype.buildSession = () => ({ handle: "me", sources: { document() {} } });
+  await assert.rejects(() => new NoSource().createSessionFrom({}), /carries no Source/);
 });
 
 test("an identity with no username or a non-numeric rating is refused", async () => {

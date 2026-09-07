@@ -117,7 +117,7 @@ function needsSync(contest, now) {
  * @returns {Promise<number>} How many contests were updated.
  */
 export async function syncPublishedProblemData(
-  cfService,
+  sources,
   contests,
   onProgress = () => {},
 ) {
@@ -130,7 +130,7 @@ export async function syncPublishedProblemData(
   let updated = 0;
   for (const contest of pending) {
     try {
-      const standings = await cfService.getPublicContestStandings(contest.id);
+      const standings = await sources.getPublicContestStandings(contest.id);
       // The same applier the add path uses, so the two cannot disagree about
       // what "published" means or which fields it sets.
       applyStandingsProblemData(standings, contest.problems);

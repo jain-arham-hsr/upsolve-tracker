@@ -23,7 +23,7 @@
  *
  * @returns {Promise<number>} How many contests were resolved.
  */
-export async function syncStartTimes(cfService, contests, onProgress = () => {}) {
+export async function syncStartTimes(sources, contests, onProgress = () => {}) {
   const pending = contests.filter((contest) => !contest.startTimeSeconds);
   if (pending.length === 0) return 0;
 
@@ -31,7 +31,7 @@ export async function syncStartTimes(cfService, contests, onProgress = () => {})
 
   const startTimes = new Map();
   try {
-    const list = await cfService.getContestList();
+    const list = await sources.getContestList();
     (list ?? []).forEach((contest) => {
       if (contest.startTimeSeconds) {
         startTimes.set(String(contest.id), contest.startTimeSeconds);

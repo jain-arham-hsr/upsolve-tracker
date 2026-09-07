@@ -29,7 +29,7 @@ import { notPublishedYet } from "../../contest-status.js";
  *   reaches it without being fetched twice.
  */
 export async function fetchContest({ contestId, session, onProgress = () => {} }) {
-  const { service } = session;
+  const { sources } = session;
 
   // problemset.problems is where Codeforces publishes an official contest's
   // problems, and it publishes them already rated — a contest present but
@@ -41,7 +41,7 @@ export async function fetchContest({ contestId, session, onProgress = () => {} }
   // entirely, so applying this to them would make every gym unaddable. That
   // asymmetry is why the two pipelines are two files.
   onProgress("Checking whether Codeforces has published it…");
-  if (!(await isInProblemset(service, contestId))) {
+  if (!(await isInProblemset(sources, contestId))) {
     return notPublishedYet(
       `Codeforces hasn't published contest ${contestId} yet. It'll be added ` +
         `on a refresh once it appears.`,
@@ -50,7 +50,7 @@ export async function fetchContest({ contestId, session, onProgress = () => {} }
 
   onProgress("Reading the standings…");
   const { contestName, problems, startTimeSeconds, solveCountsRead, standings } =
-    await readSolveStats(contestId, service);
+    await readSolveStats(contestId, sources);
 
   // A running round cannot reach here — it would not be in the problemset — so
   // unlike the gym pipeline this needs no phase check of its own.
@@ -67,7 +67,7 @@ export async function fetchContest({ contestId, session, onProgress = () => {} }
     startTimeSeconds,
   };
 
-  await syncStartTimes(service, [record], onProgress);
+  await syncStartTimes(sources, [record], onProgress);
 
   return {
     ...record,
@@ -88,6 +88,6 @@ export async function fetchContest({ contestId, session, onProgress = () => {} }
  * both helpers match on bare contest ids.
  */
 export async function syncMetadata(session, contests, onProgress = () => {}) {
-  await syncPublishedProblemData(session.service, contests, onProgress);
-  await syncStartTimes(session.service, contests, onProgress);
+  await syncPublishedProblemData(session.sources, contests, onProgress);
+  await syncStartTimes(session.sources, contests, onProgress);
 }

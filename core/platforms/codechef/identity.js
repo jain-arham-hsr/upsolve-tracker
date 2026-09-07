@@ -34,6 +34,7 @@ export async function createSessionFrom(values) {
 
   return {
     handle: values[HANDLE_KEY],
+    sources,
     signedInAs: page?.username ?? null,
     rating: page?.rating ?? null,
     signedIn: Boolean(page?.username),

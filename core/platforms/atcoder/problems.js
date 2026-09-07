@@ -12,16 +12,15 @@
  * the contest's standings by `estimator.js` — which is a separate concern with a
  * separate failure mode, and is allowed to fail softly where this is not.
  */
-import { sources } from "./sources.js";
 import { fill } from "./estimator.js";
 import { notPublishedYet } from "../../contest-status.js";
 
 /** A stuck contest must not cost a standings fetch on every single refresh. */
 const MAX_RETRIES_PER_SYNC = 1;
 
-export async function fetchContest({ contestId, onProgress = () => {} }) {
+export async function fetchContest({ contestId, session, onProgress = () => {} }) {
   onProgress("Reading the contest's problems…");
-  const tasks = await sources.contestTasks(contestId);
+  const tasks = await session.sources.contestTasks(contestId);
 
   // Before a contest ends its task list is not public. That resolves on its own
   // once it finishes, so it waits rather than failing — and it now resolves as

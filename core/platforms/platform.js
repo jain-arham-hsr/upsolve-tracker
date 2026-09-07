@@ -42,7 +42,9 @@
  *
  * ## Shapes
  *
- *   Session   { handle: string|null, ... }   whatever else the site needs
+ *   Session   { handle: string|null, sources: Source, ... }
+ *             every read of the site goes through `session.sources`, so a
+ *             fake source is injected the same way on every platform
  *   Acquired  { id, name, problems: [{index, name, ...}], startTimeSeconds,
  *               publishedDataCheckedAt, sourceId?, context? }
  *   Accepted  { contest: {id}, problem }     never a bare null contest
@@ -57,6 +59,7 @@
 import { getSettings } from "../settings/store.js";
 import { SECTIONS } from "../settings/schema.js";
 import { ready, sourceUnreachable } from "../contest-status.js";
+import { Source } from "./source.js";
 
 /** What every descriptor declares; `registry.js` asks for all of these. */
 export const DESCRIPTOR_MEMBERS = [
@@ -120,6 +123,9 @@ export class Platform {
     const session = await this.buildSession(values ?? {});
     if (!session || typeof session !== "object" || !("handle" in session)) {
       throw new Error(`${this.id} built a session with no handle field`);
+    }
+    if (!(session.sources instanceof Source)) {
+      throw new Error(`${this.id} built a session that carries no Source to read the site through`);
     }
     return session;
   }
