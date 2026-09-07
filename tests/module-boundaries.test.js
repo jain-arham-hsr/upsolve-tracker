@@ -895,7 +895,7 @@ test("a sync pass exports sync(session, contests, onProgress) and nothing else",
   }
 
   assert.deepEqual(offenders, []);
-  assert.equal(checked, 5, `expected five sync passes, found ${checked}`);
+  assert.equal(checked, 6, `expected six sync passes, found ${checked}`);
 });
 
 test("a source singleton is reached through the session, never imported", () => {
@@ -946,6 +946,40 @@ test("a source never answers with a status", () => {
     .map((file) => path.relative(ROOT, file));
 
   assert.deepEqual(offenders, []);
+});
+
+test("a platform's syncMetadata only runs sync/ passes", () => {
+  // What arrives after the add is the business of sync/, one file per pass,
+  // so `ls sync/` says what a refresh does for a platform. AtCoder's
+  // re-estimate rotation used to live inline in syncMetadata, where nothing
+  // listed it.
+  const offenders = [];
+  let overrides = 0;
+
+  for (const file of sourceFiles(PLATFORMS, [".js"]).filter((f) => path.basename(f) === "platform.js")) {
+    // The abstract base declares the default no-op; only overrides are checked.
+    if (file === path.join(PLATFORMS, "platform.js")) continue;
+    const relative = path.relative(ROOT, file);
+    const code = stripComments(readFileSync(file, "utf8"));
+    const start = code.search(/^\s+(async\s+)?syncMetadata\s*\(/m);
+    if (start === -1) continue;
+    overrides++;
+
+    // The passes this file imports, under whatever alias.
+    const passes = new Set(
+      [...code.matchAll(/import\s*\{\s*sync\s+as\s+(\w+)\s*\}\s*from\s*"[^"]*\/sync\/[^"]+"/g)].map((m) => m[1]),
+    );
+    if (passes.size === 0) offenders.push(`${relative} overrides syncMetadata but imports no sync/ pass`);
+
+    // The body: from the signature to the first line that closes it.
+    const body = code.slice(start, code.indexOf("\n  }", start));
+    for (const [, callee] of body.matchAll(/\b(?:await|return)\s+(\w+)\s*\(/g)) {
+      if (!passes.has(callee)) offenders.push(`${relative}'s syncMetadata calls ${callee}(), which is not a sync/ pass`);
+    }
+  }
+
+  assert.deepEqual(offenders, []);
+  assert.equal(overrides, 4, `expected four platforms to override syncMetadata, found ${overrides}`);
 });
 
 test("DOMParser is constructed in exactly one place", () => {
