@@ -13,14 +13,14 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shouldWait } from "../core/contest-status.js";
+import { shouldWait } from "../../../core/contest-status.js";
 import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { GymSources } = await import("../core/platforms/codeforces/gyms/sources.js");
-const { OfficialSources } = await import("../core/platforms/codeforces/official/sources.js");
-const { getAdapter } = await import("../core/platforms/platforms.js");
+const { GymSources } = await import("../../../core/platforms/codeforces/gyms/sources.js");
+const { OfficialSources } = await import("../../../core/platforms/codeforces/official/sources.js");
+const { getAdapter } = await import("../../../core/platforms/platforms.js");
 
 /**
  * The one page a hidden-standings gym reads. These cases stub it the way

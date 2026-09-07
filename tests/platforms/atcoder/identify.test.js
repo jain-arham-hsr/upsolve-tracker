@@ -20,9 +20,9 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { getAdapter } = await import("../core/platforms/platforms.js");
+const { getAdapter } = await import("../../../core/platforms/platforms.js");
 const verifyIdentity = (session) => getAdapter("atcoder").verifyIdentity(session);
-const { sources } = await import("../core/platforms/atcoder/sources.js");
+const { sources } = await import("../../../core/platforms/atcoder/sources.js");
 
 const profile = (signedInAs, rating = 1600) => `<html><head>
   <script>var userScreenName = ${signedInAs === null ? "undefined" : `"${signedInAs}"`};</script>

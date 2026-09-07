@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseHTML } from "linkedom";
 
-import { TasksPage } from "../core/platforms/atcoder/scrapers/tasks.js";
+import { TasksPage } from "../../../../core/platforms/atcoder/scrapers/tasks.js";
 
 // One parse per page now, so these read the fields off it. `parse` returns
 // null exactly when the task table is missing, which is what `findTasks`
@@ -34,7 +34,7 @@ const tasksOnly = (extra = "") =>
       `</tr></tbody></table></body></html>`,
   ).document;
 
-const html = readFileSync(new URL("./fixtures/atcoder-tasks.html", import.meta.url), "utf8");
+const html = readFileSync(new URL("../../../fixtures/atcoder-tasks.html", import.meta.url), "utf8");
 const doc = () => parseHTML(html).document;
 const empty = (body) => parseHTML(`<html><body>${body}</body></html>`).document;
 

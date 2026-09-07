@@ -7,9 +7,9 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { contestsOnPlatform } from "../core/platforms/registry.js";
-import { sync as startTimes } from "../core/platforms/codeforces/sync/start-times.js";
-import { sync as publishedData } from "../core/platforms/codeforces/official/sync/published-data.js";
+import { contestsOnPlatform } from "../../../../core/platforms/registry.js";
+import { sync as startTimes } from "../../../../core/platforms/codeforces/sync/start-times.js";
+import { sync as publishedData } from "../../../../core/platforms/codeforces/official/sync/published-data.js";
 
 // Every pass takes the session; these hand it a fake source the way a test
 // hands the platform one.

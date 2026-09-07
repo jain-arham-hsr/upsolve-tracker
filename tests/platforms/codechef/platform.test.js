@@ -8,14 +8,14 @@
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
-import { DashboardPage } from "../core/platforms/codechef/scrapers/page-globals.js";
+import { DashboardPage } from "../../../core/platforms/codechef/scrapers/page-globals.js";
 
 // The bootstrap object lives in a `<script>`, so these now go through a real
 // document the way production does, rather than being regexed off a string.
 const extractSession = (html) =>
   DashboardPage.scrape(parseHTML(`<html><body>${html ?? ""}</body></html>`).document);
-import { sources } from "../core/platforms/codechef/sources.js";
-import { getAdapter } from "../core/platforms/platforms.js";
+import { sources } from "../../../core/platforms/codechef/sources.js";
+import { getAdapter } from "../../../core/platforms/platforms.js";
 
 // The platform is instantiated in platforms.js, so this exercises the real
 // assembled object rather than a module's raw exports.

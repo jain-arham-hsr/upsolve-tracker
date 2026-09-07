@@ -116,7 +116,7 @@ test("the trunk emits every contest field its readers actually read", () => {
 test("some test actually reaches the code that applies published ratings", () => {
   const run = spawnSync(
     process.execPath,
-    ["--test", "--experimental-test-coverage", "tests/codeforces-adapter.test.js"],
+    ["--test", "--experimental-test-coverage", "tests/platforms/codeforces/platform.test.js"],
     {
       cwd: ROOT,
       encoding: "utf8",
@@ -159,7 +159,7 @@ test("some test actually reaches the code that applies published ratings", () =>
   assert.equal(
     skipped,
     false,
-    `sources.js:${APPLY_LINE} never executes in the Codeforces adapter ` +
+    `sources.js:${APPLY_LINE} never executes in the Codeforces platform ` +
       `tests, so nothing proves an official contest keeps its published ` +
       `ratings — this is exactly how the missing \`type\` bug shipped green`,
   );

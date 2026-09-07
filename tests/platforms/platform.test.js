@@ -8,11 +8,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Platform, DESCRIPTOR_MEMBERS } from "../core/platforms/platform.js";
-import { Source } from "../core/platforms/source.js";
-import { atcoder } from "../core/platforms/atcoder/descriptor.js";
-import { codechef } from "../core/platforms/codechef/descriptor.js";
-import { READY, SOURCE_UNREACHABLE, notEndedYet } from "../core/contest-status.js";
+import { Platform, DESCRIPTOR_MEMBERS } from "../../core/platforms/platform.js";
+import { Source } from "../../core/platforms/source.js";
+import { atcoder } from "../../core/platforms/atcoder/descriptor.js";
+import { codechef } from "../../core/platforms/codechef/descriptor.js";
+import { READY, SOURCE_UNREACHABLE, notEndedYet } from "../../core/contest-status.js";
 
 /** A Source with a client that is never called. */
 const FAKE_SOURCE = new Source({ client: { reset() {} } });

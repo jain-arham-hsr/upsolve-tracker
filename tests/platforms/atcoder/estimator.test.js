@@ -16,11 +16,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { estimateContest } from "../core/platforms/atcoder/estimator.js";
-import { inverseAdjustRating } from "../core/platforms/atcoder/estimator.js";
+import { estimateContest } from "../../../core/platforms/atcoder/estimator.js";
+import { inverseAdjustRating } from "../../../core/platforms/atcoder/estimator.js";
 
 const { cases } = JSON.parse(
-  readFileSync(new URL("./fixtures/atcoder-standings.json", import.meta.url), "utf8"),
+  readFileSync(new URL("../../fixtures/atcoder-standings.json", import.meta.url), "utf8"),
 );
 
 /** A field where everyone is a settled, rated competitor unless said otherwise. */

@@ -12,13 +12,13 @@
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { shouldWait } from "../core/contest-status.js";
+import { shouldWait } from "../../../core/contest-status.js";
 import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { getAdapter } = await import("../core/platforms/platforms.js");
-const { sources } = await import("../core/platforms/atcoder/sources.js");
+const { getAdapter } = await import("../../../core/platforms/platforms.js");
+const { sources } = await import("../../../core/platforms/atcoder/sources.js");
 const platform = getAdapter("atcoder");
 const fetchContestRecord = (...args) => platform.fetchContestRecord(...args);
 const fetchSolvedKeys = (...args) => platform.fetchSolvedKeys(...args);

@@ -6,7 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DOMParser } from "linkedom";
-import { ProblemsPage } from "../core/platforms/codeforces/gyms/scrapers/problems-page.js";
+import { ProblemsPage } from "../../../../../core/platforms/codeforces/gyms/scrapers/problems-page.js";
 
 // One parse per page. `parse` is null exactly when the problems table is
 // unreadable, which is what extractProblemsFromList used to signal alone; the

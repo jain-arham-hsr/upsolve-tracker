@@ -10,7 +10,7 @@
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { getAdapter } from "../core/platforms/platforms.js";
+import { getAdapter } from "../../core/platforms/platforms.js";
 
 const codechef = getAdapter("codechef");
 const codeforces = getAdapter("codeforces-official");

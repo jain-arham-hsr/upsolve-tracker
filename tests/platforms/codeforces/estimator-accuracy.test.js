@@ -46,10 +46,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { estimateProblemRating } from "../core/platforms/codeforces/estimator.js";
+import { estimateProblemRating } from "../../../core/platforms/codeforces/estimator.js";
 
 const { fields } = JSON.parse(
-  readFileSync(new URL("./fixtures/real-contest-fields.json", import.meta.url)),
+  readFileSync(new URL("../../fixtures/real-contest-fields.json", import.meta.url)),
 );
 
 const rated = fields.flatMap((field) =>
