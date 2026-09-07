@@ -136,15 +136,16 @@ test("no adapter throws a bare error where it should answer with a status", asyn
   // base in `platform.js` only passes a status through. So this is where the
   // vocabulary has to appear.
   // Every platform's own class, wherever its folder sits: the one beside a
-  // descriptor that carries an id. A base folder's descriptor is a partial
-  // with no id, and its class carries no gates, so it is not checked.
+  // descriptor that carries an id, counted once per registered platform since
+  // one site's descriptor.js may export two.
   let checked = 0;
   for (const file of sourceFiles(path.join(ROOT, "core/platforms"))) {
     if (path.basename(file) !== "platform.js") continue;
     const descriptor = path.join(path.dirname(file), "descriptor.js");
     if (!readdirSync(path.dirname(file)).includes("descriptor.js")) continue;
-    if (!Object.values(await import(descriptor)).some((value) => value && "id" in value)) continue;
-    checked++;
+    const ids = Object.values(await import(descriptor)).filter((value) => value && "id" in value);
+    if (ids.length === 0) continue;
+    checked += ids.length;
     const src = readFileSync(file, "utf8");
     const imported = /from\s+"(\.\.\/)+contest-status\.js"/.test(src);
     assert.ok(imported, `${path.relative(ROOT, file)} does not use the shared vocabulary`);

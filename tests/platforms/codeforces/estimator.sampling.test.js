@@ -15,15 +15,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { spreadPages, stratifyRows } from "../../../../core/platforms/codeforces/official/platform.js";
-import { estimateProblemRating } from "../../../../core/platforms/codeforces/estimator.js";
+import { spreadPages, stratifyRows } from "../../../core/platforms/codeforces/estimator.js";
+import { estimateProblemRating } from "../../../core/platforms/codeforces/estimator.js";
 
 const PER_PAGE = 50;
 const HEAD_PAGES = 10;
 const TAIL_PAGES = 20;
 
 const { fields } = JSON.parse(
-  readFileSync(new URL("../../../fixtures/real-contest-fields.json", import.meta.url)),
+  readFileSync(new URL("../../fixtures/real-contest-fields.json", import.meta.url)),
 );
 
 const fullField = (ratings) => ({ strata: [{ ratings, scale: 1 }] });

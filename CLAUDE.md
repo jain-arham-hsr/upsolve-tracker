@@ -16,7 +16,7 @@ npm run build:chrome    # -> dist/chrome
 npm test                # node --test over tests/ — no framework, no browser
 ```
 
-`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, the sampling arithmetic (via `platforms/codeforces/official/field.test.js`, against captured fields, so no network is touched), backup validation and queue ordering — plus three things that are invisible by nature. **Request pacing** (`request-pacer.test.js`, `platforms/codeforces/sources.test.js`, `platforms/codeforces/gyms/sources.test.js`): nothing about a response says whether a delay was served, so pacing can be removed without any other test noticing. These are the only tests here that assert on **wall-clock time**, so they are also the only ones that can flake on a loaded machine — and the two kinds behave differently. the two Codeforces source tests assert a **lower bound** (`gap >= 50` against a pinned 60ms), which a stall can only make more true. `request-pacer.test.js` asserts **both directions** via its `near()` helper, including two `near(…, 0, 40)` checks that a request should *not* have waited — a 40ms stall fails those. **If one goes red on CI and nowhere else, widen the tolerance; do not touch the pacing.** The pinned gaps are test-only anyway, set through `platform.reset(ms)` and the sources' static `reset(ms)`; production values are in the table below. **The platform boundary** (`module-boundaries.test.js`). And **the settings page's markup** (`options-settings.test.js`), which is generated from the descriptors and so is assertable in Node. There is no linter or formatter configured.
+`npm test` covers the parts that fail *silently*: the estimator's maths, the standings parsing, the sampling arithmetic (via `platforms/codeforces/estimator.sampling.test.js`, against captured fields, so no network is touched), backup validation and queue ordering — plus three things that are invisible by nature. **Request pacing** (`request-pacer.test.js`, `platforms/codeforces/sources.test.js`, `platforms/codeforces/sources.gyms.test.js`): nothing about a response says whether a delay was served, so pacing can be removed without any other test noticing. These are the only tests here that assert on **wall-clock time**, so they are also the only ones that can flake on a loaded machine — and the two kinds behave differently. the two Codeforces source tests assert a **lower bound** (`gap >= 50` against a pinned 60ms), which a stall can only make more true. `request-pacer.test.js` asserts **both directions** via its `near()` helper, including two `near(…, 0, 40)` checks that a request should *not* have waited — a 40ms stall fails those. **If one goes red on CI and nowhere else, widen the tolerance; do not touch the pacing.** The pinned gaps are test-only anyway, set through `platform.reset(ms)` and the sources' static `reset(ms)`; production values are in the table below. **The platform boundary** (`module-boundaries.test.js`). And **the settings page's markup** (`options-settings.test.js`), which is generated from the descriptors and so is assertable in Node. There is no linter or formatter configured.
 
 **Adapter fixtures must be cloned per test, not shared.** `platforms/codechef/platform.test.js` keeps its payloads in module-level consts (`PROBLEMS`, `DETAILS`) that the `fetch` stub reads directly, so a test modelling "CodeChef published this later" — flipping `is_added_to_practice`, or filling in a `difficulty_rating` — mutates the fixture for every test that runs after it. The suite then passes or fails on *ordering*. `beforeEach` deep-copies both; do the same for any fixture a test writes to.
 
@@ -52,7 +52,7 @@ Three things that pass are easy to get wrong there. The page sits **three levels
 
 Confirmed the usual way: renaming a descriptor's `api_secret` key reports *"the stored API key pair did not load into the form"*, which is the one failure here that is otherwise silent — a secret read under the wrong key comes back empty and looks exactly like a setting you never saved.
 
-`tests/platforms/codeforces/official/field.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
+`tests/platforms/codeforces/estimator.sampling.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
 
 `tests/platforms/codeforces/estimator-accuracy.test.js` records a **known bias**: estimates run below Codeforces' published ratings, by up to ~300 on the hardest problems.
 
@@ -124,7 +124,7 @@ watching it fire:
   hardcoded, since a stale line number would point at some covered line and pass; and
   a missing coverage row asserts loudly rather than skipping, since the child runner
   suppresses the table unless `NODE_TEST_CONTEXT` is cleared.
-- `linkedom` is a devDependency used only by the tests (`platforms/codeforces/gyms/scrapers/problems-page.test.js`, `platforms/codeforces/gyms/platform.test.js`, `options-settings.test.js` and others) to parse HTML in Node; shipped code uses the browser's `DOMParser`.
+- `linkedom` is a devDependency used only by the tests (`platforms/codeforces/scrapers/problems-page.test.js`, `platforms/codeforces/platform.hidden-standings.test.js`, `options-settings.test.js` and others) to parse HTML in Node; shipped code uses the browser's `DOMParser`.
 
 ## Architecture
 
@@ -208,7 +208,7 @@ The guarantee rests on three independent layers, each confirmed by removing it a
 
 `updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption. The shell reports them **last**, after the backup write and the view refresh — reporting earlier let `"Writing backup…"` overwrite the message for exactly the users whose backup was at risk.
 
-Note the Codeforces HTML client (in `codeforces/gyms/sources.js`) sends cookies, but the one page it still reads — `/gym/<id>`, read by `scrapers/problems-page.js` — yields only the contest name and its problem list, nothing about the viewer. So it needs no identity, and neither does AtCoder's public tasks page. (That file used to read competitors' handles, solve counts and pagination too; the standings scrape is gone, which is what the rename recorded.)
+Note the Codeforces HTML client (in `codeforces/sources.js`) sends cookies, but the one page it still reads — `/gym/<id>`, read by `scrapers/problems-page.js` — yields only the contest name and its problem list, nothing about the viewer. So it needs no identity, and neither does AtCoder's public tasks page. (That file used to read competitors' handles, solve counts and pagination too; the standings scrape is gone, which is what the rename recorded.)
 
 ### Platforms
 
@@ -282,14 +282,13 @@ is which:
 |---|---|---|
 | `scrapers/` | page scraped — a `Scraper` subclass each | 6 |
 
-**A base folder holds what two platforms share.** `codeforces/` is one: its `platform.js`
-exports a class no platform is built from and two extend, and it carries `sources.js`,
-`estimator.js` and a `descriptor.js` that is a *partial* — the pieces its platforms spread,
-with no `id`, which is what keeps the registry from ever listing it — with `official/` and
-`gyms/` beneath it. `module-boundaries.test.js`
-classifies every folder under `core/platforms/` from what `platforms.js` registers — a
-platform folder, a base folder, or an offender — and keys every other check on that, so no
-check assumes a folder is named after its id.
+**A folder is a site, and a site registers one or two platforms.** `codeforces/` registers
+two: `platform.js` exports `CodeforcesOfficial` and `CodeforcesGyms` over a module-private
+base holding what the account shares, `descriptor.js` exports both descriptors over a
+module-private partial, and `sources.js` exports both source classes over the shared signed
+client. The other two register one. `module-boundaries.test.js` classifies every folder under
+`core/platforms/` from what `platforms.js` registers — a site, or an offender — and keys
+every other check on that, so no check assumes a folder is named after its id.
 
 Rules that hold, each pinned by a test that was seen to fail:
 
@@ -314,7 +313,7 @@ Rules that hold, each pinned by a test that was seen to fail:
   production and be untestable.
 - **An estimator is pure.** The platform's `readField` reads and answers a status when
   it cannot; `estimator.js` fits what it read. The base refuses half an estimator, and the
-  file exists — in the platform's folder or its base's — iff `canEstimate`. Claiming the capability
+  file exists in the site's folder iff `canEstimate`, and two platforms sharing a site must agree. Claiming the capability
   with no estimator refuses every add; estimating without claiming it stores `???` beside
   numbers already worked out.
 - **`DOMParser` is constructed in exactly one place**, `services/site-client.js#getDocument`;
@@ -573,7 +572,7 @@ Note the expansion's opt-in is the one part of this **no unit test reaches** —
 
 ### Codeforces is one base and two platforms
 
-`codeforces/official/` and `codeforces/gyms/` are separate platforms. They were one platform
+`CodeforcesOfficial` and `CodeforcesGyms`, in one `codeforces/` folder, are separate platforms. They were one platform
 with two subtypes, and six modules independently asked which one they had — six conditions
 that had to agree with nothing checking that they did. One had already failed that way:
 `needsSync` read `contest.type !== "OFFICIAL"` on a record built before `type` was stamped on
@@ -594,9 +593,10 @@ They are genuinely different pipelines, not two flavours of one:
 `codeforces/platform.js` holds identity and the submission stream; `codeforces/sources.js`
 the signed client, the signing (SHA-512 over `rand/method?sortedParams#secret`),
 `user.status`, `user.info`, and the applier that takes a standings response's published
-ratings and tags; `codeforces/estimator.js` the fit both run; `ratePartyList` in
-`codeforces/platform.js` the party-to-rating step both fields end in; `codeforces/descriptor.js`
-the partial — origin, mark, host permission, rank colours and keys — both descriptors spread. Until this existed the two folders
+ratings and tags; `codeforces/estimator.js` the fit both run and the sampling maths;
+`ratePartyList` in `codeforces/platform.js` the party-to-rating step both fields end in; a
+module-private partial in `codeforces/descriptor.js` — origin, mark, host permission, rank
+colours and keys — that both descriptors spread. Until this existed the two folders
 held 744 byte-identical lines with a test forbidding them to diverge. **They import the base
 and never each other**, which `module-boundaries.test.js` pins.
 
@@ -625,7 +625,7 @@ a contest renders. It is the definitive problem list — a problem nobody attemp
 no submission, so a list rebuilt from `contest.status` would come out silently short.
 `GymSources#page` is how that page is read, through the HTML client with the session
 cookie and throttling tuned against the live site; `module-boundaries.test.js` pins that
-`gyms/sources.js` makes exactly one page read and that it is not a standings page. So **an
+`codeforces/sources.js` makes exactly one page read and that it is not a standings page. So **an
 add needs no codeforces.com tab** unless the gym's standings are hidden. Three scrapes went
 before that: the official roster and its field sampling (both already in `contest.standings`),
 and the gym roster (the same call was made anyway, and the API's counts overwrote the page's).
@@ -722,7 +722,7 @@ and never expiring.
 |---|---|
 | `atcoder/sources.js` | `gapMs: 1500`, `credentials: "include"` |
 | `codechef/sources.js` | `gapMs: 1500`, `credentials: "include"` |
-| `codeforces/gyms/sources.js` (the HTML client) | `gapMs: [1000, 2500]`, `measureFrom: "end"`, `cooldown: { everyNth: 15, gapMs: [6000, 12000] }`, `credentials: "include"` |
+| `codeforces/sources.js` (the HTML client) | `gapMs: [1000, 2500]`, `measureFrom: "end"`, `cooldown: { everyNth: 15, gapMs: [6000, 12000] }`, `credentials: "include"` |
 | `codeforces/sources.js` (the signed API, both platforms) | `gapMs: 2000`, `budget: "codeforces-api"`, `credentials: "omit"` |
 
 Each caller makes its own pacer, so budgets are independent — `HttpClient`'s counter was a single static shared by everything, which is now per-instance state and structurally impossible to cross.
@@ -737,7 +737,7 @@ Requests queue through a promise chain rather than each checking the clock. `Htt
 
 What that does *not* reach is the waiting branches: those contests were already published, so the problemset gate passed immediately and the gym phase check saw a finished contest. A round fresh enough that Codeforces has not indexed it yet is still the only way to see `notPublishedYet` fire on the add path.
 
-Codeforces' HTML client, in `codeforces/gyms/sources.js`, sets `credentials: "include"` so the user's session cookie is sent, plus 403 / "Just a moment" detection that surfaces a "visit codeforces.com" error.
+Codeforces' HTML client, in `codeforces/sources.js`, sets `credentials: "include"` so the user's session cookie is sent, plus 403 / "Just a moment" detection that surfaces a "visit codeforces.com" error.
 
 **A Cloudflare challenge now waits rather than failing the add.** It used to throw
 bare from the HTML client, and nothing converted it — so `contest-manager.js` never set
@@ -772,7 +772,7 @@ with one of the five statuses above. Given a `/contest/<id>` or `/gym/<id>` URL:
      object, or from the problems-page sidebar (`.contest-state-phase`) when standings are hidden.
      Still running → `notEndedYet`. An unreadable phase proceeds: refusing on a label we can't read
      would make a contest unaddable for a reason we can't state.
-2. `codeforces/official/platform.js#fetchContest` — read the problems off `contest.standings`. Official
+2. `CodeforcesOfficial#fetchContest` — read the problems off `contest.standings`. Official
    contests read solve counts from the "Accepted" totals row; gyms instead count
    `bestSubmissionTimeSeconds` in `contest.standings`, excluding ghost parties. Returns
    `solveCountsRead`, false when the totals row wouldn't parse.
@@ -865,7 +865,7 @@ inside the bracket, so they differ in path, not result. `Math.floor` is kept for
 fidelity to the source and for line-by-line diffability, not for safety — don't
 record it as a trap.
 
-### Sampling the field (`codeforces/official/platform.js`)
+### Sampling the field (`codeforces/estimator.js`)
 
 When `contest.ratingChanges` is empty — exactly the freshly-finished contest you most want to upsolve — the participant distribution comes from the standings **rows**, which `fetchContest` already fetched for the roster and passes along in `context`. So the rows are free; what is not free is turning them into ratings, at one throttled `user.info` per 250 handles. A 15,000-entrant Div. 3 is ~60 calls where a sample of ~1,500 is seven. `stratifyRows` takes that sample.
 
@@ -887,7 +887,7 @@ Verified against **real** rounds captured in `tests/fixtures/real-contest-fields
 small to sample from. That size is also why a gym estimate is so much noisier than an official
 one: the model is fitting tens of people where an official round gives it thousands.
 
-**`tests/platforms/codeforces/official/field.test.js` measures a *model* of the sample, not the code** — `stratifiedSample`, written in that file — because that is what makes the accuracy claim checkable against a captured field. So it also asserts that `stratifyRows` reproduces that model, including *positionally*: a head that sampled the bottom 500 would match on every count and be the exact mistake this design exists to avoid. Without that, the two could drift and every accuracy test would still pass — which is precisely what was possible while production read HTML and the test sliced an array.
+**`tests/platforms/codeforces/estimator.sampling.test.js` measures a *model* of the sample, not the code** — `stratifiedSample`, written in that file — because that is what makes the accuracy claim checkable against a captured field. So it also asserts that `stratifyRows` reproduces that model, including *positionally*: a head that sampled the bottom 500 would match on every count and be the exact mistake this design exists to avoid. Without that, the two could drift and every accuracy test would still pass — which is precisely what was possible while production read HTML and the test sliced an array.
 
 #### Gyms whose standings Codeforces has hidden
 
@@ -899,10 +899,10 @@ became a waiting entry. It now answers `notEndedYet` while running and `unavaila
 with no visible field. Verified on gym 712373.
 
 **`contest.status` still answers**, and it carries everything the standings response was mined for.
-`codeforces/gyms/sources.js` derives it — `GymSources.summariseSubmissions` is pure over the submission array so it tests
+`codeforces/sources.js` derives it — `GymSources.summariseSubmissions` is pure over the submission array so it tests
 without a network stack. Against 712373's real 103 rows it reproduces the contest page exactly —
 A x12, B x12, C x12, D x4, E x6, F x1 — which is the fixture `tests/fixtures/gym-standings-hidden.json`
-and the thing `tests/platforms/codeforces/gyms/sources.test.js` pins.
+and the thing `tests/platforms/codeforces/sources.gyms.test.js` pins.
 
 Five things there are easy to get wrong:
 
@@ -915,7 +915,7 @@ Five things there are easy to get wrong:
   the same idiom as `isNotPublishedYet` and `isIdentityMismatch`. And the gate is three conditions:
   gym **and** flagged **and** the problems page parses. An *official* contest with no standings
   table deliberately still throws: that is far more likely a Codeforces layout change, which
-  CLAUDE.md's rules say must fail loudly rather than be routed around. `tests/platforms/codeforces/gyms/platform.test.js`
+  CLAUDE.md's rules say must fail loudly rather than be routed around. `tests/platforms/codeforces/platform.hidden-standings.test.js`
   is mostly about what the branch must *not* touch; it stubs the service to throw if a healthy gym
   ever reaches `contestStatus`.
 - **Practice submissions are excluded, and that is what makes the counts right.** A gym closes when
@@ -950,7 +950,7 @@ carries the same number; changing that would alter contests that already add suc
 name "→ About Contest". The name is the sidebar contest box's header link
 (`#sidebar .rtable th a`, whose href is the contest root), which is not a `.caption` at all.
 `findContestNameOnProblemsPage` is separate from `findContestName` for that reason, and
-`tests/platforms/codeforces/gyms/scrapers/problems-page.test.js` keeps the real sidebar markup plus a test asserting that the
+`tests/platforms/codeforces/scrapers/problems-page.test.js` keeps the real sidebar markup plus a test asserting that the
 *standings* chain still returns "→ About Contest" on it — which is what makes the split legible.
 Note the name is read once at add time and never re-read, so a contest added under the wrong name
 keeps it until removed and re-added.
@@ -966,9 +966,9 @@ from the captured sidebar markup.
 
 **This file used to claim the extension "only gets through because it runs inside a browser with a real session." That was wrong**, and measurement showed it: the panel's requests were never authenticated at all. They worked only because Codeforces was not challenging anonymous traffic, and began failing the moment that changed — no code change was involved, and `git log` confirms it, the last commit touching that path predating the last successful add by four days. See **Requests go through a page, not from the panel** for the measurement and what it forced.
 
-The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/platforms/codeforces/gyms/platform.test.js`, `tests/platforms/codeforces/gyms/scrapers/problems-page.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live standings page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: an understated page count either takes the walk-every-page branch or trips the `hasPageLink` guard (slow but correct), a missing contest name falls back to `Contest <id>`, and an unreadable totals row refuses loudly. The residual risk is a slow add, not a wrong rating. Adding a just-finished contest in the real extension is the only way to confirm it.
+The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/platforms/codeforces/platform.hidden-standings.test.js`, `tests/platforms/codeforces/scrapers/problems-page.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live standings page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: an understated page count either takes the walk-every-page branch or trips the `hasPageLink` guard (slow but correct), a missing contest name falls back to `Contest <id>`, and an unreadable totals row refuses loudly. The residual risk is a slow add, not a wrong rating. Adding a just-finished contest in the real extension is the only way to confirm it.
 
-### Scraped markup is quarantined in `codeforces/gyms/scrapers/`
+### Scraped markup is quarantined in `codeforces/scrapers/`
 
 Every CSS selector and parsing rule for Codeforces' HTML lives in that folder — today one file, `problems-page.js`, for the one page still read — with ordered fallback chains (contest name tries `.contest-name`, then `.caption`, then `<title>`). A CF layout change should be a one-file fix.
 
@@ -1048,7 +1048,7 @@ The tag source differs by contest type:
 
 #### The re-check stops after six weeks
 
-`syncPublishedData` in `codeforces/official/platform.js` re-asks `contest.standings` for a contest that still has a
+`syncPublishedData` in `codeforces/platform.js` re-asks `contest.standings` for a contest that still has a
 problem without an official rating or without tags — at most weekly, and **only
 until six weeks after the round ran**.
 
@@ -1072,7 +1072,7 @@ Three details are deliberate:
   milliseconds.** Comparing them directly is off by a factor of 1000 and dates
   every contest to 1970, which silently puts the whole queue past the cutoff and
   disables the re-check entirely — a failure with no symptom except ratings that
-  quietly stop converging. `tests/platforms/codeforces/official/sync.test.js` pins it.
+  quietly stop converging. `tests/platforms/codeforces/platform.sync.test.js` pins it.
 - **There is no per-refresh cap**, unlike AtCoder's `syncMetadata`, and that is a
   decision rather than an omission. A cap interacts badly with the cutoff: with
   several stale contests and an infrequent refresher, a capped rotation gives
@@ -1096,7 +1096,7 @@ index. Separately, **283 of the ~11k problemset entries (about 2.5%) are listed 
 at all**, which is the genuine case and the only one the estimator should ever see. Conflating
 them is what made the old problemset-based re-check look like it was doing something.
 
-CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `syncPublishedData` in `codeforces/official/platform.js` therefore re-checks a contest that still has bare problems, but only once a week, and only until the round is six weeks old; a contest where every problem is tagged and officially rated is never re-requested. It runs from the refresh only — the add has already applied whatever the standings carry — and costs one `contest.standings` (~6.5 MB) per stale contest, which the weekly gate and the cutoff bound between them.
+CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `syncPublishedData` in `codeforces/platform.js` therefore re-checks a contest that still has bare problems, but only once a week, and only until the round is six weeks old; a contest where every problem is tagged and officially rated is never re-requested. It runs from the refresh only — the add has already applied whatever the standings carry — and costs one `contest.standings` (~6.5 MB) per stale contest, which the weekly gate and the cutoff bound between them.
 
 ### Start times
 

@@ -16,8 +16,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { OfficialSources as CodeforcesService } from "../../../core/platforms/codeforces/official/sources.js";
-import { GymSources as GymService } from "../../../core/platforms/codeforces/gyms/sources.js";
+import { OfficialSources as CodeforcesService } from "../../../core/platforms/codeforces/sources.js";
+import { GymSources as GymService } from "../../../core/platforms/codeforces/sources.js";
 
 const resetApiState = (ms) => CodeforcesService.reset(ms);
 const resetGymApiState = (ms) => GymService.reset(ms);
@@ -105,7 +105,7 @@ test("a FAILED response becomes the comment Codeforces gave", async () => {
   });
 
   try {
-    // This exact string is what codeforces/gyms/sources.js keys its
+    // This exact string is what codeforces/sources.js keys its
     // hidden-standings fallback off, so it has to survive the round trip.
     // `contest.standings` is a gym-only endpoint — the official client dropped
     // it in the split — so this is the gym half of the client.

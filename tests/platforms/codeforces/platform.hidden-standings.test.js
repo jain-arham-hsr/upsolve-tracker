@@ -14,9 +14,9 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { GymSources } = await import("../../../../core/platforms/codeforces/gyms/sources.js");
-const { OfficialSources } = await import("../../../../core/platforms/codeforces/official/sources.js");
-const { getAdapter } = await import("../../../../core/platforms/platforms.js");
+const { GymSources } = await import("../../../core/platforms/codeforces/sources.js");
+const { OfficialSources } = await import("../../../core/platforms/codeforces/sources.js");
+const { getAdapter } = await import("../../../core/platforms/platforms.js");
 
 /**
  * The page a hidden-standings gym reads, stubbed the way Codeforces serves it
@@ -338,7 +338,7 @@ test("gym 712373 end to end, against its real submissions", () => {
   // page is the contest's actual contest.status response, and the numbers are
   // what the contest page shows.
   const fixture = JSON.parse(
-    readFileSync(new URL("../../../fixtures/gym-standings-hidden.json", import.meta.url)),
+    readFileSync(new URL("../../fixtures/gym-standings-hidden.json", import.meta.url)),
   );
   const REAL = [
     ["A", "Everything Everywhere All But One", 800, 12],

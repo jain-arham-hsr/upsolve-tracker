@@ -9,8 +9,7 @@
  * default would file a malformed record under Codeforces and key it as
  * `undefined:1993`, and an unknown id means data from a newer version.
  */
-import { codeforcesOfficial } from "./codeforces/official/descriptor.js";
-import { codeforcesGyms } from "./codeforces/gyms/descriptor.js";
+import { codeforcesOfficial, codeforcesGyms } from "./codeforces/descriptor.js";
 import { atcoder } from "./atcoder/descriptor.js";
 import { codechef } from "./codechef/descriptor.js";
 

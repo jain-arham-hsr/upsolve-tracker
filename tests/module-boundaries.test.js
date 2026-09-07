@@ -114,12 +114,12 @@ const importsOf = (source) =>
 const PLATFORM_FOLDERS = new Set(["scrapers"]);
 
 /**
- * Every folder under core/platforms/ is one of two things, and platforms.js is
- * what says which. A **platform folder** is one whose platform.js exports the
- * class a registered instance was built from. A **base folder** is one whose
- * platform.js exports a class at least two registered instances extend and
- * none is built from — codeforces/ is the one there is. Anything else is an
- * offender: a folder with no platform.js, a class nobody registers or extends.
+ * A folder under core/platforms/ is a **site**, and a site registers one or
+ * more platforms: its platform.js exports the class each of them was built
+ * from. Codeforces registers two — official rounds and gyms — from one
+ * folder; the other two register one. Anything else is an offender: a folder
+ * with no platform.js, or a class exported there that no platform is built
+ * from.
  *
  * Classified once, at load, because most of the checks below need to know
  * where a platform lives without assuming its folder is named after its id.
@@ -128,7 +128,7 @@ const { getAdapter } = await import("../core/platforms/platforms.js");
 const { Platform } = await import("../core/platforms/platform.js");
 const INSTANCES = listPlatforms().map((platform) => getAdapter(platform.id));
 
-/** Folders under core/platforms/ that could hold a platform or a base. */
+/** Folders under core/platforms/ that could hold a site. */
 function candidateDirs(root) {
   const out = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
@@ -141,8 +141,7 @@ function candidateDirs(root) {
 
 async function classifyFolders() {
   const platforms = new Map();
-  const bases = [];
-  const baseClasses = new Map();
+  const sites = [];
   const offenders = [];
 
   for (const dir of candidateDirs(PLATFORMS)) {
@@ -155,31 +154,23 @@ async function classifyFolders() {
     const classes = Object.values(await import(path.join(dir, "platform.js"))).filter(
       (value) => typeof value === "function" && value.prototype instanceof Platform,
     );
-    if (classes.length !== 1) {
-      offenders.push(`${relative}/platform.js exports ${classes.length} Platform classes, expected one`);
+    if (classes.length === 0) {
+      offenders.push(`${relative}/platform.js exports no Platform class`);
       continue;
     }
 
-    const [cls] = classes;
-    const builtFrom = INSTANCES.filter((instance) => instance.constructor === cls);
-    const extending = INSTANCES.filter(
-      (instance) => instance instanceof cls && instance.constructor !== cls,
-    );
-
-    if (builtFrom.length === 1 && extending.length === 0) platforms.set(builtFrom[0].id, relative);
-    else if (builtFrom.length === 0 && extending.length >= 2) {
-      bases.push(relative);
-      baseClasses.set(relative, cls);
-    }
-    else {
-      offenders.push(
-        `${relative}/platform.js: ${cls.name} is built by ${builtFrom.length} platform(s) ` +
-          `and extended by ${extending.length} — neither a platform nor a base`,
-      );
+    sites.push(relative);
+    for (const cls of classes) {
+      const builtFrom = INSTANCES.filter((instance) => instance.constructor === cls);
+      if (builtFrom.length !== 1) {
+        offenders.push(`${relative}/platform.js exports ${cls.name}, which ${builtFrom.length} platforms are built from`);
+        continue;
+      }
+      platforms.set(builtFrom[0].id, relative);
     }
   }
 
-  return { platforms, bases, baseClasses, offenders };
+  return { platforms, sites, offenders };
 }
 
 const FOLDERS = await classifyFolders();
@@ -187,13 +178,8 @@ const FOLDERS = await classifyFolders();
 /** Absolute folder of a registered platform. */
 const folderOf = (id) => path.join(ROOT, FOLDERS.platforms.get(id));
 
-/** A platform's own folder, then every base folder it inherits from. */
-const foldersOf = (id) => [
-  folderOf(id),
-  ...[...FOLDERS.baseClasses]
-    .filter(([, cls]) => getAdapter(id) instanceof cls)
-    .map(([folder]) => path.join(ROOT, folder)),
-];
+/** Every site folder, once. */
+const siteFolders = () => [...new Set(FOLDERS.platforms.values())].map((folder) => path.join(ROOT, folder));
 
 test("shared code covers the whole of core/, not just its top level", () => {
   const files = sharedFiles();
@@ -408,89 +394,56 @@ test("the retired names survive nowhere", () => {
 });
 
 /**
- * Codeforces is two platforms over one base folder. What the account shares —
- * identity, the submission stream, the signed client — is inherited from
- * `codeforces/`; what the site publishes differently stays in each platform.
- * They import the base and never each other.
+ * Codeforces is one site folder registering two platforms. What the account
+ * shares — identity, the submission stream, the signed client — is a base
+ * class inside the same files; what the site publishes differently is each
+ * platform's own class.
  */
-const cfFolders = ["codeforces-official", "codeforces-gyms"];
-
-test("the two Codeforces platforms do not import each other", () => {
-  const offenders = [];
-
-  for (const folder of cfFolders) {
-    const other = cfFolders.find((candidate) => candidate !== folder);
-    const dir = folderOf(folder);
-
-    for (const file of sourceFiles(dir, [".js"])) {
-      for (const spec of importsOf(readFileSync(file, "utf8"))) {
-        if (spec.includes(other)) {
-          offenders.push(`${path.relative(ROOT, file)} → ${spec}`);
-        }
-      }
-    }
-  }
-
-  assert.deepEqual(
-    offenders,
-    [],
-    "the folders share an account, not code — duplicate it or lift it to core/",
-  );
-});
-
-test("every folder under core/platforms/ is a platform or a base, and platforms.js says which", async () => {
-  assert.deepEqual(FOLDERS.offenders, [], "a folder that is neither has nowhere to be");
+test("every folder under core/platforms/ is a site, and platforms.js says what it registers", async () => {
+  assert.deepEqual(FOLDERS.offenders, [], "a folder that registers nothing has nowhere to be");
 
   assert.deepEqual(
     [...FOLDERS.platforms.keys()].sort(),
     listPlatforms().map((platform) => platform.id).sort(),
-    "every registered platform has exactly one folder, and every platform folder is registered",
+    "every registered platform has exactly one folder",
   );
 
-  // A platform folder carries its descriptor. A base's descriptor.js is the
-  // partial its platforms spread, and it has no `id` — which is what keeps the
-  // registry from ever listing a base as a platform.
-  for (const [id, folder] of FOLDERS.platforms) {
-    assert.ok(readdirSync(path.join(ROOT, folder)).includes("descriptor.js"), `${id} has no descriptor.js`);
-  }
-  for (const folder of FOLDERS.bases) {
-    const exported = await import(path.join(ROOT, folder, "descriptor.js"));
-    for (const [name, value] of Object.entries(exported)) {
-      assert.ok(
-        value && typeof value === "object" && !("id" in value),
-        `${folder}/descriptor.js exports ${name} with an id, so it reads as a platform`,
-      );
-    }
+  // A site's descriptor.js exports exactly the descriptors of the platforms
+  // it registers, each with an id — nothing partial, nothing extra.
+  for (const folder of siteFolders()) {
+    const exported = Object.values(await import(path.join(folder, "descriptor.js")));
+    const ids = exported.map((value) => value?.id).sort();
+    const registered = [...FOLDERS.platforms].filter(([, f]) => path.join(ROOT, f) === folder).map(([id]) => id).sort();
+    assert.deepEqual(ids, registered, `${path.relative(ROOT, folder)}/descriptor.js does not export exactly its platforms' descriptors`);
   }
 
-  // Or a base could quietly become a platform, or vice versa, and pass.
-  assert.deepEqual(FOLDERS.bases, ["core/platforms/codeforces"]);
+  assert.equal(FOLDERS.sites.length, 3, `expected three sites, found ${FOLDERS.sites.join(", ")}`);
 });
+
+/** A class's source text, from its declaration to its column-zero closing brace. */
+function classBody(source, name) {
+  const start = source.indexOf(`class ${name} `);
+  assert.notEqual(start, -1, `${name} not found`);
+  return source.slice(start, source.indexOf("\n}\n", start));
+}
 
 test("the official Codeforces platform reaches no HTML at all", () => {
   // The reason the split is worth having, asserted structurally rather than by
   // counting requests. An official add is pure JSON API: it cannot be
-  // Cloudflare-challenged, and needs no tab open on codeforces.com.
-  //
-  // `tests/codeforces-adapter.test.js` asserts the same thing dynamically, by
-  // failing if a request is issued while reaching the estimator. This one
-  // catches the import before it can ever run.
-  // Keyed on what is still observable. It used to list `http.js` and
-  // `scraping.js` too, which worked only while a file name told you which kind
-  // of site a platform talked to; with one `sources.js` everywhere, it does
-  // not. What remains is exact: an official add reaches no markup, so it
-  // imports nothing from a `scrapers/` folder and constructs no `DOMParser`.
-  const forbidden = ["scrapers", "DOMParser"];
+  // Cloudflare-challenged, and needs no tab open on codeforces.com. Both
+  // platforms share a folder now, so this reads the two official classes
+  // rather than a folder: neither may reach the page seam, the problems page
+  // or a scraper.
+  const platform = stripComments(readFileSync(path.join(folderOf("codeforces-official"), "platform.js"), "utf8"));
+  const sources = stripComments(readFileSync(path.join(folderOf("codeforces-official"), "sources.js"), "utf8"));
   const offenders = [];
 
-  for (const file of sourceFiles(folderOf("codeforces-official"), [".js"])) {
-    const relative = path.relative(ROOT, file);
-    const code = stripComments(readFileSync(file, "utf8"));
-
-    for (const name of forbidden) {
-      if (importsOf(code).some((spec) => spec.endsWith(name)) || code.includes(name)) {
-        offenders.push(`${relative} uses ${name}`);
-      }
+  for (const [name, body] of [
+    ["CodeforcesOfficial", classBody(platform, "CodeforcesOfficial")],
+    ["OfficialSources", classBody(sources, "OfficialSources")],
+  ]) {
+    for (const forbidden of ["page(", "problemsPage", "scrape", "DOMParser"]) {
+      if (body.includes(forbidden)) offenders.push(`${name} uses ${forbidden}`);
     }
   }
 
@@ -527,12 +480,6 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
     `a standings page is being read again — a visible gym comes from the API: ${fetched[0]}`,
   );
 
-  // And the official half reads no page at all, which is why it has no
-  // `scrapers/` folder to go with it.
-  assert.ok(
-    !readdirSync(folderOf("codeforces-official")).includes("scrapers"),
-    "codeforces-official grew a scrapers/ folder — it should read no HTML",
-  );
 });
 
 test("a platform has estimator.js iff its descriptor claims canEstimate", () => {
@@ -543,12 +490,12 @@ test("a platform has estimator.js iff its descriptor claims canEstimate", () => 
   // problem the site has not rated, stored as `rating: null` and shown as
   // `???`. The Platform constructor refuses a class whose methods disagree
   // with the flag; this is the same fact at the level of files, which is where
-  // a reader looks first — and the file may sit in a base folder, as the
-  // Codeforces estimator does.
+  // a reader looks first. Two platforms sharing a site share its estimator,
+  // so they must agree on the claim.
   const offenders = [];
 
   for (const platform of listPlatforms()) {
-    const has = foldersOf(platform.id).some((dir) => readdirSync(dir).includes("estimator.js"));
+    const has = readdirSync(folderOf(platform.id)).includes("estimator.js");
     const claimed = platform.capabilities.canEstimate === true;
     if (has === claimed) continue;
     offenders.push(
@@ -609,8 +556,7 @@ test("nothing in a scrapers/ folder fetches", () => {
   const offenders = [];
   const scrapers = [];
 
-  for (const platform of listPlatforms()) {
-    const root = folderOf(platform.id);
+  for (const root of siteFolders()) {
     if (!readdirSync(root).includes("scrapers")) continue;
 
     for (const file of sourceFiles(path.join(root, "scrapers"), [".js"])) {
@@ -684,9 +630,10 @@ test("a site client routes through its own platform's descriptor", () => {
 
   assert.deepEqual(offenders, [], "a client must speak to the site it belongs to");
 
-  // Or a rename could empty the loop and pass. Four: AtCoder, CodeChef, the
-  // signed Codeforces API in its base, and the HTML client a hidden gym needs.
-  assert.equal(clients.length, 4, `expected four site clients, found ${clients.join(", ")}`);
+  // Or a rename could empty the loop and pass. Three files: AtCoder, CodeChef,
+  // and Codeforces, whose one sources.js builds both the signed API client and
+  // the HTML client a hidden gym needs.
+  assert.equal(clients.length, 3, `expected three site clients, found ${clients.join(", ")}`);
 });
 
 test("Codeforces signs in exactly one place", () => {
@@ -729,31 +676,22 @@ const PLATFORM_ROOT_FILES = new Set([
   "estimator.js",
 ]);
 
-/** A base folder has the same three; its descriptor is the partial its platforms spread. */
-const REQUIRED = { platform: ["descriptor.js", "platform.js", "sources.js"], base: ["descriptor.js", "platform.js", "sources.js"] };
+const REQUIRED = ["descriptor.js", "platform.js", "sources.js"];
 
-test("a platform's root holds only contract names", () => {
+test("a site's root holds only contract names", () => {
   const offenders = [];
-  const folders = [
-    ...[...FOLDERS.platforms.values()].map((folder) => [folder, "platform"]),
-    ...FOLDERS.bases.map((folder) => [folder, "base"]),
-  ];
 
-  for (const [folder, kind] of folders) {
+  for (const folder of siteFolders().map((f) => path.relative(ROOT, f))) {
     const entries = readdirSync(path.join(ROOT, folder), { withFileTypes: true });
     const names = entries.map((entry) => entry.name);
 
-    for (const required of REQUIRED[kind]) {
+    for (const required of REQUIRED) {
       if (!names.includes(required)) offenders.push(`${folder} has no ${required}`);
     }
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        // A base may hold its platforms' folders; a platform may not.
-        const isPlatform = FOLDERS.platforms.has(
-          [...FOLDERS.platforms].find(([, f]) => f === `${folder}/${entry.name}`)?.[0],
-        );
-        if (!PLATFORM_FOLDERS.has(entry.name) && !(kind === "base" && isPlatform)) {
+        if (!PLATFORM_FOLDERS.has(entry.name)) {
           offenders.push(`${folder}/${entry.name}/ is not a known kind of folder`);
         }
         continue;
@@ -769,7 +707,7 @@ test("a platform's root holds only contract names", () => {
     }
   }
 
-  assert.deepEqual(offenders, [], "the root of a platform folder is a closed set");
+  assert.deepEqual(offenders, [], "the root of a site folder is a closed set");
 });
 
 test("every scraper is one, by the definition rather than by folder", async () => {
@@ -785,8 +723,7 @@ test("every scraper is one, by the definition rather than by folder", async () =
   const offenders = [];
   let scrapers = 0;
 
-  for (const platform of listPlatforms()) {
-    const root = folderOf(platform.id);
+  for (const root of siteFolders()) {
     if (!readdirSync(root).includes("scrapers")) continue;
 
     for (const file of sourceFiles(path.join(root, "scrapers"), [".js"])) {
@@ -820,7 +757,7 @@ test("every scraper is one, by the definition rather than by folder", async () =
   assert.equal(scrapers, 6, `expected six scrapers, found ${scrapers}`);
 });
 
-test("a sources.js exports one Source class, and at most a singleton of it", async () => {
+test("a sources.js exports Source classes, and at most a singleton of one", async () => {
   // What made "what do these have in common" hard to answer: one sources.js
   // exported a class and six free functions, another a singleton and a reset
   // seam, a third a constant. Everything a site's reads need is now on the
@@ -835,24 +772,23 @@ test("a sources.js exports one Source class, and at most a singleton of it", asy
     const exported = await import(file);
     checked++;
 
-    const classes = Object.entries(exported).filter(
-      ([, value]) => typeof value === "function" && value.prototype instanceof Source,
+    const classes = Object.values(exported).filter(
+      (value) => typeof value === "function" && value.prototype instanceof Source,
     );
-    if (classes.length !== 1) {
-      offenders.push(`${relative} exports ${classes.length} Source classes, expected one`);
+    if (classes.length === 0) {
+      offenders.push(`${relative} exports no Source class`);
       continue;
     }
-    const [, cls] = classes[0];
 
     for (const [name, value] of Object.entries(exported)) {
-      if (value === cls) continue;
-      if (name === "sources" && value instanceof cls) continue;
-      offenders.push(`${relative} also exports ${name} — put it on the class, or in the module that owns it`);
+      if (classes.includes(value)) continue;
+      if (name === "sources" && classes.some((cls) => value instanceof cls)) continue;
+      offenders.push(`${relative} also exports ${name} — put it on a class, or in the module that owns it`);
     }
   }
 
   assert.deepEqual(offenders, []);
-  assert.equal(checked, 5, `expected five sources.js, found ${checked}`);
+  assert.equal(checked, 3, `expected three sources.js, found ${checked}`);
 });
 
 test("a source singleton is reached through the session, never imported", () => {
@@ -914,12 +850,15 @@ test("every descriptor declares its members in the base's order", async () => {
   const rank = new Map(DESCRIPTOR_MEMBERS.map((name, i) => [name, i]));
   const offenders = [];
 
-  for (const platform of listPlatforms()) {
-    const source = stripComments(readFileSync(path.join(folderOf(platform.id), "descriptor.js"), "utf8"));
-    const declared = [...source.matchAll(/^  (\w+)\s*[:(]/gm)].map((m) => m[1]).filter((name) => rank.has(name));
-    const sorted = [...declared].sort((a, b) => rank.get(a) - rank.get(b));
-    if (declared.join() !== sorted.join()) {
-      offenders.push(`${platform.id}: ${declared.join(", ")}`);
+  // One file may hold two descriptors, so each `export const` block is read
+  // on its own.
+  for (const folder of siteFolders()) {
+    const source = stripComments(readFileSync(path.join(folder, "descriptor.js"), "utf8"));
+    for (const block of source.split(/^export const /m).slice(1)) {
+      const name = block.slice(0, block.indexOf(" "));
+      const declared = [...block.matchAll(/^  (\w+)\s*[:(]/gm)].map((m) => m[1]).filter((n) => rank.has(n));
+      const sorted = [...declared].sort((a, b) => rank.get(a) - rank.get(b));
+      if (declared.join() !== sorted.join()) offenders.push(`${name}: ${declared.join(", ")}`);
     }
   }
 
