@@ -1,27 +1,23 @@
 /**
- * The AtCoder platform descriptor.
+ * AtCoder.
  *
  * Two things differ structurally from Codeforces and drive most of what
- * follows:
- *
- *  - **A problem can belong to several contests.** 1,906 of 9,383 do. So a
- *    problem's identity is its task id, not contest + index, and solving it
- *    anywhere counts as solving it everywhere.
- *  - **Difficulty is published, not estimated**, and is unbounded below —
- *    1,772 rated problems sit under 800 and 931 are negative. Nothing here
- *    may clamp to a Codeforces-shaped floor.
+ * follows. A problem can belong to several contests — 1,906 of 9,383 do — so
+ * its identity is its task id, not contest + index, and solving it anywhere
+ * counts everywhere. And difficulty is unbounded below: 931 rated problems
+ * are negative, so nothing here may clamp to a Codeforces-shaped floor.
  */
 
 const URL_PATTERN = /^https?:\/\/(?:www\.)?atcoder\.jp\/contests\/([A-Za-z0-9_-]+)/i;
 
-// `/contests/archive` is the contest *list*, not a contest.
+/** `/contests/archive` is the contest *list*, not a contest. */
 const NOT_CONTESTS = new Set(["archive"]);
 
-const SUBTYPE_PREFIXES = [
-  [/^abc\d/i, "ABC"],
-  [/^arc\d/i, "ARC"],
-  [/^agc\d/i, "AGC"],
-  [/^ahc\d/i, "AHC"],
+const SUBTYPES = [
+  [/^abc\d/i, "ABC", "ABC"],
+  [/^arc\d/i, "ARC", "ARC"],
+  [/^agc\d/i, "AGC", "AGC"],
+  [/^ahc\d/i, "AHC", "AHC"],
 ];
 
 export const atcoder = {
@@ -30,24 +26,14 @@ export const atcoder = {
   shortLabel: "AC",
   origin: "https://atcoder.jp",
 
-  subtypes: [
-    { value: "ABC", label: "ABC" },
-    { value: "ARC", label: "ARC" },
-    { value: "AGC", label: "AGC" },
-    { value: "AHC", label: "AHC" },
-    { value: "OTHER", label: "Other" },
-  ],
+  subtypes: [...SUBTYPES.map(([, value, label]) => ({ value, label })), { value: "OTHER", label: "Other" }],
 
-  /**
-   * @returns {{contestId: string, subtype: string}|null}
-   */
   matchUrl(url) {
     const match = typeof url === "string" ? url.match(URL_PATTERN) : null;
     if (!match) return null;
 
     const contestId = match[1];
     if (NOT_CONTESTS.has(contestId.toLowerCase())) return null;
-
     return { contestId, subtype: subtypeFor(contestId) };
   },
 
@@ -55,16 +41,13 @@ export const atcoder = {
     return `${this.origin}/contests/${contest.id}`;
   },
 
-  /**
-   * The task id is the problem's identity, so it is stored on the problem.
-   * Without it the best available link is the contest itself — a degraded
-   * link, not a fabricated one.
-   */
+  /** The task id is the problem's identity; without it the contest is the best link, degraded not fabricated. */
   problemUrl(contest, problem) {
     if (!problem?.problemId) return this.contestUrl(contest);
     return `${this.contestUrl(contest)}/tasks/${problem.problemId}`;
   },
 
+  /** Display-only, e.g. "ABC466 C". */
   sourceLabel(contest, problem) {
     return `${String(contest.id).toUpperCase()} ${problem.index}`;
   },
@@ -80,19 +63,18 @@ export const atcoder = {
     return [];
   },
 
+  contestLabel() {
+    return "AtCoder contest";
+  },
+
   /** Already a code, not a number — no "#" needed to say so. */
   contestIdLabel(contest) {
     return String(contest.id);
   },
 
-  contestLabel() {
-    return "AtCoder contest";
-  },
-
   /**
-   * Keyed on the task id, not contest + index. The same problem appears in
-   * several contests — daily-training rounds are mostly reruns — and solving
-   * it once should clear it everywhere it shows up.
+   * Keyed on the task id, not contest + index: the same problem appears in
+   * several contests, and solving it once should clear it everywhere.
    */
   solvedKey(contest, problem) {
     return `atcoder:${problem?.problemId ?? `${contest.id}-${problem?.index}`}`;
@@ -102,72 +84,40 @@ export const atcoder = {
     return this.solvedKey(contest, problem);
   },
 
-  /**
-   * AtCoder's own bands. Note they start far lower than Codeforces' — its
-   * scale runs negative — so borrowing Codeforces' thresholds would paint the
-   * entire ABC range a single colour.
-   */
-  /**
-   * Chart colour for this platform's slice of the overview ring — aqua; AtCoder brands achromatically, so the slot is arbitrary.
-   *
-   * Fixed per platform, never assigned by size: a filter that changes which
-   * platforms are present must not repaint the survivors. Taken from the first
-   * three slots of the validated categorical theme rather than picked by eye;
-   * the icons' own brand colours fail the chroma floor as fills.
-   */
-  /* Chart slot — blue. AtCoder brands achromatically, so there is no brand
-     colour to take and the slot is free. */
+  /* Chart slot — blue. AtCoder brands achromatically, so the slot is free.
+     A validated categorical set checked together against the dark surface;
+     changing one means re-validating all of them. No rank colours: AtCoder
+     has its own scheme, and borrowing Codeforces' would attach its meaning to
+     an AtCoder number. Ratings render neutral. */
   chartColor: "#3987e5",
-
-  /**
-   * **No rank colours.** AtCoder has its own scheme, but the queue previously
-   * borrowed Codeforces' — which attaches Codeforces' meaning to an AtCoder
-   * number. "Cyan 1600" says something specific there and nothing here.
-   * Ratings render neutral instead; see problem-row.js.
-   */
-
 
   hostPermissions: ["*://*.atcoder.jp/*"],
 
-  // Not drawn: AtCoder's own crest, shrunk. Six hand-drawn attempts each read
-  // as something else at this size — a security badge, then an apricot — while
-  // the real thing keeps a silhouette a reader recognises even when no
-  // individual element is legible.
-  //
-  // It needs some processing. The crest is line art on transparency and only
-  // 24% of its canvas is ink, so a plain downscale averages those thin strokes
-  // into grey haze — dilating them first preserves the mass. It is then
-  // inverted onto a rounded white plate to match the other two, which the
-  // original favicon does not have. Embedded at 2x rather than shipped as a
-  // file so this module stays pure: the tests import it with no extension APIs
-  // available.
+  /**
+   * AtCoder's own crest, not a drawing: six hand-drawn attempts each read as
+   * something else at this size. The line art is dilated before downscaling
+   * so the thin strokes keep their mass, then inverted onto a rounded white
+   * plate to match the other two. Embedded so this module stays pure.
+   */
   icon: `
     <img class="platform-icon" alt="AtCoder"
          src="data:image/png;base64,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" />`,
 
-
   capabilities: {
-    // AtCoder publishes no problem tags at all — not "none yet", none ever.
-    // The stats panel drops its whole tag section rather than heading an
-    // empty one, which reads as a failed load.
+    // AtCoder publishes no problem tags at all — not "none yet", none ever —
+    // so the stats panel drops its tag section rather than heading an empty one.
     publishesTags: false,
-    // AtCoder publishes no difficulty at all, so every rating here is fitted
-    // locally — the same estimator Codeforces uses, over the contest's own
-    // standings. That makes a leftover null a *fault* rather than a fact about
-    // the problem, and `contest-manager.js` is the one place that says so.
-    //
-    // This read `false` while the comment claimed "no estimator", which stopped
-    // being true when the fitting moved in-house. The cost of the mismatch was
-    // a queue of `???` whenever the standings could not be read — signed out,
-    // usually — indistinguishable from a problem nothing can rate. That case is
-    // now `sourceUnreachable` and waits; see `estimator.js#fill`.
+    // AtCoder publishes no difficulty either, so every rating here is fitted
+    // locally over the contest's own standings. A leftover null is therefore
+    // a fault, not a fact about the problem; a field that could not be read
+    // is `sourceUnreachable` and waits.
     canEstimate: true,
   },
 };
 
 function subtypeFor(contestId) {
-  for (const [pattern, subtype] of SUBTYPE_PREFIXES) {
-    if (pattern.test(contestId)) return subtype;
+  for (const [pattern, value] of SUBTYPES) {
+    if (pattern.test(contestId)) return value;
   }
   return "OTHER";
 }

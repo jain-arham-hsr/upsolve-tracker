@@ -982,6 +982,27 @@ test("a platform's syncMetadata only runs sync/ passes", () => {
   assert.equal(overrides, 4, `expected four platforms to override syncMetadata, found ${overrides}`);
 });
 
+test("every descriptor declares its members in the base's order", async () => {
+  // Four descriptors read alike only if a reader finds `matchUrl` in the same
+  // place in each. The order is `DESCRIPTOR_MEMBERS`, which is also the order
+  // the Platform base asserts them in. Read off the source, since a
+  // descriptor that spreads shared pieces first cannot show it in its keys.
+  const { DESCRIPTOR_MEMBERS } = await import("../core/platforms/platform.js");
+  const rank = new Map(DESCRIPTOR_MEMBERS.map((name, i) => [name, i]));
+  const offenders = [];
+
+  for (const platform of listPlatforms()) {
+    const source = stripComments(readFileSync(path.join(folderOf(platform.id), "descriptor.js"), "utf8"));
+    const declared = [...source.matchAll(/^  (\w+)\s*[:(]/gm)].map((m) => m[1]).filter((name) => rank.has(name));
+    const sorted = [...declared].sort((a, b) => rank.get(a) - rank.get(b));
+    if (declared.join() !== sorted.join()) {
+      offenders.push(`${platform.id}: ${declared.join(", ")}`);
+    }
+  }
+
+  assert.deepEqual(offenders, [], "declare descriptor members in DESCRIPTOR_MEMBERS order");
+});
+
 test("DOMParser is constructed in exactly one place", () => {
   // What makes every reader testable in Node against linkedom: they take a
   // Document and never build one. It was three places until the two
