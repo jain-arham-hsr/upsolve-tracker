@@ -153,7 +153,7 @@ function fitTask(rows, taskId) {
  * every task's dataset, including the ones they never opened — those are the
  * negative samples, and without them the fit sees only people who engaged and
  * reads every problem as far easier than it is. It is also exactly the
- * "model attempts, not ability" change that `estimator-accuracy.test.js` already
+ * "model attempts, not ability" change that `platforms/codeforces/estimator-accuracy.test.js` already
  * records as measured and wrong for Codeforces: mean error 213 → 374.
  */
 export function buildRows(standings) {

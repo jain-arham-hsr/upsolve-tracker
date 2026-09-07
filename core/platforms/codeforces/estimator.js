@@ -7,7 +7,7 @@
  * field of pre-contest ratings — whichever way that field was read.
  *
  * Pure: the field arrives from each platform's `field.js`, and nothing here
- * fetches. `tests/estimator-accuracy.test.js` records the known bias — up to
+ * fetches. `tests/platforms/codeforces/estimator-accuracy.test.js` records the known bias — up to
  * ~300 low on the hardest problems — and the seven levers tried against it.
  */
 import { fitDifficulty } from "../../rating-models/rasch.js";

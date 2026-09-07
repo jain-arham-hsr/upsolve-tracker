@@ -118,7 +118,7 @@ async function sampleOfficialStandings(sources, standings, onProgress) {
  *          covers the whole spread instead of clumping.
  *
  * **Do not replace this with a uniform random sample.** It was tried and
- * measured; `tests/sampling.test.js` reproduces the failure so the rejected
+ * measured; `tests/platforms/codeforces/official/field.test.js` reproduces the failure so the rejected
  * design cannot quietly come back.
  *
  * ## This used to read paginated HTML
@@ -177,7 +177,7 @@ export function stratifyRows(rows) {
  * Evenly spaced block numbers across [from, to], taken at interval midpoints so
  * the sample doesn't lean toward either end of the range.
  *
- * Still named for pages, and still exported, because `tests/sampling.test.js`
+ * Still named for pages, and still exported, because `tests/platforms/codeforces/official/field.test.js`
  * is written against it directly: the accuracy claim this file rests on is only
  * meaningful if the spread is genuinely even.
  */

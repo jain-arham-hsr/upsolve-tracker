@@ -25,7 +25,7 @@
  * disagreeing about what a team is worth.
  *
  * `mean` and `max` were both tried as cheaper substitutes and measured worse;
- * `tests/estimator-accuracy.test.js` records the numbers so neither is retried.
+ * `tests/platforms/codeforces/estimator-accuracy.test.js` records the numbers so neither is retried.
  *
  * @param {number[]} memberRatings
  * @returns {number} the effective team rating, rounded.

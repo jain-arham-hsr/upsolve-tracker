@@ -4,7 +4,7 @@
  * `CodeforcesSources` holds the key pair, signs each call (SHA-512 over
  * `rand/method?sortedParams#secret`) and reads the methods both platforms use.
  * Each platform's own `sources.js` extends it with the methods only it calls,
- * so a signing fix lands in one place and `tests/codeforces-api.test.js` pins
+ * so a signing fix lands in one place and `tests/platforms/codeforces/sources.test.js` pins
  * the string that is hashed.
  *
  * One instance per key pair, not one per platform: `identity` builds it from
