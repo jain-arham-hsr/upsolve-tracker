@@ -12,7 +12,7 @@
  * running from `syncMetadata`: it has a different cadence, a different cost
  * argument and writes in both directions. See `practice-flags.js`.
  */
-import { getProblem } from "../api.js";
+import { sources } from "../sources.js";
 
 /**
  * `difficulty_rating` arrives as a string and uses two out-of-band values:
@@ -87,7 +87,7 @@ export async function syncPublishedDifficulty(contests, onProgress = () => {}) {
 
       onProgress(`Re-checking ${problem.index}…`);
       try {
-        const detail = await getProblem(contest.id, problem.index);
+        const detail = await sources.problem(contest.id, problem.index);
         const rating = parseDifficulty(detail?.difficulty_rating);
         if (rating === null) continue;
 

@@ -10,7 +10,7 @@
  * Now user-wide, like Codeforces' `user.status`, so `contests` is unused. It is
  * also cheaper: a few paged requests rather than one per tracked contest.
  */
-import { getAttemptedProblems, ACCEPTED } from "./api.js";
+import { sources, ACCEPTED } from "./sources.js";
 import { verifyIdentity } from "./identity.js";
 
 /**
@@ -43,7 +43,7 @@ export async function fetchAccepted(session, _contests, onProgress = () => {}) {
   // reads the session object the add already built.
   await verifyIdentity(session);
 
-  const rows = await getAttemptedProblems(onProgress);
+  const rows = await sources.attemptedProblems(onProgress);
   const accepted = [];
 
   for (const row of rows) {

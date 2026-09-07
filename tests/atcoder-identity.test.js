@@ -21,7 +21,7 @@ import { DOMParser } from "linkedom";
 globalThis.DOMParser = DOMParser;
 
 const { verifyIdentity } = await import("../core/platforms/atcoder/identity.js");
-const { resetHttpState } = await import("../core/platforms/atcoder/http.js");
+const { resetHttpState } = await import("../core/platforms/atcoder/sources.js");
 
 const profile = (signedInAs, rating = 1600) => `<html><head>
   <script>var userScreenName = ${signedInAs === null ? "undefined" : `"${signedInAs}"`};</script>

@@ -18,7 +18,7 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { resetHttpState } = await import("../core/platforms/atcoder/http.js");
+const { resetHttpState } = await import("../core/platforms/atcoder/sources.js");
 const { processNewContest } = await import("../core/contest-manager.js");
 
 // A contest AtCoder has not finished does not list its problems — the case in

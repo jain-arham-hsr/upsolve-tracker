@@ -8,7 +8,7 @@
  * deleted outright, and `writeBackup()` runs after the sync, so one sync under
  * another account permanently corrupts the queue *and* overwrites the backup.
  */
-import { getDashboardPage } from "./api.js";
+import { sources } from "./sources.js";
 import { DashboardPage } from "./scrapers/page-globals.js";
 import { getSettings } from "../../settings/store.js";
 
@@ -30,7 +30,7 @@ export async function createSessionFrom(values) {
   // Null both when signed out and when the shell no longer carries the
   // bootstrap object. Either way the caller must not read an empty solved list
   // as "nothing solved".
-  const page = DashboardPage.scrape(await getDashboardPage());
+  const page = DashboardPage.scrape(await sources.dashboard());
 
   return {
     handle: values[HANDLE_KEY],

@@ -10,7 +10,7 @@
  * Sharing a file invites sharing a gate, and the slower pass would then
  * suppress the faster.
  */
-import { getContest } from "../api.js";
+import { sources } from "../sources.js";
 
 /**
  * Some old problems were never mirrored into CodeChef's practice archive.
@@ -55,7 +55,7 @@ export function practiceFlag(problem) {
  * still carries a flagged problem, so a fully-mirrored queue — which is the
  * normal case — costs nothing at all. Reading the **contest** payload rather
  * than the per-problem endpoint is what makes even the flagged case cheap: one
- * request per affected contest, against one per affected *problem*. `getContest`
+ * request per affected contest, against one per affected *problem*. `sources.contest`
  * is memoised for a minute on top of that.
  *
  * Note this deliberately never re-checks a contest with nothing flagged. The
@@ -73,7 +73,7 @@ export async function refreshPracticeFlags(contests, onProgress = () => {}) {
 
   for (const contest of pending) {
     try {
-      const payload = await getContest(contest.id);
+      const payload = await sources.contest(contest.id);
       const problems = payload?.problems ?? {};
 
       for (const problem of contest.problems) {

@@ -27,7 +27,7 @@
 import { sourceUnreachable } from "../../contest-status.js";
 import { fitDifficulty } from "../../rating-models/rasch.js";
 import { fitWithUpperAsymptote } from "../../rating-models/rasch-upper-asymptote.js";
-import { fetchStandings } from "./sources.js";
+import { sources } from "./sources.js";
 import { buildRows, selectDataset, toAbilities, isAgcFirstProblem } from "./field.js";
 
 /** AtCoder's own scale: base 6 over 400, the same constants its ratings use. */
@@ -50,7 +50,7 @@ export async function fill({ contest, onProgress = () => {} }) {
   let standings = null;
   try {
     onProgress("Reading the standings…");
-    standings = await fetchStandings(contest.id);
+    standings = await sources.standings(contest.id);
   } catch (error) {
     // **Not the same as "this problem has no difficulty".** Signed out, the
     // refusal hook turns AtCoder's `/login` redirect into a throw; a network

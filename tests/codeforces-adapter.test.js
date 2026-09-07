@@ -18,7 +18,7 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { CodeforcesHttp } = await import("../core/platforms/codeforces-gyms/http.js");
+const { CodeforcesHttp } = await import("../core/platforms/codeforces-gyms/sources.js");
 const { getAdapter } = await import("../core/platforms/adapters.js");
 
 /**

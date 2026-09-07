@@ -14,7 +14,7 @@
 import { getSettings } from "../../settings/store.js";
 import { ProfilePage } from "./scrapers/profile.js";
 import { PageGlobals } from "./scrapers/page-globals.js";
-import { getDocument } from "./http.js";
+import { sources } from "./sources.js";
 
 const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
 
@@ -74,7 +74,7 @@ export async function verifyIdentity(session) {
   // `new DOMParser()` outside `site-client.js` went with the split.
   let doc;
   try {
-    doc = await getDocument(`https://atcoder.jp/users/${encodeURIComponent(session.handle)}`);
+    doc = await sources.document(`/users/${encodeURIComponent(session.handle)}`);
   } catch (error) {
     if (error?.status === 404) {
       throw new Error(`AtCoder has no user "${session.handle}".`);

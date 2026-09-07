@@ -16,6 +16,7 @@
  * in it, plus three more spread across the modules below. The folder answers
  * that question now, so neither pipeline asks it.
  */
+
 import { readSolveStats } from "./sources.js";
 import { syncStartTimes } from "./sync/start-times.js";
 import { notEndedYet } from "../../contest-status.js";

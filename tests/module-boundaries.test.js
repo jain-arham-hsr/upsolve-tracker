@@ -390,7 +390,12 @@ test("the official Codeforces platform reaches no HTML at all", () => {
   // `tests/codeforces-adapter.test.js` asserts the same thing dynamically, by
   // failing if a request is issued while reaching the estimator. This one
   // catches the import before it can ever run.
-  const forbidden = ["http.js", "scraping.js", "scrapers", "DOMParser"];
+  // Keyed on what is still observable. It used to list `http.js` and
+  // `scraping.js` too, which worked only while a file name told you which kind
+  // of site a platform talked to; with one `sources.js` everywhere, it does
+  // not. What remains is exact: an official add reaches no markup, so it
+  // imports nothing from a `scrapers/` folder and constructs no `DOMParser`.
+  const forbidden = ["scrapers", "DOMParser"];
   const offenders = [];
 
   for (const file of sourceFiles(path.join(PLATFORMS, "codeforces-official"), [".js"])) {
@@ -413,38 +418,36 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   // FAILED to `contest.standings`, and the `/gym/<id>` problems page is the one
   // page those contests still render.
   //
-  // So `http.js` must have exactly one importer, and it must be the module that
-  // reads that page. A second importer would mean a visible gym had started
-  // scraping again — which is what this change removed, and which no unit test
-  // would otherwise notice, since the result is correct either way and only the
-  // request count differs.
-  // Scoped to the gym folder's own client: AtCoder has an `http.js` too, and
-  // it is none of this test's business.
-  const importers = sourceFiles(path.join(PLATFORMS, "codeforces-gyms"), [".js"])
-    .filter((file) => importsOf(readFileSync(file, "utf8")).some((s) => s.endsWith("http.js")))
-    .map((file) => path.relative(ROOT, file));
-
-  assert.deepEqual(importers, ["core/platforms/codeforces-gyms/sources.js"]);
-
-  const sources = readFileSync(
-    path.join(PLATFORMS, "codeforces-gyms", "sources.js"),
-    "utf8",
+  // This used to count importers of `http.js`. That file is gone — the client
+  // lives on the platform's `Source` now — so it counts **page reads** instead,
+  // which is what it was really about. A second one would mean a visible gym
+  // had started scraping again, and no other test would notice: the result is
+  // correct either way and only the request count differs.
+  const sources = stripComments(
+    readFileSync(path.join(PLATFORMS, "codeforces-gyms", "sources.js"), "utf8"),
   );
-  // Inspect the fetched URLs themselves, not the file. The import path used to
-  // be `./standings-dom.js`, which read as a standings fetch and is half the
-  // reason that file was renamed; keep measuring the URLs regardless, since the
-  // next stale name will not announce itself either.
-  // Any method on the client, not `get` specifically. Pinning the method name
-  // is how this goes vacuous without failing: it was `.get` until the client
-  // started answering with a parsed Document, at which point a name-specific
-  // regex matches nothing and "exactly one page fetch" reads as zero.
-  const fetched = [...stripComments(sources).matchAll(/CodeforcesHttp\.\w+\(([^)]*)\)/g)]
-    .map((m) => m[1].trim());
 
-  assert.equal(fetched.length, 1, `expected one page fetch, got ${fetched.length}`);
+  // Any method on the client, not `getDocument` specifically. Pinning the
+  // method name is how this goes vacuous without failing: it was `.get` until
+  // the client started answering with a parsed Document, at which point a
+  // name-specific regex matches nothing and "exactly one page read" reads as
+  // zero.
+  const fetched = [...sources.matchAll(/CodeforcesHttp\.\w+\(([^)]*)\)/g)]
+    .map((m) => m[1].trim())
+    // The export declares the method by name; only calls count.
+    .filter((args) => args && !args.startsWith("url,"));
+
+  assert.equal(fetched.length, 1, `expected one page read, got ${fetched.length}`);
   assert.ok(
     !fetched[0].includes("standings"),
-    `a standings page is being fetched again — a visible gym is read from the API: ${fetched[0]}`,
+    `a standings page is being read again — a visible gym comes from the API: ${fetched[0]}`,
+  );
+
+  // And the official half reads no page at all, which is why it has no
+  // `scrapers/` folder to go with it.
+  assert.ok(
+    !readdirSync(path.join(PLATFORMS, "codeforces-official")).includes("scrapers"),
+    "codeforces-official grew a scrapers/ folder — it should read no HTML",
   );
 });
 
@@ -555,8 +558,18 @@ test("a site client routes through its own platform's descriptor", () => {
       const routed = /\bsite:\s*(\w+)/.exec(code)?.[1] ?? null;
       const own = /import\s*\{\s*(\w+)\s*\}\s*from\s*"\.\/descriptor\.js"/.exec(code)?.[1] ?? null;
 
-      if (!routed) offenders.push(`${relative} builds a site client naming no site`);
-      else if (routed !== own) {
+      // A client with no `site` is deliberate in exactly one place: Codeforces'
+      // signed API passes a direct `fetchImpl` instead, because it works
+      // anonymously and routing it through a tab would add a dependency it does
+      // not need. Anywhere else, a missing `site` is the silent bug this test
+      // exists for — a direct fetch that quietly stops carrying the session.
+      if (!routed) {
+        if (!code.includes("fetchImpl:")) {
+          offenders.push(`${relative} builds a site client with neither a site nor a fetchImpl`);
+        }
+        continue;
+      }
+      if (routed !== own) {
         offenders.push(`${relative} routes through \`${routed}\`, not its own \`${own}\``);
       }
     }
@@ -564,9 +577,10 @@ test("a site client routes through its own platform's descriptor", () => {
 
   assert.deepEqual(offenders, [], "a client must speak to the site it belongs to");
 
-  // Or a rename could empty the loop and pass. Three: AtCoder, CodeChef, gyms —
-  // codeforces-official has no site client, being pure signed JSON API.
-  assert.equal(clients.length, 3, `expected three site clients, found ${clients.join(", ")}`);
+  // Or a rename could empty the loop and pass. Four now, one per platform:
+  // every read of every site goes through `services/site-client.js`, including
+  // Codeforces' signed API, which used to talk to a bare pacer.
+  assert.equal(clients.length, 4, `expected four site clients, found ${clients.join(", ")}`);
 });
 
 /**
@@ -621,7 +635,7 @@ test("both Codeforces clients share one signing implementation", () => {
     throw new Error(`${name} is unbalanced`);
   };
 
-  const [official, gyms] = bothCopies("api.js");
+  const [official, gyms] = bothCopies("sources.js");
 
   for (const name of ["_callMethod", "_sha512"]) {
     assert.equal(
@@ -658,9 +672,10 @@ const PLATFORM_ROOT_FILES = new Set([
   // Where the platform estimates.
   "estimator.js",
   "field.js",
-  // How it reaches the site.
-  "api.js",
-  "http.js",
+  // Everything it reads from the site, client included. There is no api.js or
+  // http.js any more: the client and the endpoints that use it were never two
+  // subjects, and splitting them meant a file name had to carry which kind of
+  // site a platform talks to.
   "sources.js",
 ]);
 

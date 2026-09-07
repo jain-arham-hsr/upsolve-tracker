@@ -20,7 +20,7 @@ import { DOMParser } from "linkedom";
 // gives production one.
 globalThis.DOMParser = DOMParser;
 
-import { CodeforcesHttp, resetHttpState } from "../core/platforms/codeforces-gyms/http.js";
+import { CodeforcesHttp, resetHttpState } from "../core/platforms/codeforces-gyms/sources.js";
 
 function stubFetch(handler) {
   const calls = [];

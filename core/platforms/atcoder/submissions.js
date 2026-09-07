@@ -16,7 +16,7 @@
  * rerun of it. There is no way around that: AtCoder does not publish the list
  * that would answer it. The failure is a stale queue row, not a wrong one.
  */
-import { fetchAcceptedTaskIds } from "./sources.js";
+import { sources } from "./sources.js";
 
 /**
  * @returns {Promise<Array<{contest: object, problem: object}>>} pairs the trunk
@@ -35,7 +35,7 @@ export async function fetchAccepted(session, contests, onProgress = () => {}) {
     // nothing, and `solved` is sticky — so a swallowed failure would look like a
     // healthy sync while quietly stranding the queue. `progress-manager`
     // isolates the throw to this platform.
-    for (const problemId of await fetchAcceptedTaskIds(contest.id, session.handle)) {
+    for (const problemId of await sources.acceptedTaskIds(contest.id, session.handle)) {
       accepted.push({ contest: { id: null }, problem: { problemId } });
     }
   }

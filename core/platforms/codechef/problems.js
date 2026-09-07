@@ -9,7 +9,7 @@
  * tags appear on no bulk or contest-level response, signed in or not. That is
  * ~9 for a Starters division, still fewer than a Codeforces add.
  */
-import { getContest, getProblem, ACCEPTED } from "./api.js";
+import { sources, ACCEPTED } from "./sources.js";
 import { parseDifficulty, cleanTags, syncPublishedDifficulty } from "./sync/published-data.js";
 import { practiceFlag, refreshPracticeFlags } from "./sync/practice-flags.js";
 import {
@@ -90,7 +90,7 @@ export async function fetchContest({
  * they competed in.
  */
 async function resolveDivision(contestId, session, onProgress) {
-  const contest = await getContest(contestId);
+  const contest = await sources.contest(contestId);
   if (!contest.is_a_parent_contest) return { code: contestId, contest };
 
   const children = Object.values(contest.child_contests ?? {});
@@ -123,7 +123,7 @@ async function resolveDivision(contestId, session, onProgress) {
   }
 
   onProgress(`Using ${match.contest_code} (${match.div?.name ?? "your division"})…`);
-  return { code: match.contest_code, contest: await getContest(match.contest_code) };
+  return { code: match.contest_code, contest: await sources.contest(match.contest_code) };
 }
 
 /**
@@ -153,7 +153,7 @@ async function buildProblem(contestCode, problem, solved) {
   // on the next refresh instead.
   let detail;
   try {
-    detail = await getProblem(contestCode, code);
+    detail = await sources.problem(contestCode, code);
   } catch (error) {
     throw Object.assign(error, { isSourceUnreachable: true });
   }

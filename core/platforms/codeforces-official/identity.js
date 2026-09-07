@@ -26,7 +26,7 @@
  * **load-bearing** — each platform namespaces solved keys by its own id, so
  * skipping either fetch stops solves clearing for that platform.
  */
-import { CodeforcesService } from "./api.js";
+import { CodeforcesService } from "./sources.js";
 import { getSettings } from "../../settings/store.js";
 
 /**

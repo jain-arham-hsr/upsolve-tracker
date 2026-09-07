@@ -14,7 +14,7 @@ import { DashboardPage } from "../core/platforms/codechef/scrapers/page-globals.
 // document the way production does, rather than being regexed off a string.
 const extractSession = (html) =>
   DashboardPage.scrape(parseHTML(`<html><body>${html ?? ""}</body></html>`).document);
-import { resetApiState } from "../core/platforms/codechef/api.js";
+import { resetApiState } from "../core/platforms/codechef/sources.js";
 import { getAdapter } from "../core/platforms/adapters.js";
 
 // The adapter is composed in adapters.js now, so this exercises the real

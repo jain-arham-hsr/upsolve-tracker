@@ -16,18 +16,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { CodeforcesService, resetApiState } from "../core/platforms/codeforces-official/api.js";
+import { CodeforcesService, resetApiState } from "../core/platforms/codeforces-official/sources.js";
 import {
   CodeforcesService as GymService,
   resetApiState as resetGymApiState,
-} from "../core/platforms/codeforces-gyms/api.js";
+} from "../core/platforms/codeforces-gyms/sources.js";
 
+/**
+ * The signed client goes through `services/site-client.js` like every other
+ * platform, so the stub answers `text()` — the client reads the body once and
+ * parses it, because a refusal is as often in the body as in the status. It
+ * used to answer `json()` only, back when this path talked to a bare pacer.
+ */
 function stubFetch(result = []) {
   const calls = [];
   const original = globalThis.fetch;
   globalThis.fetch = async (url) => {
     calls.push({ url, at: Date.now() });
-    return { async json() { return { status: "OK", result }; } };
+    const body = JSON.stringify({ status: "OK", result });
+    return { ok: true, status: 200, url, async text() { return body; } };
   };
   return { calls, restore: () => { globalThis.fetch = original; } };
 }
@@ -89,10 +96,12 @@ test("a request is signed, and the secret never appears in the URL", async () =>
 test("a FAILED response becomes the comment Codeforces gave", async () => {
   resetApiState();
   const original = globalThis.fetch;
-  globalThis.fetch = async () => ({
-    async json() {
-      return { status: "FAILED", comment: "contestId: Standings are not available" };
-    },
+  const failure = JSON.stringify({
+    status: "FAILED",
+    comment: "contestId: Standings are not available",
+  });
+  globalThis.fetch = async (url) => ({
+    ok: true, status: 200, url, async text() { return failure; },
   });
 
   try {
@@ -129,7 +138,7 @@ test("both Codeforces clients sign a request identically", async () => {
   // *shape* of the signature can: same length, same hex alphabet.
   globalThis.fetch = async (url) => {
     seen.push(url);
-    return { async json() { return { status: "OK", result: [] }; } };
+    return { ok: true, status: 200, url, async text() { return '{"status":"OK","result":[]}'; } };
   };
 
   try {
@@ -164,7 +173,7 @@ test("both clients agree on which parameters they append", async () => {
   const original = globalThis.fetch;
   globalThis.fetch = async (url) => {
     seen.push(url);
-    return { async json() { return { status: "OK", result: [] }; } };
+    return { ok: true, status: 200, url, async text() { return '{"status":"OK","result":[]}'; } };
   };
 
   try {
