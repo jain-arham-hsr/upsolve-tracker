@@ -31,7 +31,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { buildContestRecord } from "../core/platforms/pipeline.js";
+import { buildContestRecord } from "../core/platforms/platform.js";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const CORE = path.join(ROOT, "core");
@@ -170,7 +170,7 @@ test("some test actually reaches the code that applies published ratings", () =>
 test("every platform expresses an accepted submission the same way", () => {
   // The same class as the `type` bug above, caught before it costs anything.
   //
-  // `fetchAccepted` returns `{contest, problem}` pairs and `pipeline.js` hands
+  // `fetchAccepted` returns `{contest, problem}` pairs and `platform.js` hands
   // both to `descriptor.solvedKey`. The three platforms had three encodings for
   // "this problem needs no contest": `{id: contestId}`, `{id: null}`, and a bare
   // `null`. That was harmless only by accident — neither AtCoder's `solvedKey`

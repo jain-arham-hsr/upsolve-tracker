@@ -15,11 +15,14 @@ import { DashboardPage } from "../core/platforms/codechef/scrapers/page-globals.
 const extractSession = (html) =>
   DashboardPage.scrape(parseHTML(`<html><body>${html ?? ""}</body></html>`).document);
 import { resetApiState } from "../core/platforms/codechef/sources.js";
-import { getAdapter } from "../core/platforms/adapters.js";
+import { getAdapter } from "../core/platforms/platforms.js";
 
-// The adapter is composed in adapters.js now, so this exercises the real
+// The platform is instantiated in platforms.js, so this exercises the real
 // assembled object rather than a module's raw exports.
-const { fetchContestRecord, fetchSolvedKeys, syncMetadata } = getAdapter("codechef");
+const platform = getAdapter("codechef");
+const fetchContestRecord = (...args) => platform.fetchContestRecord(...args);
+const fetchSolvedKeys = (...args) => platform.fetchSolvedKeys(...args);
+const syncMetadata = (...args) => platform.syncMetadata(...args);
 
 const PROBLEMS = {
   IOI7: {

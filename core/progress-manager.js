@@ -7,7 +7,7 @@ import {
   platformOf,
   contestsOnPlatform,
 } from "./platforms/registry.js";
-import { getAdapter } from "./platforms/adapters.js";
+import { getAdapter } from "./platforms/platforms.js";
 import { storeFetchedRatings } from "./services/user-ratings.js";
 import {
   settleIdentity,

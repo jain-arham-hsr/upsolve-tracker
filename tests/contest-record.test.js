@@ -1,7 +1,7 @@
 /**
  * The trunk's record contract.
  *
- * `pipeline.js` builds the stored shape that three platforms used to build
+ * `platform.js` builds the stored shape that three platforms used to build
  * separately, so a field it forgets is a field every platform loses at once —
  * and silently, because a missing key reads as "this contest doesn't have one"
  * rather than as a failure.
@@ -16,7 +16,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildContestRecord, normalizeProblem } from "../core/platforms/pipeline.js";
+import { buildContestRecord, normalizeProblem } from "../core/platforms/platform.js";
 
 const descriptor = { id: "codeforces-official" };
 const base = {

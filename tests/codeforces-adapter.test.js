@@ -19,7 +19,7 @@ import { DOMParser } from "linkedom";
 globalThis.DOMParser = DOMParser;
 
 const { CodeforcesHttp } = await import("../core/platforms/codeforces-gyms/sources.js");
-const { getAdapter } = await import("../core/platforms/adapters.js");
+const { getAdapter } = await import("../core/platforms/platforms.js");
 
 /**
  * These cases stub the page the way Codeforces serves it — as HTML — while
@@ -76,6 +76,7 @@ function standingsApi(ratings) {
     contest: { startTimeSeconds: 1000 },
     problems: INDEXES.map((index, i) => ({
       index,
+      name: `Problem ${index}`,
       tags: [],
       ...(ratings[i] == null ? {} : { rating: ratings[i] }),
     })),

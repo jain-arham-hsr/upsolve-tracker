@@ -16,7 +16,7 @@
  * message that `verifyIdentity` already produces — so the same condition read
  * differently here and in the queue's status strip. One message, one author.
  */
-import { getAdapter } from "../../platforms/adapters.js";
+import { getAdapter } from "../../platforms/platforms.js";
 import { saveDirHandle, loadDirHandle, clearDirHandle } from "../../services/secure-store.js";
 import { SECTIONS } from "../../settings/schema.js";
 import { readSection, writeSettings } from "../../settings/store.js";

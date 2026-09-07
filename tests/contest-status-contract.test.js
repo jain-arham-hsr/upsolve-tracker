@@ -133,7 +133,7 @@ test("no adapter throws a bare error where it should answer with a status", () =
   // still throw for genuine faults — that is what makes an escaping exception
   // a bug rather than a case — but the known situations must be statuses.
   // Acquisition — and therefore every gate — lives in `problems.js` now; the
-  // trunk in `pipeline.js` only passes a status through. So this is where the
+  // base in `platform.js` only passes a status through. So this is where the
   // vocabulary has to appear.
   for (const id of listPlatforms().map((p) => p.id)) {
     const file = path.join(ROOT, "core/platforms", id, "problems.js");

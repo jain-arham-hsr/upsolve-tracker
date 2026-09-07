@@ -2,7 +2,7 @@
  * Everything outside `core/platforms/` is platform-agnostic, and this is what
  * says so.
  *
- * `registry.js` and `adapters.js` are the only two modules allowed to know
+ * `registry.js` and `platforms.js` are the only two modules allowed to know
  * which platforms exist. Everything else asks them. That was aspiration rather
  * than fact until recently — five wholly-Codeforces modules sat in shared
  * space (the signed API client, the scrape, its HTML parser, its HTTP client
@@ -74,7 +74,7 @@ const ALLOWED = {
   "core/settings/schema.js":
     "The settings page is declared by hand, and verify.adapter has to name the " +
     "platform that runs each section's check. This is the third allowed " +
-    "enumerator alongside registry.js and adapters.js, and for the same reason: " +
+    "enumerator alongside registry.js and platforms.js, and for the same reason: " +
     "it is declarative data, not a branch. It is deliberately the *only* file " +
     "under core/settings/ with the exception — store.js and the options page " +
     "route by slug and by section, and still fail this test if they name a " +
@@ -129,9 +129,9 @@ test("nothing outside core/platforms/ imports a specific platform's code", () =>
 
   for (const file of sharedFiles()) {
     for (const spec of importsOf(read(file))) {
-      // registry.js and adapters.js are the agnostic entry points and are
+      // registry.js and platforms.js are the agnostic entry points and are
       // exactly what shared code should be reaching for.
-      if (/platforms\/(?!registry\.js|adapters\.js)[^/]+\/.+/.test(spec)) {
+      if (/platforms\/(?!registry\.js|platforms\.js)[^/]+\/.+/.test(spec)) {
         offenders.push(`${file} → ${spec}`);
       }
     }
@@ -666,6 +666,7 @@ test("both Codeforces clients share one signing implementation", () => {
 const PLATFORM_ROOT_FILES = new Set([
   // Always.
   "descriptor.js",
+  "platform.js",
   "identity.js",
   "problems.js",
   "submissions.js",

@@ -17,9 +17,12 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { getAdapter } = await import("../core/platforms/adapters.js");
+const { getAdapter } = await import("../core/platforms/platforms.js");
 const { resetHttpState } = await import("../core/platforms/atcoder/sources.js");
-const { fetchContestRecord, fetchSolvedKeys, syncMetadata } = getAdapter("atcoder");
+const platform = getAdapter("atcoder");
+const fetchContestRecord = (...args) => platform.fetchContestRecord(...args);
+const fetchSolvedKeys = (...args) => platform.fetchSolvedKeys(...args);
+const syncMetadata = (...args) => platform.syncMetadata(...args);
 
 const SESSION = { handle: "tourist" };
 

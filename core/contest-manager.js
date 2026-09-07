@@ -7,7 +7,7 @@
  */
 import { LocalDB } from "./services/storage.js";
 import { matchContestUrl } from "./platforms/registry.js";
-import { getAdapter } from "./platforms/adapters.js";
+import { getAdapter } from "./platforms/platforms.js";
 import { READY, isKnownStatus, shouldWait } from "./contest-status.js";
 import { storeFetchedRatings } from "./services/user-ratings.js";
 import {
