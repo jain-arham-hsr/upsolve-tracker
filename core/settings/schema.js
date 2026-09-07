@@ -85,7 +85,7 @@ export const SECTIONS = [
      *
      * `adapter` names which platform runs the check, and is asserted against
      * the registry by `tests/module-boundaries.test.js` — a typo here is
-     * otherwise silent, since `getAdapter` returns null and the button throws
+     * otherwise silent, since `getPlatform` throws and the button reports it
      * only once pressed.
      *
      * Either Codeforces platform would do: both inherit identity from

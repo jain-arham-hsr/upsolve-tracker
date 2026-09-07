@@ -18,9 +18,8 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { GymSources } = await import("../../../core/platforms/codeforces/sources.js");
-const { OfficialSources } = await import("../../../core/platforms/codeforces/sources.js");
-const { getAdapter } = await import("../../../core/platforms/platforms.js");
+const { CodeforcesSources } = await import("../../../core/platforms/codeforces/sources.js");
+const { getPlatform } = await import("../../../core/platforms/registry.js");
 
 /**
  * The one page a hidden-standings gym reads. These cases stub it the way
@@ -39,7 +38,7 @@ const CodeforcesHttp = { get: async () => { throw new Error("no page served"); }
  */
 const real = (subtype, fake) =>
   Object.assign(
-    new (subtype === "GYM" ? GymSources : OfficialSources)("k", "s"),
+    new CodeforcesSources("k", "s"),
     { page: async (url) => new DOMParser().parseFromString(await CodeforcesHttp.get(url), "text/html") },
     fake,
   );
@@ -50,7 +49,7 @@ const real = (subtype, fake) =>
  * naming the subtype it is about.
  */
 const fetchContestRecord = ({ subtype, session, ...rest }) =>
-  getAdapter(subtype === "GYM" ? "codeforces-gyms" : "codeforces-official")
+  getPlatform(subtype === "GYM" ? "codeforces-gyms" : "codeforces-official")
     .fetchContestRecord({ subtype, session: { ...session, sources: real(subtype, session.sources) }, ...rest });
 
 const INDEXES = ["A", "B", "C"];

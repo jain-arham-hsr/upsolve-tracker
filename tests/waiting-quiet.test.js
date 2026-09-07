@@ -18,7 +18,7 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { getAdapter } = await import("../core/platforms/platforms.js");
+const { getPlatform } = await import("../core/platforms/registry.js");
 const { processNewContest } = await import("../core/contest-manager.js");
 
 // A contest AtCoder has not finished does not list its problems — the case in
@@ -34,7 +34,7 @@ let logged;
 let real;
 
 beforeEach(() => {
-  getAdapter("atcoder").reset(0);
+  getPlatform("atcoder").reset(0);
 
   store = { "upsolve_tracker.atcoder_handle": "me" };
   globalThis.chrome = {

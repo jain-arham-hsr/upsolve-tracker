@@ -6,8 +6,9 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { codechef } from "../../../core/platforms/codechef/descriptor.js";
-import { matchContestUrl } from "../../../core/platforms/registry.js";
+import { matchContestUrl, getPlatform } from "../../../core/platforms/registry.js";
+
+const codechef = getPlatform("codechef");
 
 test("contest codes at the site root are recognised", () => {
   for (const [url, id, subtype] of [

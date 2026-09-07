@@ -3,7 +3,7 @@
  *
  * It knows about *sections and fields*, never about platforms. Sections come
  * from `core/settings/schema.js`, and the only platform id involved is
- * `section.verify.adapter` — a string handed straight to `getAdapter()` and
+ * `section.verify.adapter` — a string handed straight to `getPlatform()` and
  * never read here. So this file stays agnostic even though the schema it
  * renders is hand-written.
  *
@@ -16,7 +16,7 @@
  * message that `verifyIdentity` already produces — so the same condition read
  * differently here and in the queue's status strip. One message, one author.
  */
-import { getAdapter } from "../../platforms/platforms.js";
+import { getPlatform } from "../../platforms/registry.js";
 import { saveDirHandle, loadDirHandle, clearDirHandle } from "../../services/secure-store.js";
 import { SECTIONS } from "../../settings/schema.js";
 import { readSection, writeSettings } from "../../settings/store.js";
@@ -130,7 +130,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     setStatus(status, "Checking…");
-    const adapter = getAdapter(section.verify.adapter);
+    const adapter = getPlatform(section.verify.adapter);
 
     try {
       const identity = await adapter.verifyIdentity(await adapter.createSessionFrom(values));

@@ -26,7 +26,7 @@
  */
 import { Source } from "../source.js";
 import { createSiteClient } from "../../services/site-client.js";
-import { codechef } from "./descriptor.js";
+import { site } from "./site.js";
 import { DashboardPage } from "./scrapers/page-globals.js";
 
 const ORIGIN = "https://www.codechef.com";
@@ -70,7 +70,7 @@ export class CodeChefSources extends Source {
       client: createSiteClient({
         // CodeChef answers for whoever holds the session cookie, so routing
         // through a tab is what makes the signed-in account visible at all.
-        site: codechef,
+        site,
         pacer: { gapMs: GAP_MS },
 
         /**
@@ -102,6 +102,16 @@ export class CodeChefSources extends Source {
       (code) => this.#api(`/api/contests/${encodeURIComponent(code)}`),
       { ttlMs: CONTEST_TTL_MS },
     );
+  }
+
+  /** CodeChef needs no credentials: one instance serves every session. */
+  static fromSettings() {
+    return sources;
+  }
+
+  /** Test seam: resets pacing and the contest memo between cases. */
+  static reset(spacingMs = 0) {
+    sources.reset(spacingMs);
   }
 
   /** Every read here is JSON and wants the same Accept header. */

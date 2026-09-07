@@ -28,7 +28,7 @@
  */
 import { Source } from "../source.js";
 import { createSiteClient } from "../../services/site-client.js";
-import { atcoder } from "./descriptor.js";
+import { site } from "./site.js";
 import { TasksPage } from "./scrapers/tasks.js";
 import { SubmissionsPage } from "./scrapers/submissions.js";
 import { ProfilePage } from "./scrapers/profile.js";
@@ -61,7 +61,7 @@ export class AtCoderSources extends Source {
         // Both the submissions list and standings/json are login-gated, and a
         // cross-site request carries no cookies — so without a tab open on
         // atcoder.jp those two answer with a sign-in form, and `refusal` says so.
-        site: atcoder,
+        site,
         pacer: { gapMs: GAP_MS },
 
         /**
@@ -87,6 +87,16 @@ export class AtCoderSources extends Source {
         },
       }),
     });
+  }
+
+  /** AtCoder needs no credentials: one instance serves every session. */
+  static fromSettings() {
+    return sources;
+  }
+
+  /** Test seam: resets pacing between cases. */
+  static reset(spacingMs = 0) {
+    sources.reset(spacingMs);
   }
 
   /**

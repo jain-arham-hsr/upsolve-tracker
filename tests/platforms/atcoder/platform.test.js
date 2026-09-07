@@ -17,9 +17,9 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { getAdapter } = await import("../../../core/platforms/platforms.js");
+const { getPlatform } = await import("../../../core/platforms/registry.js");
 const { sources } = await import("../../../core/platforms/atcoder/sources.js");
-const platform = getAdapter("atcoder");
+const platform = getPlatform("atcoder");
 const fetchContestRecord = (...args) => platform.fetchContestRecord(...args);
 const fetchSolvedKeys = (...args) => platform.fetchSolvedKeys(...args);
 const syncMetadata = (...args) => platform.syncMetadata(...args);

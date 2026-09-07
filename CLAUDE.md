@@ -50,7 +50,7 @@ It carries the same second check as the `⚠` does: the store seeds one problem 
 
 Three things that pass are easy to get wrong there. The page sits **three levels down**, so `/assets/` rewrites to `../../../assets/` and not the panel's two. `--allow-file-access-from-files` is required, or the `crossorigin` attribute CRXJS puts on the `<link>` makes Chrome CORS-block the stylesheet under `file://` and the page renders in Times with every computed style wrong — a failure that looks exactly like a CSS bug. And `fetch` is stubbed to **reject**, because every change-triggered platform verifies on load and the run would otherwise sit waiting on atcoder.jp; rejecting drives the failure branch, which is the one that has to render a verdict instead of throwing. Errors the stub itself causes are filtered out by message, since a failed verify legitimately logs.
 
-Confirmed the usual way: renaming a descriptor's `api_secret` key reports *"the stored API key pair did not load into the form"*, which is the one failure here that is otherwise silent — a secret read under the wrong key comes back empty and looks exactly like a setting you never saved.
+Confirmed the usual way: renaming the schema's `api_secret` slug reports *"the stored API key pair did not load into the form"*, which is the one failure here that is otherwise silent — a secret read under the wrong key comes back empty and looks exactly like a setting you never saved.
 
 `tests/platforms/codeforces/estimator.sampling.test.js` deliberately asserts that uniformly random page sampling is *worse* than the stratified design, so the rejected approach can't quietly come back.
 
@@ -132,7 +132,7 @@ Vanilla ES modules and custom elements — no framework, no bundled UI library.
 
 ### Platform registry
 
-`core/platforms/registry.js` owns which sites exist. A descriptor answers everything that depends on *where a contest came from*: `matchUrl`, `contestUrl`, `problemUrl`, `sourceLabel`, `contestLabel`, `solvedKey`, `problemKey`, and a `capabilities` block.
+`core/platforms/registry.js` owns which platforms exist, as one instance each. **A platform is its own descriptor**: the class declares everything that depends on *where a contest came from* beside the work it does — `matchUrl`, `contestUrl`, `problemUrl`, `sourceLabel`, `contestLabel`, `solvedKey`, `problemKey`, and a `capabilities` block.
 
 It also answers everything shared code used to hardcode about a platform, which is what makes the boundary hold rather than merely be stated:
 
@@ -142,7 +142,7 @@ It also answers everything shared code used to hardcode about a platform, which 
 | `chartColor`, `ratingBandClass` | assigning colours or rank tints by id |
 | `hostPermissions` | hand-listing origins in `targets/chrome/manifest.json` |
 
-`registry.js` and `platforms.js` are the **only** two modules allowed to enumerate platforms. Nothing else — not a view, not a service, not the build — should branch on one, and `tests/module-boundaries.test.js` fails if it does.
+`registry.js` is the **only** module allowed to enumerate platforms. Nothing else — not a view, not a service, not the build — should branch on one, and `tests/module-boundaries.test.js` fails if it does.
 
 This replaced two copies of the same Codeforces URL regex (`contest-manager.js` and `contest-list.js`) and three hardcoded `https://codeforces.com` origins, so a URL change is now one edit.
 
@@ -212,18 +212,26 @@ Note the Codeforces HTML client (in `codeforces/sources.js`) sends cookies, but 
 
 ### Platforms
 
-The registry is *pure* — URLs, identity, capabilities — so anything can import it. Network
-work lives behind a **platform instance**, one per site, held by `core/platforms/platforms.js`.
-The split is deliberate: `backup-validation.js` imports the registry, and must not drag the
-network stack in with it.
-
 **Every platform extends `Platform` (`core/platforms/platform.js`), and the base is where the
-contract lives** — not in a test, not in a destructure. It names every hook a platform
-implements, refuses at construction a subclass missing one or one whose `canEstimate`
-disagrees with whether it estimates, and checks every shape that crosses the boundary,
-naming the platform when one is wrong. Before it, each folder had the same seven file names
-and a different design inside: three session shapes, two ways of reaching the site, four
-`fetchContest` signatures, a field module that meant something different in each folder.
+contract lives** — not in a test, not in a destructure. A platform declares what it *is* — the
+`DESCRIPTOR_MEMBERS`: `id`, `matchUrl`, `solvedKey`, `capabilities` and the rest — and what it
+*does*, in one class. `registry.js` builds one instance of each and runs `Platform.check` on it,
+which refuses a class missing a member or a hook, or one whose `canEstimate` disagrees with
+whether it estimates. Every shape that crosses the boundary is checked and names the platform
+when wrong, so a platform that returns the wrong thing fails at the boundary rather than three
+modules later.
+
+The registry used to be kept free of network code by holding descriptors in a separate file.
+That purity was measured and retired: everything that imports the registry ships in the same
+bundle as the network stack, and every source module loads in plain Node with no `chrome`
+access at load time, so the build config reads `hostPermissions` straight off the instances.
+
+**A site and a platform are two words for two things.** A site is a host the extension talks
+to — an account, a client, routes, pages, a fit. A platform is a registered kind of contest on
+a site. AtCoder and CodeChef are a site with one platform; Codeforces is a site with two. Each
+class names its site (`static site`, the pure object in the site's `site.js`, which the base
+copies onto the instance: origin, host permission, mark, settings section) and its site's
+Source class (`static Sources`).
 
 What callers use — the orchestrators and the settings page:
 
@@ -233,109 +241,103 @@ What callers use — the orchestrators and the settings page:
 | `verifyIdentity(session)` | `{username, rating}`, or a throw whose **message is the user-facing verdict**, in Settings and in the queue's status strip alike |
 | `describeIdentity(identity)` | how Settings names the account — "Connected as X", or "Signed in as X" on CodeChef, where the browser session *is* the identity |
 | `fetchContestRecord({contestId, subtype, session, onProgress})` | the whole add: one of the five statuses, with the stored-shape contest on `ready` |
-| `fetchSolvedKeys(session, contests, onProgress)` | a Set of `descriptor.solvedKey` values |
+| `fetchSolvedKeys(session, contests, onProgress)` | a Set of `solvedKey` values |
 | `syncMetadata(session, contests, onProgress)` | fills in what arrives after the add |
-| `reset(spacingMs)` | the one test seam, replacing five per-platform ones |
+| `reset(spacingMs)` | the one test seam |
 
-What a platform implements:
+What a platform implements — three hooks have defaults that work through the site's source,
+so a platform overrides them only where its site's account works differently:
 
 | hook | returns | required |
 |---|---|---|
-| `static settingsSection` | the slug of its section in `settings/schema.js`; the base reads that section's slugs, so a slug is declared once | yes |
-| `buildSession(values)` | `{ handle, sources, ... }` — **the site's `Source` rides on the session**, so every read goes through `session.sources` and a fake is injected the same way on every platform | yes |
-| `identify(session)` | `{username, rating}` | yes |
 | `fetchContest({contestId, subtype, session, onProgress})` | a status, or `{ id, name, problems, startTimeSeconds, publishedDataCheckedAt, sourceId?, context? }` | yes |
-| `fetchAccepted(session, contests, onProgress)` | `{contest: {id}, problem}` pairs — never a bare `null` contest | yes |
+| `buildSession(values)` | `{ handle, sources, ... }` — **the site's `Source` rides on the session**, so every read goes through `session.sources` and a fake is injected the same way on every platform | default: the handle from the section's local field, and `Sources.fromSettings(values)` |
+| `identify(session)` | `{username, rating}` | default: refuse a blank handle, ask `sources.identity(handle)`, refuse null |
+| `fetchAccepted(session, contests, onProgress)` | `{contest: {id}, problem}` pairs — never a bare `null` contest | default: `sources.accepted(handle)` |
 | `readField({contest, context, session, onProgress})` | what the estimator fits against; or a status — `sourceUnreachable` where the data will come, `unavailable` where it never will; or null when there was nothing to measure | iff `canEstimate` |
 | `estimate(contest, field)` | fills the gaps in place; **pure** | iff `canEstimate` |
-| `syncMetadata`, `describeIdentity` | overrides | optional |
+| `syncStartTimes`, `syncMetadata`, `describeIdentity` | overrides | optional |
+
+Codeforces' two platforms override none of the account hooks: their source answers `identity`
+and `accepted`, and `fromSettings` builds it from the key pair. AtCoder overrides `identify`
+(a mismatch only on positive evidence) and `fetchAccepted` (per contest). CodeChef overrides
+`buildSession` (dashboard facts on the session), `identify` (the session *is* the identity) and
+`fetchAccepted` (verifies again).
 
 **The base owns exactly what means the same thing everywhere** — this file's naming rule
 applied to steps: the stored contest shape (`buildContestRecord`), the per-problem defaults,
 the `isSourceUnreachable` → `sourceUnreachable` translation, the `readField → estimate`
-composition (`estimateMissing`, which a re-check reuses), and mapping accepted pairs through
-`descriptor.solvedKey`. **Every gate stays inside `fetchContest`**, returned as one of the
-five statuses; the base passes one through. Codeforces has five decision points, AtCoder two,
-CodeChef resolves a division first, and none of that reaches the base. **The gap policy is
-deliberately not in the base** — `contest-manager.js` applies it against
+composition (`estimateMissing`, which a re-check reuses), mapping accepted pairs through
+`solvedKey`, and dating contests from a site's bulk contest list. **Every gate stays inside
+`fetchContest`**, returned as one of the five statuses; the base passes one through. **The gap
+policy is deliberately not in the base** — `contest-manager.js` applies it against
 `capabilities.canEstimate`, and two places would be free to disagree.
 
-`contest-manager.js` is just the orchestrator: match the URL, pick the platform, mark solved,
-decide whether the record is complete enough to store. Adding a platform is a folder (below),
-one line in `registry.js`, one in `platforms.js`, and a settings section; the base refuses at
-construction if a hook is missing.
+`contest-manager.js` is just the orchestrator: match the URL, mark solved, decide whether the
+record is complete enough to store. Adding a site is a folder (below), one `new` per platform in
+`registry.js`, and a settings section; the registry refuses at load if a member or hook is
+missing.
 
-#### The shape of a platform folder
+#### The shape of a site folder
 
-**The root is a closed set of four names**, and `module-boundaries.test.js` fails on a fifth.
-Anything a platform can have *N* of lives in a folder named for its kind, so `ls` says which
-is which:
+**A folder is a site, and a site registers one or more platforms.** `module-boundaries.test.js`
+classifies every folder under `core/platforms/`: a folder with `site.js` is a site; a folder whose
+`platform.js` exports a registered class is a platform folder, and is the site folder itself or a
+direct child of it. AtCoder and CodeChef are both at once. Codeforces is a site with two
+platforms beneath it:
 
-| file | role | where |
+```
+atcoder/     site.js  platform.js  sources.js  estimator.js  scrapers/
+codechef/    site.js  platform.js  sources.js             scrapers/
+codeforces/  site.js  sources.js  estimator.js  scrapers/
+  official/  platform.js
+  gyms/      platform.js
+```
+
+| file | level | holds |
 |---|---|---|
-| `descriptor.js` | what the registry needs; pure | always |
-| `platform.js` | `class X extends Platform` — the contract, every decision (gates, fallbacks, the record shape, `readField`) and every post-add pass, with helpers below the class | always |
-| `sources.js` | `class XSources extends Source` — one route per method, returning what the site said; nothing else exported but at most a singleton `sources` | always |
-| `estimator.js` | `estimate` — the pure fit; imports no source, client or platform | iff `canEstimate` |
-
-| folder | one file per | today |
-|---|---|---|
-| `scrapers/` | page scraped — a `Scraper` subclass each | 6 |
-
-**A folder is a site, and a site registers one or two platforms.** `codeforces/` registers
-two: `platform.js` exports `CodeforcesOfficial` and `CodeforcesGyms` over a module-private
-base holding what the account shares, `descriptor.js` exports both descriptors over a
-module-private partial, and `sources.js` exports both source classes over the shared signed
-client. The other two register one. `module-boundaries.test.js` classifies every folder under
-`core/platforms/` from what `platforms.js` registers — a site, or an offender — and keys
-every other check on that, so no check assumes a folder is named after its id.
+| `site.js` | site | a pure object every platform of the site takes on: `origin`, `hostPermissions`, `icon`, rank bands where the site has them, keys that only need a platform id, `settingsSection`, and the `label` the account's messages use |
+| `sources.js` | site | `class XSources extends Source` — one route per method, returning what the site said; what its payloads mean, as statics; `fromSettings` and `reset`. Nothing else exported but at most a singleton `sources` |
+| `estimator.js` | site | the pure fit, iff the site's platforms estimate; imports no source, client or platform |
+| `scrapers/` | site | one `Scraper` per page |
+| `platform.js` | platform | `class X extends Platform`: the describing members first, in `DESCRIPTOR_MEMBERS` order, then the hooks, then helpers below the class — every decision (gates, fallbacks, the record shape, `readField`) and every post-add pass |
 
 Rules that hold, each pinned by a test that was seen to fail:
 
-- **A source answers routes; a platform decides.** Each source method is one
-  route of the site — a JSON endpoint, or a page handed to its scraper — and
-  returns what the site said. It may paginate; it never falls back and never
-  answers with a status. `fetchContest` composes routes, applies the gates,
-  chooses fallbacks and shapes the record, with helpers as module-level
-  functions below the class. Before this rule the same kind of work sat in a
-  different place in each folder: one source returned facts, one raw payloads,
-  one whole records with the hidden-standings fallback inside. Two checks pin
-  it: a scraper is imported only by a `sources.js`, so a platform never sees a
-  `Document`; and no `sources.js` imports `contest-status.js`.
-- **Every descriptor declares its members in `DESCRIPTOR_MEMBERS` order**, read
-  off the source, so a reader finds `matchUrl` in the same place in each.
+- **A source answers routes; a platform decides.** Each source method is one route of the site —
+  a JSON endpoint, or a page handed to its scraper — and returns what the site said. It may
+  paginate; it never falls back and never answers with a status. `fetchContest` composes routes,
+  applies the gates, chooses fallbacks and shapes the record. Two checks pin it: a scraper is
+  imported only by a `sources.js`, so a platform never sees a `Document`; and no `sources.js`
+  imports `contest-status.js`.
+- **Every platform of a site took the site on**: the same `origin`, `hostPermissions` and `icon`
+  as its `site.js`.
+- **Describing members first, in `DESCRIPTOR_MEMBERS` order, hooks after**, read off each class
+  body, so a reader finds `matchUrl` in the same place in every class.
 - **Nothing in a `scrapers/` folder fetches**, and every file there exports one `Scraper`
   subclass with `scrape(doc)` overridden and its selectors declared. That is what lets every
-  scraper run in Node against `linkedom` with no network stack, which is most of the coverage
-  these platforms have.
-- **A source singleton is reached through the session, never imported.** A platform's class
-  attaches it to the session it builds; a module that imported it instead would work in
-  production and be untestable.
-- **An estimator is pure.** The platform's `readField` reads and answers a status when
-  it cannot; `estimator.js` fits what it read. The base refuses half an estimator, and the
-  file exists in the site's folder iff `canEstimate`, and two platforms sharing a site must agree. Claiming the capability
-  with no estimator refuses every add; estimating without claiming it stores `???` beside
-  numbers already worked out.
-- **`DOMParser` is constructed in exactly one place**, `services/site-client.js#getDocument`;
-  a scraper only ever receives a finished `Document`.
-- **Codeforces signs in exactly one place**, `codeforces/sources.js`.
+  scraper run in Node against `linkedom` with no network stack.
+- **A source singleton is reached through the session, never imported.** A platform's session
+  carries it; a module that imported it instead would work in production and be untestable.
+- **An estimator is pure.** The platform's `readField` reads and answers a status when it cannot;
+  `estimator.js` fits what it read. `Platform.check` refuses half an estimator, and the file
+  exists in the site's folder iff its platforms estimate.
+- **`DOMParser` is constructed in exactly one place**, `services/site-client.js#getDocument`.
+- **Codeforces signs in exactly one place**, `codeforces/sources.js`, and its official platform
+  reaches no HTML: `official/platform.js` names no page seam, no problems page, no scraper.
 
 **`Scraper` and `Source` are the two other bases.** A scraper owns one page: `scrape(doc)`
-returns that page's facts or null, never a plausible default — the old code left solve counts
-at `0` when a totals row went missing and stored confidently wrong ratings. Statics, because
-scraping is pure and nothing needs `new`. `page-globals.js` is named for a fragment rather
-than a page because AtCoder emits its marker on every page it serves; it is a scraper like the
-rest, reading a `<script>` element. A source owns one site's reads: endpoints as methods,
-what an answer's fields mean as statics (`CodeChefSources.parseDifficulty`, `ACCEPTED`), and
-it is instantiable because on Codeforces it holds a **key pair** — `buildSession` builds one
-per credential set, and Settings builds a second to check credentials typed but not saved.
-Platforms without credentials export a singleton.
+returns that page's facts or null, never a plausible default. Statics, because scraping is pure
+and nothing needs `new`. A source owns one site's reads: endpoints as methods, what an answer's
+fields mean as statics (`CodeChefSources.parseDifficulty`, `ACCEPTED`), and it is instantiable
+because on Codeforces it holds a **key pair** — `fromSettings` builds one per credential set,
+and Settings builds a second to check credentials typed but not saved. Sites without
+credentials export a singleton.
 
-Post-add passes are helper functions below the class, called in order from
-`syncMetadata`. CodeChef's two are worth knowing apart: they differ in every way that
-matters — weekly against every refresh, write-once against both directions, gated on a
-timestamp against gated on the flags already stored — and must never share a gate, or the
-slower pass suppresses the faster.
+Post-add passes are helper functions below the class, called in order from `syncMetadata`.
+CodeChef's two are worth knowing apart: they differ in every way that matters — weekly against
+every refresh, write-once against both directions, gated on a timestamp against gated on the
+flags already stored — and must never share a gate, or the slower pass suppresses the faster.
 
 `progress-manager.js#updateSolvedStatus()` loops over every platform with tracked contests, **isolating failures**: one site being down or unconfigured must not stop the others, and if *every* platform fails it returns before the write so a bad sync can't touch storage. `applySolvedStatus()` is split out and pure because it's the step that fails quietly.
 
@@ -570,13 +572,13 @@ A `contest.practiceSyncedAt` stamp existed briefly, so a one-time backfill could
 
 Note the expansion's opt-in is the one part of this **no unit test reaches** — removing it leaves the whole suite green. `npm run smoke` covers it: the store seeds START252D with an unmirrored problem, and the run fails unless the queue omits it while the contest's expansion lists it with exactly one mark. Confirmed the usual way, by removing each piece and watching the run report the original symptom.
 
-### Codeforces is one base and two platforms
+### Codeforces is one site with two platforms
 
-`CodeforcesOfficial` and `CodeforcesGyms`, in one `codeforces/` folder, are separate platforms. They were one platform
-with two subtypes, and six modules independently asked which one they had — six conditions
-that had to agree with nothing checking that they did. One had already failed that way:
-`needsSync` read `contest.type !== "OFFICIAL"` on a record built before `type` was stamped on
-it, so every official add silently skipped its published ratings. **The folder answers that
+`codeforces/official/` and `codeforces/gyms/` are the two platforms of one site. They were one
+platform with two subtypes, and six modules independently asked which one they had — six
+conditions that had to agree with nothing checking that they did. One had already failed that
+way: `needsSync` read `contest.type !== "OFFICIAL"` on a record built before `type` was stamped on
+it, so every official add silently skipped its published ratings. **The class answers that
 question now**, and every one of those branches is gone.
 
 They are genuinely different pipelines, not two flavours of one:
@@ -589,16 +591,15 @@ They are genuinely different pipelines, not two flavours of one:
 | API methods | `publicContestStandings`, `contestRatingChanges`, `problemsetProblems` | `contestStandings`, `contestStatus` |
 | HTML | **none at all** | none, unless the standings are hidden |
 
-**What they share is an account and a site, and it is inherited, not copied.**
-`codeforces/platform.js` holds identity and the submission stream; `codeforces/sources.js`
-the signed client, the signing (SHA-512 over `rand/method?sortedParams#secret`),
-`user.status`, `user.info`, and the applier that takes a standings response's published
-ratings and tags; `codeforces/estimator.js` the fit both run and the sampling maths;
-`ratePartyList` in `codeforces/platform.js` the party-to-rating step both fields end in; a
-module-private partial in `codeforces/descriptor.js` — origin, mark, host permission, rank
-colours and keys — that both descriptors spread. Until this existed the two folders
-held 744 byte-identical lines with a test forbidding them to diverge. **They import the base
-and never each other**, which `module-boundaries.test.js` pins.
+**What they share is the site, and neither platform holds any of it.** `codeforces/site.js`
+is the origin, mark, host permission, rank colours and keys both classes take on;
+`codeforces/sources.js` is the signed client, the signing (SHA-512 over
+`rand/method?sortedParams#secret`), every route either platform reads, the applier that takes
+a standings response's published ratings and tags, and the account answers — `identity`,
+`accepted`, `partyRatings`, `fromSettings` — that the base's defaults work through, so neither
+platform overrides an account hook; `codeforces/estimator.js` is the fit both run and the
+sampling maths. Until this shape existed the two folders held 744 byte-identical lines with a
+test forbidding them to diverge.
 
 Three consequences worth knowing before changing anything here:
 
@@ -656,7 +657,7 @@ site's defences — it is how an extension acts as the user on a site they are
 already signed in to, and the resulting request is the one their own tab makes.
 
 **A client names its `site` and the routing follows.** `createSiteClient({ site:
-descriptor })` derives the match patterns from that descriptor's
+site })` derives the match patterns from that site's
 `hostPermissions`, and defaults `credentials: "include"`; the three platforms
 each used to spell out `createPageFetch({ matchPatterns: X.hostPermissions })`.
 Naming **no** site throws at construction, since the alternative is a direct
@@ -1233,7 +1234,7 @@ it, which is what a large near-white fill was doing wrong.
 
 There is no server, no CDN, no analytics, no telemetry and no runtime font fetch. The only
 remote addresses in the built bundle are the platform APIs, which is why `host_permissions`
-is composed from the descriptors and diffed against the previous build — that diff is the
+is composed from the platforms and diffed against the previous build — that diff is the
 check on this invariant, not a formality.
 
 It constrains ordinary-looking changes. A web font, an icon set from a CDN, an error
@@ -1310,7 +1311,7 @@ that section's slugs; `options/index.html` holds only the intro and the Backup s
 `options/sections.js` renders the rest.
 
 **A section is a credential set, not a platform**, and that is the whole point.
-The page *was* generated from each descriptor's `settingsFields`, which was the
+The page *was* generated from each platform's `settingsFields`, which was the
 right shape while the two were the same thing. They stopped being the same thing
 when Codeforces became two platforms over one account: generating per platform
 asks for one key pair twice, on a page where the two copies then have to agree.
@@ -1327,7 +1328,7 @@ each had their own. `tests/options-settings.test.js` asserts the rendering, and
 slug — a duplicate slug means two inputs writing one storage key.
 
 **`schema.js` is the third module allowed to name a platform**, alongside
-`registry.js` and `platforms.js`, because `verify.adapter` has to. The exception
+`registry.js`, because `verify.adapter` has to. The exception
 is scoped to that one file and recorded in `module-boundaries.test.js`'s
 `ALLOWED`; `store.js` and `options.js` route by slug and by section and still
 fail the test if they name one. Confirmed by adding a platform name to
@@ -1401,7 +1402,7 @@ The row carries a **⋮ menu** holding *Open contest* and *Remove from queue*; t
 
 ### Platform marks
 
-Each mark lives on its **descriptor**, beside `chartColor` — a platform's own appearance is its own to declare. `core/ui/platform-icons.js` keeps only the fallback and the design rules that apply to all of them, and asks the registry. It uses `listPlatforms().find(...)` rather than `getPlatform()`, which **throws** on an id it does not know: the text-chip fallback is the whole point of the function, so a platform without a mark yet must show something rather than take the panel down.
+Each mark lives on its **site**, beside the platform's `chartColor` — a platform's own appearance is its own to declare. `core/ui/platform-icons.js` keeps only the fallback and the design rules that apply to all of them, and asks the registry. It uses `listPlatforms().find(...)` rather than `getPlatform()`, which **throws** on an id it does not know: the text-chip fallback is the whole point of the function, so a platform without a mark yet must show something rather than take the panel down.
 
 AtCoder's is deliberately light-on-dark, inverting its black-on-white branding, because a `#222` square on the `#1e1e1e` panel is close to invisible.
 
@@ -1411,7 +1412,7 @@ A platform with no mark yet falls back to a text chip rather than rendering noth
 
 Views build rows with template strings and `innerHTML`, so anything originating outside the extension goes through `ui/escape-html.js` first. That covers contest names, problem names and tags (scraped or API-supplied), and the problem URL and source label, which are both built from a scraped problem index. Values the extension derives itself — counts, ratings, the type badge — don't need it.
 
-**One deliberate exception, and it is the only one:** the settings page injects each descriptor's `label` and `help` as trusted HTML, so the Codeforces key-pair note can carry a link to its API settings page. That text is authored in this repo, in `platforms/<id>/descriptor.js`. Nothing reaching that path comes from a platform or a user — and if a descriptor ever grows a field whose text does, it must be escaped like everything else.
+**One deliberate exception, and it is the only one:** the settings page injects each section's `label` and `help` as trusted HTML, so the Codeforces key-pair note can carry a link to its API settings page. That text is authored in this repo, in `platforms/<id>/descriptor.js`. Nothing reaching that path comes from a platform or a user — and if a descriptor ever grows a field whose text does, it must be escaped like everything else.
 
 `backup-validation.js` guards Import, which writes straight into `chrome.storage.local` with no undo. Note it uses `.some()`, not `.find()`: a `null` entry in `trackedContests` is itself falsy, so a truthiness check on `find`'s return value silently accepted malformed backups. There's a test for exactly that case.
 

@@ -2,12 +2,11 @@
  * Orchestrates adding a contest, and nothing else.
  *
  * Everything site-specific — auth, fetching, rating, solved history — lives
- * behind the platform adapter. This file only decides *which* platform, and
+ * behind the platform platform. This file only decides *which* platform, and
  * what to do with what comes back.
  */
 import { LocalDB } from "./services/storage.js";
 import { matchContestUrl } from "./platforms/registry.js";
-import { getAdapter } from "./platforms/platforms.js";
 import { READY, isKnownStatus, shouldWait } from "./contest-status.js";
 import { storeFetchedRatings } from "./services/user-ratings.js";
 import {
@@ -22,19 +21,14 @@ export async function processNewContest(url, onProgress = () => {}) {
 
     const { platform, contestId, subtype } = parsed;
 
-    const adapter = getAdapter(platform.id);
-    if (!adapter) {
-      throw new Error(`${platform.label} contests aren't supported yet.`);
-    }
-
-    const session = await adapter.createSession();
+    const session = await platform.createSession();
 
     // Adding reads user-specific data too — CodeChef's problemsstats carries
     // solved status — so the identity has to be settled here as well, not just
     // on refresh.
-    await establishIdentity(platform, adapter, session);
+    await establishIdentity(platform, session);
 
-    const result = await adapter.fetchContestRecord({
+    const result = await platform.fetchContestRecord({
       contestId,
       subtype,
       session,
@@ -49,7 +43,7 @@ export async function processNewContest(url, onProgress = () => {}) {
     if (!isKnownStatus(result?.status)) {
       throw new Error(
         `${platform.label} returned an unrecognised status for ${contestId}. ` +
-          `This is a bug in its adapter.`,
+          `This is a bug in its platform.`,
       );
     }
     if (result.status !== READY) {
@@ -63,7 +57,7 @@ export async function processNewContest(url, onProgress = () => {}) {
 
     const contest = result.contest;
 
-    const solvedKeys = await adapter.fetchSolvedKeys(session, [contest], onProgress);
+    const solvedKeys = await platform.fetchSolvedKeys(session, [contest], onProgress);
 
     let solvedCount = 0;
     contest.problems.forEach((prob) => {
@@ -146,13 +140,13 @@ export async function processNewContest(url, onProgress = () => {}) {
  * on a refresh, so a fresh install added a contest and then showed an em dash
  * for every solve chance until the first sync.
  */
-async function establishIdentity(platform, adapter, session) {
+async function establishIdentity(platform, session) {
   // Fatal on purpose. You cannot add a platform's contest without its handle:
   // the contest would go in unmarked, its solved problems would never clear,
   // and it would look like the sync was merely slow. On CodeChef it is
   // stronger still — adding reads problemsstats, so the wrong account signed
   // in would write their solves onto a contest you just added.
-  const identity = await adapter.verifyIdentity(session);
+  const identity = await platform.verifyIdentity(session);
   const verdict = await settleIdentity(platform, identity);
 
   if (verdict === "changed") {

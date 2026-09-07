@@ -1,17 +1,28 @@
 /**
  * What a platform is.
  *
- * > A platform is one site the extension can track contests on. It knows how
- * > to build a session from settings, whose account that session is, what a
- * > contest holds, what the user has solved, and — where the site publishes no
- * > difficulty — how to estimate one.
+ * > A platform is one registered kind of contest on a site: it says which
+ * > URLs are its contests and how they are named and keyed, builds a session
+ * > from settings, verifies whose account that is, acquires a contest, reads
+ * > what the user has solved, and — where the site publishes no difficulty —
+ * > estimates one.
  *
- * One subclass per platform, in `<platform>/platform.js`, one instance each in
- * `platforms.js`. The orchestrators (`contest-manager.js`, `progress-manager.js`,
- * the settings page) only ever call the **public** methods below; the
- * **hooks** are what a subclass implements. The base checks every shape that
- * crosses that line and names the platform when one is wrong, so a platform
- * that returns the wrong thing fails here rather than three modules later.
+ * A **site** is the host behind it: `site.js` in the site's folder is a pure
+ * object every platform of that site takes on — origin, host permission, mark,
+ * settings section — and `sources.js` is the site's routes. AtCoder and
+ * CodeChef are a site with one platform; Codeforces is a site with two.
+ *
+ * One subclass per platform, in `platform.js`, one instance each in
+ * `registry.js`. The orchestrators and the settings page only ever call the
+ * **public** methods below; the **hooks** are what a subclass implements, and
+ * three of them have defaults that work through the site's source, so a
+ * platform overrides them only where its site's account works differently.
+ *
+ * ## Describing the platform
+ *
+ * The members in `DESCRIPTOR_MEMBERS` — `id`, `matchUrl`, `solvedKey`,
+ * `capabilities` and the rest — are declared on the class, first, in that
+ * order. `registry.js` checks every instance it builds with `Platform.check`.
  *
  * ## Public — what callers use
  *
@@ -22,23 +33,25 @@
  *   fetchContestRecord({contestId, subtype, session, onProgress})
  *                                          → {status, contest?} — the whole add
  *   fetchSolvedKeys(session, contests, onProgress)
- *                                          → Set of descriptor.solvedKey values
+ *                                          → Set of solvedKey values
  *   syncMetadata(session, contests, onProgress)
  *   reset(spacingMs)                      test seam
  *
  * ## Hooks — what a subclass implements
  *
- *   static settingsSection                slug of the settings section it reads
- *   buildSession(values)                  → Session          required
- *   identify(session)                     → {username, rating} required
+ *   static site, static Sources           the site's object and Source class   required
  *   fetchContest({contestId, subtype, session, onProgress})
- *                                          → Status | Acquired required
+ *                                          → Status | Acquired                 required
+ *   buildSession(values)                  → Session      default: handle + Sources.fromSettings
+ *   identify(session)                     → {username, rating}
+ *                                                        default: sources.identity(handle)
+ *   fetchAccepted(session, contests, onProgress)
+ *                                          → Accepted[]  default: sources.accepted(handle)
  *   readField({contest, context, session, onProgress})
  *                                          → Status | Field | null   iff canEstimate
- *   estimate(contest, field)              pure; fills the gaps        iff canEstimate
- *   fetchAccepted(session, contests, onProgress)
- *                                          → Accepted[]       required
+ *   estimate(contest, field)              pure; fills the gaps       iff canEstimate
  *   syncMetadata(session, contests, onProgress)              optional
+ *   syncStartTimes(session, contests, onProgress)            default: from sources.contestList()
  *   describeIdentity(identity)                               optional
  *
  * ## Shapes
@@ -54,9 +67,8 @@
  * `readField` is the I/O that produces what the estimator fits against, and
  * answers with a Status when it cannot — `sourceUnreachable` where the data
  * will come, `unavailable` where it never will — or null when there was simply
- * nothing to measure. `estimate` is pure over the result, so the fit tests
- * without a network stack. `estimateMissing` composes the two and is not
- * overridden.
+ * nothing to measure. `estimate` is pure over the result. `estimateMissing`
+ * composes the two and is not overridden.
  *
  * Every gate stays inside `fetchContest`, returned as a Status; the base only
  * passes one through. The gap policy — what an unrated problem means once the
@@ -69,7 +81,7 @@ import { SECTIONS } from "../settings/schema.js";
 import { ready, sourceUnreachable } from "../contest-status.js";
 import { Source } from "./source.js";
 
-/** What every descriptor declares; `registry.js` asks for all of these. */
+/** What every platform declares, in this order, before any hook. */
 export const DESCRIPTOR_MEMBERS = [
   "id", "label", "shortLabel", "origin", "subtypes",
   "matchUrl", "contestUrl", "problemUrl", "sourceLabel",
@@ -78,53 +90,79 @@ export const DESCRIPTOR_MEMBERS = [
   "chartColor", "hostPermissions", "icon", "capabilities",
 ];
 
-const HOOKS = ["buildSession", "identify", "fetchContest", "fetchAccepted"];
-
 export class Platform {
-  /** The settings section whose fields `createSession` reads. */
-  static settingsSection = null;
+  /** The site's object: what every platform of the site takes on. */
+  static site = null;
 
-  constructor(descriptor) {
-    assertDescriptor(descriptor);
-    this.descriptor = descriptor;
-    this.id = descriptor.id;
+  /** The site's Source class. `fromSettings(values)` builds the instance a session carries. */
+  static Sources = null;
 
-    const name = new.target.name;
-    for (const hook of HOOKS) {
-      if (this[hook] === Platform.prototype[hook]) {
-        throw new Error(`${name} must implement ${hook}()`);
-      }
+  constructor() {
+    const { site, Sources, name } = new.target;
+    if (!site || typeof site !== "object") throw new Error(`${name} declares no site`);
+    if (typeof Sources !== "function") throw new Error(`${name} declares no Sources class`);
+    Object.assign(this, site);
+  }
+
+  /**
+   * What the registry asks of every instance it builds. Class fields
+   * initialise after `super()` returns, so this cannot run in the constructor.
+   */
+  static check(instance) {
+    const name = instance.constructor.name;
+    for (const member of DESCRIPTOR_MEMBERS) {
+      if (!(member in instance)) throw new Error(`${name} is missing ${member}`);
+    }
+    if (typeof instance.capabilities?.canEstimate !== "boolean") {
+      throw new Error(`${name} must declare capabilities.canEstimate`);
+    }
+    if (instance.fetchContest === Platform.prototype.fetchContest) {
+      throw new Error(`${name} must implement fetchContest()`);
+    }
+    if (
+      instance.fetchAccepted === Platform.prototype.fetchAccepted &&
+      typeof instance.constructor.Sources.prototype.accepted !== "function"
+    ) {
+      throw new Error(`${name} must implement fetchAccepted(), or its source accepted()`);
     }
 
     // Two declarations of one fact. Claiming the capability with no estimator
     // refuses every add; estimating without claiming it stores "???" beside
     // numbers already worked out. And the two halves come together: a field
     // nobody fits, or a fit with no field, is half an estimator.
-    const reads = this.readField !== Platform.prototype.readField;
-    const fits = this.estimate !== Platform.prototype.estimate;
+    const reads = instance.readField !== Platform.prototype.readField;
+    const fits = instance.estimate !== Platform.prototype.estimate;
     if (reads !== fits) {
       throw new Error(`${name} implements ${reads ? "readField() without estimate()" : "estimate() without readField()"}`);
     }
-    if (reads !== descriptor.capabilities.canEstimate) {
+    if (reads !== instance.capabilities.canEstimate) {
       throw new Error(
         reads
-          ? `${name} implements readField() and estimate() but its descriptor declares canEstimate: false`
+          ? `${name} implements readField() and estimate() but declares canEstimate: false`
           : `${name} declares canEstimate: true but implements neither readField() nor estimate()`,
       );
     }
 
-    const section = new.target.settingsSection;
-    if (!SECTIONS.some((candidate) => candidate.slug === section)) {
-      throw new Error(`${name} names settings section "${section}", which schema.js does not declare`);
+    if (!SECTIONS.some((section) => section.slug === instance.settingsSection)) {
+      throw new Error(`${name} names settings section "${instance.settingsSection}", which schema.js does not declare`);
     }
+    return instance;
   }
 
   // ── public ────────────────────────────────────────────────────────────
 
-  /** The slugs this platform reads, from its settings section — declared once. */
+  /** The slugs this platform reads, from its site's settings section — declared once. */
   get settingSlugs() {
-    const section = SECTIONS.find((s) => s.slug === this.constructor.settingsSection);
-    return section.fields.map((field) => field.slug);
+    return this.#section.fields.map((field) => field.slug);
+  }
+
+  /** The one local field of the section: the handle. */
+  get handleSlug() {
+    return this.#section.fields.find((field) => field.store === "local").slug;
+  }
+
+  get #section() {
+    return SECTIONS.find((section) => section.slug === this.settingsSection);
   }
 
   async createSession() {
@@ -175,9 +213,9 @@ export class Platform {
     if (acquired?.status) return acquired;
 
     assertAcquired(this.id, acquired);
-    const contest = buildContestRecord(this.descriptor, { type: subtype, ...acquired });
+    const contest = buildContestRecord(this, { type: subtype, ...acquired });
 
-    if (this.descriptor.capabilities.canEstimate) {
+    if (this.capabilities.canEstimate) {
       const verdict = await this.estimateMissing({ contest, context: acquired.context, session, onProgress });
       if (verdict?.status) return verdict;
     }
@@ -208,25 +246,96 @@ export class Platform {
   async fetchSolvedKeys(session, contests, onProgress = () => {}) {
     const accepted = await this.fetchAccepted(session, contests, onProgress);
     assertAccepted(this.id, accepted);
-    return new Set(
-      [...accepted].map(({ contest, problem }) => this.descriptor.solvedKey(contest, problem)),
-    );
+    return new Set([...accepted].map(({ contest, problem }) => this.solvedKey(contest, problem)));
   }
 
   /** Fills in data that only arrives after the add. Default: nothing does. */
   async syncMetadata(_session, _contests, _onProgress) {}
 
-  /** Test seam: resets pacing and caches between cases. */
+  /** Test seam: resets the site's clients and caches between cases. */
   reset(spacingMs = 0) {
-    this.sources?.reset?.(spacingMs);
+    this.constructor.Sources.reset(spacingMs);
   }
 
-  // ── hooks ─────────────────────────────────────────────────────────────
+  // ── hooks with defaults, through the site's source ────────────────────
 
-  buildSession(_values) { throw new Error(`${this.id} must implement buildSession()`); }
-  identify(_session) { throw new Error(`${this.id} must implement identify()`); }
+  /** The handle from settings, and the source built from them. */
+  buildSession(values) {
+    return { handle: values[this.handleSlug], sources: this.constructor.Sources.fromSettings(values) };
+  }
+
+  /**
+   * A site that is asked *about* a handle: confirm it exists and take the
+   * rating it shows. A site whose session is the identity overrides.
+   *
+   * @throws when no handle is set, or the site does not know it.
+   */
+  async identify(session) {
+    if (!session?.handle) {
+      throw new Error(`No ${this.constructor.site.label} handle set. Add one in Settings.`);
+    }
+    const identity = await session.sources.identity(session.handle);
+    if (!identity) {
+      throw new Error(`${this.constructor.site.label} doesn't recognise the handle "${session.handle}".`);
+    }
+    return identity;
+  }
+
+  /** A site with a per-user submission list answers in one call. */
+  async fetchAccepted(session, _contests, onProgress = () => {}) {
+    onProgress("Checking your submissions…");
+    return session.sources.accepted(session.handle);
+  }
+
+  /** The bulk contest list this platform dates contests from, where the site has one. */
+  contestList(session) {
+    return typeof session.sources.contestList === "function" ? session.sources.contestList() : null;
+  }
+
+  /**
+   * Fills `contest.startTimeSeconds`, which orders the contest list, from the
+   * site's bulk contest list. A finished contest's start time never changes,
+   * so there is no re-check: a contest is asked about once, and only if the
+   * field is missing. Ordering is cosmetic, so a failed list never breaks a
+   * sync or an add.
+   *
+   * @returns {Promise<number>} contests dated
+   */
+  async syncStartTimes(session, contests, onProgress = () => {}) {
+    const pending = contests.filter((contest) => !contest.startTimeSeconds);
+    if (pending.length === 0) return 0;
+
+    let list;
+    try {
+      onProgress("Looking up contest dates…");
+      list = await this.contestList(session);
+    } catch (error) {
+      console.warn(`[${this.constructor.site.label}] contest list failed:`, error.message);
+      return 0;
+    }
+    if (!list) return 0;
+
+    const startTimes = new Map();
+    for (const contest of list) {
+      if (contest.startTimeSeconds) startTimes.set(String(contest.id), contest.startTimeSeconds);
+    }
+
+    let resolved = 0;
+    for (const contest of pending) {
+      const startTime = startTimes.get(String(contest.id));
+      if (startTime) {
+        contest.startTimeSeconds = startTime;
+        resolved++;
+      }
+    }
+
+    console.log(`[${this.constructor.site.label}] Resolved ${resolved} of ${pending.length} contest(s).`);
+    return resolved;
+  }
+
+  // ── hooks without defaults ─────────────────────────────────────────────
+
   fetchContest(_args) { throw new Error(`${this.id} must implement fetchContest()`); }
-  fetchAccepted(_session, _contests, _onProgress) { throw new Error(`${this.id} must implement fetchAccepted()`); }
 
   /** The field the estimator fits against. Only a platform with `canEstimate` overrides. */
   async readField(_args) { return null; }
@@ -257,15 +366,15 @@ export function normalizeProblem(problem) {
 }
 
 /**
- * The stored contest shape. `platform` comes from the descriptor rather than a
+ * The stored contest shape. `platform` comes from the instance rather than a
  * literal, and `addedAt` is stamped here so no platform decides when "now" is.
  */
-export function buildContestRecord(descriptor, {
+export function buildContestRecord(platform, {
   id, sourceId, name, type, problems, publishedDataCheckedAt, startTimeSeconds,
 }) {
   return {
     id,
-    platform: descriptor.id,
+    platform: platform.id,
     // Only when it differs: a CodeChef parent resolves to a division, and the
     // add banner needs the id the user navigated from to recognise it.
     ...(sourceId != null && sourceId !== id ? { sourceId } : {}),
@@ -279,20 +388,6 @@ export function buildContestRecord(descriptor, {
 }
 
 // ── assertions ─────────────────────────────────────────────────────────
-
-function assertDescriptor(descriptor) {
-  if (!descriptor || typeof descriptor !== "object") {
-    throw new Error("a Platform needs a descriptor");
-  }
-  for (const member of DESCRIPTOR_MEMBERS) {
-    if (!(member in descriptor)) {
-      throw new Error(`descriptor "${descriptor.id ?? "?"}" is missing ${member}`);
-    }
-  }
-  if (typeof descriptor.capabilities.canEstimate !== "boolean") {
-    throw new Error(`descriptor "${descriptor.id}" must declare capabilities.canEstimate`);
-  }
-}
 
 function assertAcquired(id, acquired) {
   if (!acquired || typeof acquired !== "object") {

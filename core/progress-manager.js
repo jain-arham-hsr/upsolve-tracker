@@ -7,7 +7,6 @@ import {
   platformOf,
   contestsOnPlatform,
 } from "./platforms/registry.js";
-import { getAdapter } from "./platforms/platforms.js";
 import { storeFetchedRatings } from "./services/user-ratings.js";
 import {
   settleIdentity,
@@ -104,16 +103,13 @@ async function syncPlatforms(trackedContests, onProgress) {
     const mine = contestsOnPlatform(trackedContests, platform.id);
     if (mine.length === 0) continue;
 
-    const adapter = getAdapter(platform.id);
-    if (!adapter) continue;
-
     try {
-      const session = await adapter.createSession();
+      const session = await platform.createSession();
 
       // Establish *whose* data this is before reading a single user-specific
       // byte. Everything below writes to `solved` or to a rating the queue
       // orders by, and both are effectively permanent once wrong.
-      const identity = await adapter.verifyIdentity(session);
+      const identity = await platform.verifyIdentity(session);
       const verdict = await settleIdentity(platform, identity);
 
       if (verdict === "changed") {
@@ -126,7 +122,7 @@ async function syncPlatforms(trackedContests, onProgress) {
         );
       }
 
-      const keys = await adapter.fetchSolvedKeys(session, mine, onProgress);
+      const keys = await platform.fetchSolvedKeys(session, mine, onProgress);
       keys.forEach((key) => solvedKeys.add(key));
 
       // Verified in the same call as the identity, so no extra request.
@@ -134,7 +130,7 @@ async function syncPlatforms(trackedContests, onProgress) {
 
       // Fill in metadata for contests still missing it. Handed only this
       // platform's contests, since these match on bare contest ids.
-      await adapter.syncMetadata?.(session, mine, onProgress);
+      await platform.syncMetadata?.(session, mine, onProgress);
 
       anySucceeded = true;
     } catch (error) {

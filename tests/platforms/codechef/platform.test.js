@@ -15,11 +15,11 @@ import { DashboardPage } from "../../../core/platforms/codechef/scrapers/page-gl
 const extractSession = (html) =>
   DashboardPage.scrape(parseHTML(`<html><body>${html ?? ""}</body></html>`).document);
 import { sources } from "../../../core/platforms/codechef/sources.js";
-import { getAdapter } from "../../../core/platforms/platforms.js";
+import { getPlatform } from "../../../core/platforms/registry.js";
 
 // The platform is instantiated in platforms.js, so this exercises the real
 // assembled object rather than a module's raw exports.
-const platform = getAdapter("codechef");
+const platform = getPlatform("codechef");
 const fetchContestRecord = (...args) => platform.fetchContestRecord(...args);
 const fetchSolvedKeys = (...args) => platform.fetchSolvedKeys(...args);
 const syncMetadata = (...args) => platform.syncMetadata(...args);

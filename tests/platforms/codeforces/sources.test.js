@@ -16,8 +16,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { OfficialSources as CodeforcesService } from "../../../core/platforms/codeforces/sources.js";
-import { GymSources as GymService } from "../../../core/platforms/codeforces/sources.js";
+import { CodeforcesSources as CodeforcesService } from "../../../core/platforms/codeforces/sources.js";
+import { CodeforcesSources as GymService } from "../../../core/platforms/codeforces/sources.js";
 
 const resetApiState = (ms) => CodeforcesService.reset(ms);
 const resetGymApiState = (ms) => GymService.reset(ms);
@@ -175,7 +175,7 @@ test("both clients agree on which parameters they append", async () => {
 
   try {
     await new CodeforcesService("k", "s").contestList();
-    await new GymService("k", "s").contestList();
+    await new GymService("k", "s").contestList({ gym: true });
   } finally {
     globalThis.fetch = original;
   }

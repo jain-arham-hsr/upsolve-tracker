@@ -20,8 +20,8 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { getAdapter } = await import("../../../core/platforms/platforms.js");
-const verifyIdentity = (session) => getAdapter("atcoder").verifyIdentity(session);
+const { getPlatform } = await import("../../../core/platforms/registry.js");
+const verifyIdentity = (session) => getPlatform("atcoder").verifyIdentity(session);
 const { sources } = await import("../../../core/platforms/atcoder/sources.js");
 
 const profile = (signedInAs, rating = 1600) => `<html><head>
@@ -37,7 +37,7 @@ const noMarker = `<html><body><table class="dl-table">
 
 let served;
 beforeEach(() => {
-  getAdapter("atcoder").reset(0);
+  getPlatform("atcoder").reset(0);
   served = { status: 200, body: profile("") };
   globalThis.fetch = async (url) => ({
     ok: served.status === 200,

@@ -16,27 +16,113 @@
  * untracked contest never clears. Nothing AtCoder publishes would answer it.
  */
 import { Platform } from "../platform.js";
-import { atcoder } from "./descriptor.js";
-import { sources } from "./sources.js";
+import { site } from "./site.js";
+import { AtCoderSources } from "./sources.js";
 import { estimate } from "./estimator.js";
 import { notPublishedYet, sourceUnreachable } from "../../contest-status.js";
 
-const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
+const URL_PATTERN = /^https?:\/\/(?:www\.)?atcoder\.jp\/contests\/([A-Za-z0-9_-]+)/i;
+
+/** `/contests/archive` is the contest *list*, not a contest. */
+const NOT_CONTESTS = new Set(["archive"]);
+
+const SUBTYPES = [
+  [/^abc\d/i, "ABC", "ABC"],
+  [/^arc\d/i, "ARC", "ARC"],
+  [/^agc\d/i, "AGC", "AGC"],
+  [/^ahc\d/i, "AHC", "AHC"],
+];
 
 /** A stuck contest must not cost a standings fetch on every single refresh. */
 const MAX_RE_ESTIMATES_PER_SYNC = 1;
 
 export class AtCoder extends Platform {
-  static settingsSection = "atcoder";
+  static site = site;
+  static Sources = AtCoderSources;
 
-  constructor() {
-    super(atcoder);
-    this.sources = sources;
+  id = "atcoder";
+
+  label = "AtCoder";
+
+  shortLabel = "AC";
+
+  subtypes = [...SUBTYPES.map(([, value, label]) => ({ value, label })), { value: "OTHER", label: "Other" }];
+
+  matchUrl(url) {
+    const match = typeof url === "string" ? url.match(URL_PATTERN) : null;
+    if (!match) return null;
+
+    const contestId = match[1];
+    if (NOT_CONTESTS.has(contestId.toLowerCase())) return null;
+    return { contestId, subtype: subtypeFor(contestId) };
   }
 
-  buildSession(values) {
-    return { handle: values[HANDLE_KEY], sources: this.sources };
+  contestUrl(contest) {
+    return `${this.origin}/contests/${contest.id}`;
   }
+
+  /** The task id is the problem's identity; without it the contest is the best link, degraded not fabricated. */
+  problemUrl(contest, problem) {
+    if (!problem?.problemId) return this.contestUrl(contest);
+    return `${this.contestUrl(contest)}/tasks/${problem.problemId}`;
+  }
+
+  /** Display-only, e.g. "ABC466 C". */
+  sourceLabel(contest, problem) {
+    return `${String(contest.id).toUpperCase()} ${problem.index}`;
+  }
+
+  filterGroups = [{ key: "atcoder", label: "AtCoder" }];
+
+  filterKey() {
+    return "atcoder";
+  }
+
+  /** Nothing about an AtCoder round changes how its row should be read. */
+  contestFlags() {
+    return [];
+  }
+
+  contestLabel() {
+    return "AtCoder contest";
+  }
+
+  /** Already a code, not a number — no "#" needed to say so. */
+  contestIdLabel(contest) {
+    return String(contest.id);
+  }
+
+  /**
+   * Keyed on the task id, not contest + index: the same problem appears in
+   * several contests, and solving it once should clear it everywhere.
+   */
+  solvedKey(contest, problem) {
+    return `atcoder:${problem?.problemId ?? `${contest.id}-${problem?.index}`}`;
+  }
+
+  problemKey(contest, problem) {
+    return this.solvedKey(contest, problem);
+  }
+
+  /* Chart slot — blue. AtCoder brands achromatically, so the slot is free.
+     A validated categorical set checked together against the dark surface;
+     changing one means re-validating all of them. No rank colours: AtCoder
+     has its own scheme, and borrowing Codeforces' would attach its meaning to
+     an AtCoder number. Ratings render neutral. */
+  chartColor = "#3987e5";
+
+  capabilities = {
+    // AtCoder publishes no problem tags at all — not "none yet", none ever —
+    // so the stats panel drops its tag section rather than heading an empty one.
+    publishesTags: false,
+    // AtCoder publishes no difficulty either, so every rating here is fitted
+    // locally over the contest's own standings. A leftover null is therefore
+    // a fault, not a fact about the problem; a field that could not be read
+    // is `sourceUnreachable` and waits.
+    canEstimate: true,
+  };
+
+  // ── the work ──────────────────────────────────────────────────────────
 
   /**
    * Confirms the handle exists, reads its rating, and checks it is yours where
@@ -221,4 +307,11 @@ export class AtCoder extends Platform {
     }
     return resolved;
   }
+}
+
+function subtypeFor(contestId) {
+  for (const [pattern, value] of SUBTYPES) {
+    if (pattern.test(contestId)) return value;
+  }
+  return "OTHER";
 }

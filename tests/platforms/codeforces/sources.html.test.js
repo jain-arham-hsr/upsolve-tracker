@@ -16,12 +16,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const { GymSources } = await import("../../../core/platforms/codeforces/sources.js");
+const { CodeforcesSources } = await import("../../../core/platforms/codeforces/sources.js");
 
-const summariseSubmissions = (rows) => GymSources.summariseSubmissions(rows);
+const summariseSubmissions = (rows) => CodeforcesSources.summariseSubmissions(rows);
 /** A real source with the one API method stubbed, the way every Codeforces test injects. */
 const fetchContestSubmissions = (service, contestId) =>
-  Object.assign(new GymSources("k", "s"), service).contestSubmissions(contestId);
+  Object.assign(new CodeforcesSources("k", "s"), service).contestSubmissions(contestId);
 
 const FIXTURE = JSON.parse(
   readFileSync(new URL("../../fixtures/gym-standings-hidden.json", import.meta.url)),
@@ -199,8 +199,8 @@ import { DOMParser } from "linkedom";
 globalThis.DOMParser = DOMParser;
 
 
-const CodeforcesHttp = new GymSources("k", "s");
-const resetHttpState = (ms) => GymSources.reset(ms);
+const CodeforcesHttp = new CodeforcesSources("k", "s");
+const resetHttpState = (ms) => CodeforcesSources.reset(ms);
 
 function stubFetch(handler) {
   const calls = [];

@@ -5,8 +5,9 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { atcoder } from "../../../core/platforms/atcoder/descriptor.js";
 import { matchContestUrl, getPlatform } from "../../../core/platforms/registry.js";
+
+const atcoder = getPlatform("atcoder");
 
 test("contest URLs are recognised, including non-numeric ids", () => {
   for (const [url, id, subtype] of [

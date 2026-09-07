@@ -135,17 +135,13 @@ test("no adapter throws a bare error where it should answer with a status", asyn
   // Acquisition — and therefore every gate — lives in `platform.js#fetchContest`; the
   // base in `platform.js` only passes a status through. So this is where the
   // vocabulary has to appear.
-  // Every platform's own class, wherever its folder sits: the one beside a
-  // descriptor that carries an id, counted once per registered platform since
-  // one site's descriptor.js may export two.
+  // Every platform's class, wherever its folder sits — every platform.js under
+  // core/platforms/ except the abstract base.
   let checked = 0;
   for (const file of sourceFiles(path.join(ROOT, "core/platforms"))) {
     if (path.basename(file) !== "platform.js") continue;
-    const descriptor = path.join(path.dirname(file), "descriptor.js");
-    if (!readdirSync(path.dirname(file)).includes("descriptor.js")) continue;
-    const ids = Object.values(await import(descriptor)).filter((value) => value && "id" in value);
-    if (ids.length === 0) continue;
-    checked += ids.length;
+    if (file === path.join(ROOT, "core/platforms", "platform.js")) continue;
+    checked++;
     const src = readFileSync(file, "utf8");
     const imported = /from\s+"(\.\.\/)+contest-status\.js"/.test(src);
     assert.ok(imported, `${path.relative(ROOT, file)} does not use the shared vocabulary`);

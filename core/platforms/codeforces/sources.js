@@ -1,13 +1,14 @@
 /**
- * Everything both Codeforces platforms read from Codeforces.
+ * Everything the extension reads from Codeforces: one class, both platforms.
  *
- * `CodeforcesSources` holds the key pair, signs each call (SHA-512 over
- * `rand/method?sortedParams#secret`) and reads the routes both platforms use.
- * `OfficialSources` adds the routes an official round reads — all JSON, one of
- * them deliberately unsigned — and `GymSources` the routes a gym reads,
- * including the one page a hidden-standings gym still has to scrape. So a
- * signing fix lands in one place, and `tests/platforms/codeforces/sources.test.js`
- * pins the string that is hashed.
+ * It holds the key pair, signs each call (SHA-512 over
+ * `rand/method?sortedParams#secret`), and reads every route — the ones an
+ * official round needs, all JSON and one deliberately unsigned; the ones a
+ * gym needs, including the one page a hidden-standings gym still has to
+ * scrape; and what the account needs, which is what `identity`, `accepted`
+ * and `fromSettings` answer for the platforms' defaults. A signing fix lands
+ * in one place, and `tests/platforms/codeforces/sources.test.js` pins the
+ * string that is hashed.
  *
  * One instance per key pair, not one per platform: `buildSession` builds it
  * from settings, and Settings builds a second to check credentials you have
@@ -17,7 +18,8 @@
 import { Source } from "../source.js";
 import { createSiteClient } from "../../services/site-client.js";
 import { withTtlCache } from "../../services/ttl-cache.js";
-import { codeforcesGyms } from "./descriptor.js";
+import { site } from "./site.js";
+import { computeTeamRating } from "../../rating-models/team-rating.js";
 import { ProblemsPage } from "./scrapers/problems-page.js";
 
 /**
@@ -45,6 +47,74 @@ const signed = createSiteClient({
   refusal: () => null,
 });
 
+/**
+ * problemset.problems is ~2 MB and an add reads it twice: once to ask whether
+ * Codeforces has published the contest, once to apply the ratings it carries.
+ * Short-lived on purpose — it is a publication check, and a stale "not
+ * published" would strand a contest for the length of the window.
+ */
+const PROBLEMSET_TTL_MS = 60 * 1000;
+
+/**
+ * The second client, for the one page this platform still reads.
+ *
+ * Separate from `signed` because it is a different site surface with different
+ * rules: it needs the session cookie and the page transport, Cloudflare
+ * challenges it, and its throttling is tuned against the live HTML rather than
+ * the API's published limit.
+ *
+ * **Do not shorten these delays when optimising.** `measureFrom: "end"` is
+ * load-bearing for the same reason: it waits the full gap after each request
+ * finishes rather than letting a slow page count towards the next gap.
+ * `tests/request-pacer.test.js` fails if that is collapsed.
+ */
+/** Tuned against the live site; do not shorten when optimising. */
+const PAGE_GAP_MS = [1000, 2500];
+const COOLDOWN = { everyNth: 15, gapMs: [6000, 12000] };
+
+const BLOCKED =
+  "Codeforces is blocking requests. Please visit codeforces.com in your browser and try again.";
+
+const html = createSiteClient({
+  // Routed through a Codeforces tab when one is open, so the request carries the
+  // session and Cloudflare sees the user rather than a stranger. Falls back to a
+  // direct fetch otherwise, which still reads anything public.
+  site,
+  pacer: {
+    gapMs: PAGE_GAP_MS,
+    measureFrom: "end",
+    cooldown: COOLDOWN,
+    onWait: ({ count, ms, isCooldown }) => {
+      const seconds = (ms / 1000).toFixed(2);
+      if (isCooldown) {
+        // `info`, not `warn`. chrome://extensions collects warnings alongside
+        // errors, so a normal add used to file a row there every 15 requests.
+        console.info(`[Codeforces] Cooldown threshold reached. Pausing for ${seconds}s…`);
+      } else {
+        console.log(`[Codeforces] Request ${count}: waiting ${seconds}s`);
+      }
+    },
+  },
+
+  /**
+   * Cloudflare answers a challenge two ways, and both must be caught: a 403
+   * with no useful body, or a 200 whose body is the interstitial. Measured
+   * live — `cf-mitigated: challenge`, a page of scripts pointing at
+   * challenges.cloudflare.com — so this is not a heuristic.
+   *
+   * Flagged rather than thrown bare. `contest-status.js` defines
+   * `sourceUnreachable` as exactly this ("we failed to ask — network, 403,
+   * anything"), but until the flag existed nothing converted the throw into
+   * that status, so a challenge failed the add outright and was never retried.
+   */
+  refusal({ response, body }) {
+    if (response.status !== 403 && !body.includes("Just a moment")) return null;
+    return Object.assign(new Error(BLOCKED), { isSourceUnreachable: true });
+  },
+});
+
+const USERS_PER_CALL = 250;
+
 export class CodeforcesSources extends Source {
   constructor(apiKey, apiSecret) {
     super({ client: signed, origin: ORIGIN });
@@ -63,13 +133,6 @@ export class CodeforcesSources extends Source {
     return this._callMethod("user.info", { handles: handles.join(";") });
   }
 
-  /**
-   * Test seam for the shared client. Takes a spacing because proving the API
-   * is paced needs an observable gap.
-   */
-  static reset(spacingMs = 0) {
-    signed.reset(spacingMs);
-  }
 
   /**
    * Applies the tags and the rating Codeforces attaches to a contest's
@@ -161,21 +224,9 @@ export class CodeforcesSources extends Source {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
   }
-}
 
-// ---------------------------------------------------------------------------
-// Official rounds
-// ---------------------------------------------------------------------------
+  // ── official rounds ───────────────────────────────────────────────────
 
-/**
- * problemset.problems is ~2 MB and an add reads it twice: once to ask whether
- * Codeforces has published the contest, once to apply the ratings it carries.
- * Short-lived on purpose — it is a publication check, and a stale "not
- * published" would strand a contest for the length of the window.
- */
-const PROBLEMSET_TTL_MS = 60 * 1000;
-
-export class OfficialSources extends CodeforcesSources {
   // One slot, not one per instance: the problemset is the same ~2 MB response
   // whoever asks, and Settings builds a second instance to check typed
   // credentials. Not `this.memo`, which is per-instance for that reason.
@@ -216,91 +267,28 @@ export class OfficialSources extends CodeforcesSources {
     return data.result;
   }
 
-  /** Contest metadata in bulk, ~400 KB. Official rounds only. */
-  async contestList() {
-    return this._callMethod("contest.list", {});
+  /**
+   * Contest metadata in bulk, ~400 KB. Official rounds by default; gyms are a
+   * separate list, and private gyms and mashups (the 6xxxxx ids) are absent
+   * from it entirely — those are dated from `standings.contest.startTimeSeconds`
+   * at add time instead.
+   */
+  async contestList({ gym = false } = {}) {
+    return this._callMethod("contest.list", gym ? { gym: true } : {});
   }
 
   /** The entire public problemset, ~2 MB, memoised for a minute. */
   async problemsetProblems() {
-    return OfficialSources.#problemset("", this);
+    return CodeforcesSources.#problemset("", this);
   }
 
   /** Test seam, and the way a retry gets a genuinely fresh read. */
   static clearProblemsetCache() {
-    OfficialSources.#problemset.clear();
+    CodeforcesSources.#problemset.clear();
   }
 
-  /** Test seam: the problemset memo and the shared client. */
-  static reset(spacingMs = 0) {
-    OfficialSources.#problemset.clear();
-    CodeforcesSources.reset(spacingMs);
-  }
-}
+  // ── gyms ──────────────────────────────────────────────────────────────
 
-// ---------------------------------------------------------------------------
-// Gyms
-// ---------------------------------------------------------------------------
-
-/**
- * The second client, for the one page this platform still reads.
- *
- * Separate from `signed` because it is a different site surface with different
- * rules: it needs the session cookie and the page transport, Cloudflare
- * challenges it, and its throttling is tuned against the live HTML rather than
- * the API's published limit.
- *
- * **Do not shorten these delays when optimising.** `measureFrom: "end"` is
- * load-bearing for the same reason: it waits the full gap after each request
- * finishes rather than letting a slow page count towards the next gap.
- * `tests/request-pacer.test.js` fails if that is collapsed.
- */
-/** Tuned against the live site; do not shorten when optimising. */
-const PAGE_GAP_MS = [1000, 2500];
-const COOLDOWN = { everyNth: 15, gapMs: [6000, 12000] };
-
-const BLOCKED =
-  "Codeforces is blocking requests. Please visit codeforces.com in your browser and try again.";
-
-const html = createSiteClient({
-  // Routed through a Codeforces tab when one is open, so the request carries the
-  // session and Cloudflare sees the user rather than a stranger. Falls back to a
-  // direct fetch otherwise, which still reads anything public.
-  site: codeforcesGyms,
-  pacer: {
-    gapMs: PAGE_GAP_MS,
-    measureFrom: "end",
-    cooldown: COOLDOWN,
-    onWait: ({ count, ms, isCooldown }) => {
-      const seconds = (ms / 1000).toFixed(2);
-      if (isCooldown) {
-        // `info`, not `warn`. chrome://extensions collects warnings alongside
-        // errors, so a normal add used to file a row there every 15 requests.
-        console.info(`[Codeforces] Cooldown threshold reached. Pausing for ${seconds}s…`);
-      } else {
-        console.log(`[Codeforces] Request ${count}: waiting ${seconds}s`);
-      }
-    },
-  },
-
-  /**
-   * Cloudflare answers a challenge two ways, and both must be caught: a 403
-   * with no useful body, or a 200 whose body is the interstitial. Measured
-   * live — `cf-mitigated: challenge`, a page of scripts pointing at
-   * challenges.cloudflare.com — so this is not a heuristic.
-   *
-   * Flagged rather than thrown bare. `contest-status.js` defines
-   * `sourceUnreachable` as exactly this ("we failed to ask — network, 403,
-   * anything"), but until the flag existed nothing converted the throw into
-   * that status, so a challenge failed the add outright and was never retried.
-   */
-  refusal({ response, body }) {
-    if (response.status !== 403 && !body.includes("Just a moment")) return null;
-    return Object.assign(new Error(BLOCKED), { isSourceUnreachable: true });
-  },
-});
-
-export class GymSources extends CodeforcesSources {
   /**
    * The one page this platform reads, through the HTML client above. A method,
    * so a test injects a page the same way it injects an API answer: by
@@ -338,19 +326,10 @@ export class GymSources extends CodeforcesSources {
     return this._callMethod("contest.status", { contestId, from, count });
   }
 
-  /**
-   * Contest metadata in bulk, for gyms. Private gyms and mashups (the 6xxxxx
-   * ids) are absent from this list; those are dated from
-   * `standings.contest.startTimeSeconds` at add time instead.
-   */
-  async contestList() {
-    return this._callMethod("contest.list", { gym: true });
-  }
 
   /**
    * Every submission to a contest, paged.
    *
-   * @param {GymSources} sources
    * @param {string|number} contestId
    * @returns {Promise<object[]>}
    */
@@ -471,12 +450,126 @@ export class GymSources extends CodeforcesSources {
     return ProblemsPage.scrape(await this.page(`https://codeforces.com${path}`), { contestPath: path });
   }
 
-  /** Test seam: both clients, since a gym add may touch either. */
+  // ── the account ───────────────────────────────────────────────────────
+
+  /**
+   * The source a session carries, from a key pair. One instance per key pair,
+   * not one per platform: Settings builds a second to check credentials you
+   * have typed but not saved, and both share the signed client above.
+   *
+   * @throws when the extension has not been configured yet.
+   */
+  static fromSettings(values) {
+    if (!values.api_key || !values.api_secret) {
+      throw new Error(
+        "No API key set yet. Open Settings and add your Codeforces handle, key and secret.",
+      );
+    }
+    return new CodeforcesSources(values.api_key, values.api_secret);
+  }
+
+  /**
+   * What `user.info` says about a handle: its canonical casing and rating, or
+   * null when Codeforces does not know it. Codeforces has no "who am I"
+   * endpoint, so this verifies that the handle exists, not that it is yours.
+   */
+  async identity(handle) {
+    const users = await this.usersInfo([handle]);
+    const user = users?.[0];
+    if (!user?.handle) return null;
+    return {
+      // Codeforces' own casing, so "Tourist" over "tourist" is not a new account.
+      username: user.handle,
+      rating: typeof user.rating === "number" ? user.rating : null,
+    };
+  }
+
+  /** The accepted pairs in the whole account's `user.status`, in one call. */
+  async accepted(handle) {
+    const submissions = await this.userStatus(handle);
+    return submissions
+      .filter((submission) => submission.verdict === "OK")
+      .map((submission) => ({
+        contest: { id: submission.problem.contestId },
+        problem: { index: submission.problem.index },
+      }));
+  }
+
+  /**
+   * Handles to one effective rating per party — what both platforms' fields
+   * end in. Each platform decides *which* parties; everything below the
+   * handles is one path, so the two cannot drift: the same `user.info`
+   * chunking, the same team collapsing.
+   *
+   * @param {string[][]} parties - member handles, one array per party
+   * @returns {Promise<number[]>} one rating per party, in order
+   */
+  async partyRatings(parties) {
+    const allHandles = [...new Set(parties.flat().filter(Boolean))];
+
+    console.log(`[Codeforces] Found ${allHandles.length} unique handles across ${parties.length} parties.`);
+    if (allHandles.length === 0) return [];
+
+    const handleToRating = {};
+    for (let i = 0; i < allHandles.length; i += USERS_PER_CALL) {
+      try {
+        const usersInfo = await this.usersInfo(allHandles.slice(i, i + USERS_PER_CALL));
+        usersInfo?.forEach((u) => {
+          handleToRating[u.handle] = u.rating ?? 800;
+        });
+      } catch {
+        console.warn(`[Codeforces] Chunk ${Math.floor(i / USERS_PER_CALL) + 1} rejected. Skipping.`);
+      }
+    }
+
+    // An unknown handle counts as 800 rather than dropping out, or a party whose
+    // members all failed to resolve would collapse to the search's floor and drag
+    // the whole field down with it.
+    return parties.map((members) => {
+      const ratings = members.map((handle) => handleToRating[handle] ?? 800);
+      return computeTeamRating(ratings.length > 0 ? ratings : [800]);
+    });
+  }
+
+  /**
+   * The problems a `contest.standings` response describes, in the stored
+   * shape: blank, then Codeforces' published ratings and tags applied, then
+   * in-contest solves counted from the rows.
+   *
+   * @throws flagged `isSourceUnreachable` when the response names no problems —
+   *   there is nothing to store, and an unreachable API is a reason to retry.
+   */
+  static problemsFrom(contestId, standings) {
+    const problems = (standings?.problems ?? []).map((problem) => ({
+      index: problem.index,
+      name: problem.name,
+      rating: null,
+      ratingSource: null,
+      officialSolves: 0,
+      solved: false,
+      tags: [],
+    }));
+
+    if (problems.length === 0) {
+      throw Object.assign(
+        new Error(`Codeforces returned no problems for ${contestId}, so there is nothing to store.`),
+        { isSourceUnreachable: true },
+      );
+    }
+
+    CodeforcesSources.applyStandingsProblemData(standings, problems);
+    CodeforcesSources.populateSolveCounts(standings, problems);
+    return problems;
+  }
+
+  /** Test seam: both clients and the problemset memo. */
   static reset(spacingMs = 0) {
+    CodeforcesSources.#problemset.clear();
+    signed.reset(spacingMs);
     html.reset(spacingMs);
-    CodeforcesSources.reset(spacingMs);
   }
 }
+
 
 const OFFICIAL_PARTICIPANT_TYPES = new Set(["CONTESTANT", "VIRTUAL"]);
 

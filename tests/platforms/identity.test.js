@@ -10,10 +10,14 @@
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { getAdapter } from "../../core/platforms/platforms.js";
+import { getPlatform } from "../../core/platforms/registry.js";
+import { CodeforcesSources } from "../../core/platforms/codeforces/sources.js";
 
-const codechef = getAdapter("codechef");
-const codeforces = getAdapter("codeforces-official");
+/** A real source with the one API answer stubbed, the way every Codeforces test injects. */
+const answering = (usersInfo) => Object.assign(new CodeforcesSources("k", "s"), { usersInfo });
+
+const codechef = getPlatform("codechef");
+const codeforces = getPlatform("codeforces-official");
 
 beforeEach(() => codechef.reset());
 
@@ -57,7 +61,7 @@ test("CodeChef accepts a matching session, with no extra request", async () => {
 });
 
 test("Codeforces refuses a handle the API doesn't return", async () => {
-  const session = { handle: "nope", sources: { async usersInfo() { return []; } } };
+  const session = { handle: "nope", sources: answering(async () => []) };
   await assert.rejects(() => codeforces.verifyIdentity(session), /doesn't recognise/);
 });
 
@@ -66,7 +70,7 @@ test("Codeforces takes the API's own casing, so case isn't read as a new account
   // and needlessly clear every solved flag.
   const session = {
     handle: "TOURIST",
-    sources: { async usersInfo() { return [{ handle: "tourist", rating: 3800 }]; } },
+    sources: answering(async () => [{ handle: "tourist", rating: 3800 }]),
   };
   assert.deepEqual(await codeforces.verifyIdentity(session), {
     username: "tourist", rating: 3800,
@@ -78,7 +82,7 @@ test("an unrated Codeforces account verifies, with a null rating", async () => {
   // zero would read as a real rating and make every problem look impossible.
   const session = {
     handle: "newcomer",
-    sources: { async usersInfo() { return [{ handle: "newcomer" }]; } },
+    sources: answering(async () => [{ handle: "newcomer" }]),
   };
   assert.deepEqual(await codeforces.verifyIdentity(session), {
     username: "newcomer", rating: null,

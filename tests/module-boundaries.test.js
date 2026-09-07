@@ -74,7 +74,7 @@ const ALLOWED = {
   "core/settings/schema.js":
     "The settings page is declared by hand, and verify.adapter has to name the " +
     "platform that runs each section's check. This is the third allowed " +
-    "enumerator alongside registry.js and platforms.js, and for the same reason: " +
+    "enumerator alongside registry.js, and for the same reason: " +
     "it is declarative data, not a branch. It is deliberately the *only* file " +
     "under core/settings/ with the exception — store.js and the options page " +
     "route by slug and by section, and still fail this test if they name a " +
@@ -114,21 +114,20 @@ const importsOf = (source) =>
 const PLATFORM_FOLDERS = new Set(["scrapers"]);
 
 /**
- * A folder under core/platforms/ is a **site**, and a site registers one or
- * more platforms: its platform.js exports the class each of them was built
- * from. Codeforces registers two — official rounds and gyms — from one
- * folder; the other two register one. Anything else is an offender: a folder
- * with no platform.js, or a class exported there that no platform is built
- * from.
+ * Two words, each meaning one thing. A **site** is a host the extension talks
+ * to: a folder with `site.js`, `sources.js`, its scrapers and its fit. A
+ * **platform** is a registered kind of contest on a site: a folder whose
+ * `platform.js` exports the class a registered instance was built from,
+ * which is the site folder itself (AtCoder, CodeChef) or a direct child of it
+ * (Codeforces' official/ and gyms/). Anything else is an offender.
  *
  * Classified once, at load, because most of the checks below need to know
  * where a platform lives without assuming its folder is named after its id.
  */
-const { getAdapter } = await import("../core/platforms/platforms.js");
 const { Platform } = await import("../core/platforms/platform.js");
-const INSTANCES = listPlatforms().map((platform) => getAdapter(platform.id));
+const INSTANCES = listPlatforms();
 
-/** Folders under core/platforms/ that could hold a site. */
+/** Folders under core/platforms/ that could hold a site or a platform. */
 function candidateDirs(root) {
   const out = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
@@ -140,46 +139,57 @@ function candidateDirs(root) {
 }
 
 async function classifyFolders() {
-  const platforms = new Map();
   const sites = [];
+  const platforms = new Map();
   const offenders = [];
 
   for (const dir of candidateDirs(PLATFORMS)) {
     const relative = path.relative(ROOT, dir);
-    if (!readdirSync(dir).includes("platform.js")) {
-      offenders.push(`${relative} has no platform.js`);
+    const names = readdirSync(dir);
+    const isSite = names.includes("site.js");
+    const hasClass = names.includes("platform.js");
+    if (isSite) sites.push(relative);
+
+    if (!hasClass) {
+      if (!isSite) offenders.push(`${relative} is neither a site nor a platform`);
       continue;
     }
 
     const classes = Object.values(await import(path.join(dir, "platform.js"))).filter(
       (value) => typeof value === "function" && value.prototype instanceof Platform,
     );
-    if (classes.length === 0) {
-      offenders.push(`${relative}/platform.js exports no Platform class`);
+    if (classes.length !== 1) {
+      offenders.push(`${relative}/platform.js exports ${classes.length} Platform classes, expected one`);
+      continue;
+    }
+    const builtFrom = INSTANCES.filter((instance) => instance.constructor === classes[0]);
+    if (builtFrom.length !== 1) {
+      offenders.push(`${relative}/platform.js exports ${classes[0].name}, which ${builtFrom.length} platforms are built from`);
       continue;
     }
 
-    sites.push(relative);
-    for (const cls of classes) {
-      const builtFrom = INSTANCES.filter((instance) => instance.constructor === cls);
-      if (builtFrom.length !== 1) {
-        offenders.push(`${relative}/platform.js exports ${cls.name}, which ${builtFrom.length} platforms are built from`);
-        continue;
-      }
-      platforms.set(builtFrom[0].id, relative);
+    // A platform folder is its site, or a direct child of one.
+    const siteDir = isSite ? dir : path.dirname(dir);
+    if (!readdirSync(siteDir).includes("site.js") || (!isSite && path.dirname(siteDir) !== PLATFORMS)) {
+      offenders.push(`${relative} is a platform folder but not a site or a direct child of one`);
+      continue;
     }
+    platforms.set(builtFrom[0].id, { folder: relative, site: path.relative(ROOT, siteDir) });
   }
 
-  return { platforms, sites, offenders };
+  return { sites, platforms, offenders };
 }
 
 const FOLDERS = await classifyFolders();
 
-/** Absolute folder of a registered platform. */
-const folderOf = (id) => path.join(ROOT, FOLDERS.platforms.get(id));
+/** Absolute folder of a registered platform's class. */
+const folderOf = (id) => path.join(ROOT, FOLDERS.platforms.get(id).folder);
+
+/** Absolute folder of the site a registered platform belongs to. */
+const siteOf = (id) => path.join(ROOT, FOLDERS.platforms.get(id).site);
 
 /** Every site folder, once. */
-const siteFolders = () => [...new Set(FOLDERS.platforms.values())].map((folder) => path.join(ROOT, folder));
+const siteFolders = () => FOLDERS.sites.map((folder) => path.join(ROOT, folder));
 
 test("shared code covers the whole of core/, not just its top level", () => {
   const files = sharedFiles();
@@ -200,9 +210,9 @@ test("nothing outside core/platforms/ imports a specific platform's code", () =>
 
   for (const file of sharedFiles()) {
     for (const spec of importsOf(read(file))) {
-      // registry.js and platforms.js are the agnostic entry points and are
+      // registry.js is the agnostic entry point and is
       // exactly what shared code should be reaching for.
-      if (/platforms\/(?!registry\.js|platforms\.js)[^/]+\/.+/.test(spec)) {
+      if (/platforms\/(?!registry\.js)[^/]+\/.+/.test(spec)) {
         offenders.push(`${file} → ${spec}`);
       }
     }
@@ -211,7 +221,7 @@ test("nothing outside core/platforms/ imports a specific platform's code", () =>
   assert.deepEqual(
     offenders,
     [],
-    "shared code must go through getAdapter()/getPlatform(), not reach into a platform folder",
+    "shared code must go through getPlatform()/getPlatform(), not reach into a platform folder",
   );
 });
 
@@ -399,25 +409,24 @@ test("the retired names survive nowhere", () => {
  * class inside the same files; what the site publishes differently is each
  * platform's own class.
  */
-test("every folder under core/platforms/ is a site, and platforms.js says what it registers", async () => {
-  assert.deepEqual(FOLDERS.offenders, [], "a folder that registers nothing has nowhere to be");
+test("every folder under core/platforms/ is a site or a platform of one, and the registry says which", () => {
+  assert.deepEqual(FOLDERS.offenders, [], "a folder that is neither has nowhere to be");
 
   assert.deepEqual(
     [...FOLDERS.platforms.keys()].sort(),
-    listPlatforms().map((platform) => platform.id).sort(),
+    INSTANCES.map((platform) => platform.id).sort(),
     "every registered platform has exactly one folder",
   );
+  assert.deepEqual([...FOLDERS.sites].sort(), ["core/platforms/atcoder", "core/platforms/codechef", "core/platforms/codeforces"]);
 
-  // A site's descriptor.js exports exactly the descriptors of the platforms
-  // it registers, each with an id — nothing partial, nothing extra.
-  for (const folder of siteFolders()) {
-    const exported = Object.values(await import(path.join(folder, "descriptor.js")));
-    const ids = exported.map((value) => value?.id).sort();
-    const registered = [...FOLDERS.platforms].filter(([, f]) => path.join(ROOT, f) === folder).map(([id]) => id).sort();
-    assert.deepEqual(ids, registered, `${path.relative(ROOT, folder)}/descriptor.js does not export exactly its platforms' descriptors`);
+  // Every platform of a site took the site on: same origin, host permission
+  // and mark, which is what `static site` and the spread in the base are for.
+  for (const platform of INSTANCES) {
+    const site = platform.constructor.site;
+    assert.equal(platform.origin, site.origin, `${platform.id} does not carry its site's origin`);
+    assert.deepEqual(platform.hostPermissions, site.hostPermissions, `${platform.id} does not carry its site's hostPermissions`);
+    assert.equal(platform.icon, site.icon, `${platform.id} does not carry its site's icon`);
   }
-
-  assert.equal(FOLDERS.sites.length, 3, `expected three sites, found ${FOLDERS.sites.join(", ")}`);
 });
 
 /** A class's source text, from its declaration to its column-zero closing brace. */
@@ -430,23 +439,11 @@ function classBody(source, name) {
 test("the official Codeforces platform reaches no HTML at all", () => {
   // The reason the split is worth having, asserted structurally rather than by
   // counting requests. An official add is pure JSON API: it cannot be
-  // Cloudflare-challenged, and needs no tab open on codeforces.com. Both
-  // platforms share a folder now, so this reads the two official classes
-  // rather than a folder: neither may reach the page seam, the problems page
-  // or a scraper.
-  const platform = stripComments(readFileSync(path.join(folderOf("codeforces-official"), "platform.js"), "utf8"));
-  const sources = stripComments(readFileSync(path.join(folderOf("codeforces-official"), "sources.js"), "utf8"));
-  const offenders = [];
-
-  for (const [name, body] of [
-    ["CodeforcesOfficial", classBody(platform, "CodeforcesOfficial")],
-    ["OfficialSources", classBody(sources, "OfficialSources")],
-  ]) {
-    for (const forbidden of ["page(", "problemsPage", "scrape", "DOMParser"]) {
-      if (body.includes(forbidden)) offenders.push(`${name} uses ${forbidden}`);
-    }
-  }
-
+  // Cloudflare-challenged, and needs no tab open on codeforces.com. The two
+  // platforms share a source, so this reads the official class's file: it
+  // may not reach the page seam, the problems page or a scraper.
+  const code = stripComments(readFileSync(path.join(folderOf("codeforces-official"), "platform.js"), "utf8"));
+  const offenders = ["page(", "problemsPage", "scrapers/", "DOMParser"].filter((name) => code.includes(name));
   assert.deepEqual(offenders, [], "the official path must stay pure JSON API");
 });
 
@@ -462,7 +459,7 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   // had started scraping again, and no other test would notice: the result is
   // correct either way and only the request count differs.
   const sources = stripComments(
-    readFileSync(path.join(folderOf("codeforces-gyms"), "sources.js"), "utf8"),
+    readFileSync(path.join(siteOf("codeforces-gyms"), "sources.js"), "utf8"),
   );
 
   // Any method on the client, not `getDocument` specifically. Pinning the
@@ -495,7 +492,7 @@ test("a platform has estimator.js iff its descriptor claims canEstimate", () => 
   const offenders = [];
 
   for (const platform of listPlatforms()) {
-    const has = readdirSync(folderOf(platform.id)).includes("estimator.js");
+    const has = readdirSync(siteOf(platform.id)).includes("estimator.js");
     const claimed = platform.capabilities.canEstimate === true;
     if (has === claimed) continue;
     offenders.push(
@@ -582,57 +579,43 @@ test("nothing in a scrapers/ folder fetches", () => {
   assert.equal(scrapers.length, 6, `expected six scrapers, found ${scrapers.join(", ")}`);
 });
 
-test("a site client routes through its own platform's descriptor", () => {
+test("a site client routes through its own site", () => {
   // `createSiteClient({ site })` derives the tab-routing match patterns from the
-  // descriptor's `hostPermissions`, which replaced three platforms each spelling
-  // out `createPageFetch({ matchPatterns: X.hostPermissions })`.
+  // site's `hostPermissions`. Naming the *wrong* site is the failure worth
+  // pinning, because nothing else notices it: there is no matching tab, so
+  // every request falls back to a direct fetch and still succeeds — it just
+  // stops carrying the session, and only the session-gated routes break, the
+  // same way they do when the user has no tab open. So the only `site` a
+  // sources.js may hand the client is the one it imports from its own
+  // `site.js`.
   //
-  // Naming the *wrong* descriptor is the failure worth pinning, because nothing
-  // else notices it. There is no matching tab, so every request falls back to a
-  // direct fetch and still succeeds — it just stops carrying the session, so
-  // only the session-gated routes break, and they break exactly the way they do
-  // when the user has no tab open, which is a supported state that reports
-  // itself politely. Confirmed by pointing AtCoder's client at Codeforces:
-  // all 420 tests stayed green.
-  //
-  // A missing `site` throws from `createSiteClient` itself, so that half needs
-  // no test here.
+  // A client with no `site` is deliberate in exactly one place: Codeforces'
+  // signed API passes a direct `fetchImpl` instead, because it works
+  // anonymously and routing it through a tab would add a dependency it does
+  // not need. Anywhere else, a missing `site` is a direct fetch that quietly
+  // stops carrying the session — which `createSiteClient` itself refuses.
   const offenders = [];
   const clients = [];
 
   for (const file of sourceFiles(PLATFORMS, [".js"])) {
-    {
-      const code = stripComments(readFileSync(file, "utf8"));
-      if (!code.includes("createSiteClient(")) continue;
+    const code = stripComments(readFileSync(file, "utf8"));
+    if (!code.includes("createSiteClient(")) continue;
+    const relative = path.relative(ROOT, file);
+    clients.push(relative);
 
-      const relative = path.relative(ROOT, file);
-      clients.push(relative);
-
-      const routed = /\bsite:\s*(\w+)/.exec(code)?.[1] ?? null;
-      const own = /import\s*\{\s*(\w+)\s*\}\s*from\s*"\.\/descriptor\.js"/.exec(code)?.[1] ?? null;
-
-      // A client with no `site` is deliberate in exactly one place: Codeforces'
-      // signed API passes a direct `fetchImpl` instead, because it works
-      // anonymously and routing it through a tab would add a dependency it does
-      // not need. Anywhere else, a missing `site` is the silent bug this test
-      // exists for — a direct fetch that quietly stops carrying the session.
-      if (!routed) {
-        if (!code.includes("fetchImpl:")) {
-          offenders.push(`${relative} builds a site client with neither a site nor a fetchImpl`);
-        }
-        continue;
-      }
-      if (routed !== own) {
-        offenders.push(`${relative} routes through \`${routed}\`, not its own \`${own}\``);
-      }
+    const importsOwnSite = /import\s*\{\s*site\s*\}\s*from\s*"\.\/site\.js"/.test(code);
+    for (const call of code.split("createSiteClient(").slice(1)) {
+      const head = call.slice(0, call.indexOf("refusal"));
+      const routed = /\bsite\s*[,:]/.test(head);
+      if (!routed && !head.includes("fetchImpl:")) offenders.push(`${relative} builds a client with neither a site nor a fetchImpl`);
+      if (routed && !importsOwnSite) offenders.push(`${relative} routes through a site it did not import from ./site.js`);
+      if (/\bsite:\s*(?!site\b)\w+/.test(head)) offenders.push(`${relative} routes through something other than its own site`);
     }
   }
 
   assert.deepEqual(offenders, [], "a client must speak to the site it belongs to");
-
-  // Or a rename could empty the loop and pass. Three files: AtCoder, CodeChef,
-  // and Codeforces, whose one sources.js builds both the signed API client and
-  // the HTML client a hidden gym needs.
+  // Three files: AtCoder, CodeChef, and Codeforces, whose one sources.js builds
+  // both the signed API client and the HTML client a hidden gym needs.
   assert.equal(clients.length, 3, `expected three site clients, found ${clients.join(", ")}`);
 });
 
@@ -676,33 +659,33 @@ const PLATFORM_ROOT_FILES = new Set([
   "estimator.js",
 ]);
 
-const REQUIRED = ["descriptor.js", "platform.js", "sources.js"];
+const SITE_FILES = new Set(["site.js", "sources.js", "platform.js", "estimator.js"]);
+const CHILD_FILES = new Set(["platform.js"]);
 
-test("a site's root holds only contract names", () => {
+test("a site's root holds only contract names, and a child platform's only its class", () => {
   const offenders = [];
+  const children = new Set([...FOLDERS.platforms.values()].filter((p) => p.folder !== p.site).map((p) => p.folder));
 
-  for (const folder of siteFolders().map((f) => path.relative(ROOT, f))) {
+  for (const folder of FOLDERS.sites) {
     const entries = readdirSync(path.join(ROOT, folder), { withFileTypes: true });
-    const names = entries.map((entry) => entry.name);
-
-    for (const required of REQUIRED) {
-      if (!names.includes(required)) offenders.push(`${folder} has no ${required}`);
-    }
-
+    if (!entries.some((e) => e.name === "sources.js")) offenders.push(`${folder} has no sources.js`);
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (!PLATFORM_FOLDERS.has(entry.name)) {
-          offenders.push(`${folder}/${entry.name}/ is not a known kind of folder`);
+        if (!PLATFORM_FOLDERS.has(entry.name) && !children.has(`${folder}/${entry.name}`)) {
+          offenders.push(`${folder}/${entry.name}/ is neither scrapers/ nor a platform of this site`);
         }
         continue;
       }
+      if (!SITE_FILES.has(entry.name)) {
+        offenders.push(`${folder}/${entry.name} is not a contract name — put it in scrapers/, or argue here for widening the root`);
+      }
+    }
+  }
 
-      if (!PLATFORM_ROOT_FILES.has(entry.name)) {
-        offenders.push(
-          `${folder}/${entry.name} is not a contract name — put it in ` +
-            `${[...PLATFORM_FOLDERS].map((f) => `${f}/`).join(" or ")}, or argue ` +
-            `here for widening the root`,
-        );
+  for (const folder of children) {
+    for (const entry of readdirSync(path.join(ROOT, folder), { withFileTypes: true })) {
+      if (entry.isDirectory() || !CHILD_FILES.has(entry.name)) {
+        offenders.push(`${folder}/${entry.name} — a platform under a site holds only its class`);
       }
     }
   }
@@ -757,7 +740,7 @@ test("every scraper is one, by the definition rather than by folder", async () =
   assert.equal(scrapers, 6, `expected six scrapers, found ${scrapers}`);
 });
 
-test("a sources.js exports Source classes, and at most a singleton of one", async () => {
+test("a sources.js exports one Source class, and at most a singleton of it", async () => {
   // What made "what do these have in common" hard to answer: one sources.js
   // exported a class and six free functions, another a singleton and a reset
   // seam, a third a constant. Everything a site's reads need is now on the
@@ -775,15 +758,15 @@ test("a sources.js exports Source classes, and at most a singleton of one", asyn
     const classes = Object.values(exported).filter(
       (value) => typeof value === "function" && value.prototype instanceof Source,
     );
-    if (classes.length === 0) {
-      offenders.push(`${relative} exports no Source class`);
+    if (classes.length !== 1) {
+      offenders.push(`${relative} exports ${classes.length} Source classes, expected one — a site has one set of routes`);
       continue;
     }
 
     for (const [name, value] of Object.entries(exported)) {
-      if (classes.includes(value)) continue;
-      if (name === "sources" && classes.some((cls) => value instanceof cls)) continue;
-      offenders.push(`${relative} also exports ${name} — put it on a class, or in the module that owns it`);
+      if (value === classes[0]) continue;
+      if (name === "sources" && value instanceof classes[0]) continue;
+      offenders.push(`${relative} also exports ${name} — put it on the class, or in the module that owns it`);
     }
   }
 
@@ -841,28 +824,32 @@ test("a source never answers with a status", () => {
   assert.deepEqual(offenders, []);
 });
 
-test("every descriptor declares its members in the base's order", async () => {
-  // Four descriptors read alike only if a reader finds `matchUrl` in the same
-  // place in each. The order is `DESCRIPTOR_MEMBERS`, which is also the order
-  // the Platform base asserts them in. Read off the source, since a
-  // descriptor that spreads shared pieces first cannot show it in its keys.
+test("every platform declares its describing members first, in the base's order", async () => {
+  // A platform is its own descriptor, and four classes read alike only if a
+  // reader finds `matchUrl` in the same place in each: the members in
+  // `DESCRIPTOR_MEMBERS` come first, in that order, and every hook after them.
   const { DESCRIPTOR_MEMBERS } = await import("../core/platforms/platform.js");
   const rank = new Map(DESCRIPTOR_MEMBERS.map((name, i) => [name, i]));
   const offenders = [];
 
-  // One file may hold two descriptors, so each `export const` block is read
-  // on its own.
-  for (const folder of siteFolders()) {
-    const source = stripComments(readFileSync(path.join(folder, "descriptor.js"), "utf8"));
-    for (const block of source.split(/^export const /m).slice(1)) {
-      const name = block.slice(0, block.indexOf(" "));
-      const declared = [...block.matchAll(/^  (\w+)\s*[:(]/gm)].map((m) => m[1]).filter((n) => rank.has(n));
-      const sorted = [...declared].sort((a, b) => rank.get(a) - rank.get(b));
-      if (declared.join() !== sorted.join()) offenders.push(`${name}: ${declared.join(", ")}`);
+  for (const platform of INSTANCES) {
+    const source = stripComments(readFileSync(path.join(folderOf(platform.id), "platform.js"), "utf8"));
+    const start = source.indexOf(`class ${platform.constructor.name} `);
+    const body = source.slice(start, source.indexOf("\n}\n", start));
+    const declared = [...body.matchAll(/^  (?:static\s+|async\s+)?(\w+)\s*[=(]/gm)].map((m) => m[1]);
+
+    const describing = declared.filter((n) => rank.has(n));
+    const sorted = [...describing].sort((a, b) => rank.get(a) - rank.get(b));
+    if (describing.join() !== sorted.join()) offenders.push(`${platform.id}: ${describing.join(", ")}`);
+
+    const firstHook = declared.findIndex((n) => !rank.has(n) && n !== "site" && n !== "Sources");
+    const lastDescribing = declared.map((n) => rank.has(n)).lastIndexOf(true);
+    if (firstHook !== -1 && lastDescribing > firstHook) {
+      offenders.push(`${platform.id}: ${declared[lastDescribing]} is declared after the hook ${declared[firstHook]}`);
     }
   }
 
-  assert.deepEqual(offenders, [], "declare descriptor members in DESCRIPTOR_MEMBERS order");
+  assert.deepEqual(offenders, [], "describing members first, in DESCRIPTOR_MEMBERS order; hooks after");
 });
 
 test("DOMParser is constructed in exactly one place", () => {

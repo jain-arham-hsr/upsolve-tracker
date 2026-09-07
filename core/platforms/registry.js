@@ -1,20 +1,29 @@
 /**
- * The platform registry.
+ * The platform registry: one instance per platform, and every question that
+ * depends on *where a contest came from* — URLs, keys, labels, capabilities.
  *
- * Adding a site means adding a descriptor here; nothing else should branch on
- * which platform a contest came from.
+ * A platform is its own descriptor: the class declares `id`, `matchUrl`,
+ * `solvedKey` and the rest beside the work it does, so this is the one module
+ * that enumerates platforms. Adding a site means adding its instances here;
+ * nothing else should branch on which platform a contest came from.
  *
  * Every lookup **throws** on a record with no `platform`, or one naming a
  * platform this build does not know. There is deliberately no fallback: a
  * default would file a malformed record under Codeforces and key it as
  * `undefined:1993`, and an unknown id means data from a newer version.
  */
-import { codeforcesOfficial, codeforcesGyms } from "./codeforces/descriptor.js";
-import { atcoder } from "./atcoder/descriptor.js";
-import { codechef } from "./codechef/descriptor.js";
+import { Platform } from "./platform.js";
+import { CodeforcesOfficial } from "./codeforces/official/platform.js";
+import { CodeforcesGyms } from "./codeforces/gyms/platform.js";
+import { AtCoder } from "./atcoder/platform.js";
+import { CodeChef } from "./codechef/platform.js";
 
-
-const PLATFORMS = [codeforcesOfficial, codeforcesGyms, atcoder, codechef];
+const PLATFORMS = [
+  new CodeforcesOfficial(),
+  new CodeforcesGyms(),
+  new AtCoder(),
+  new CodeChef(),
+].map(Platform.check);
 const BY_ID = new Map(PLATFORMS.map((platform) => [platform.id, platform]));
 
 export function listPlatforms() {
@@ -32,7 +41,7 @@ export function getPlatform(id) {
   return platform;
 }
 
-/** The descriptor for a stored contest record. */
+/** The platform a stored contest record belongs to. */
 export function platformOf(contest) {
   return getPlatform(contest?.platform);
 }

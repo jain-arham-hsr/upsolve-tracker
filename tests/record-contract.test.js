@@ -180,11 +180,13 @@ test("every platform expresses an accepted submission the same way", () => {
   const offenders = [];
   let builders = 0;
 
-  // Wherever `fetchAccepted` is implemented — a platform's own class, or a
-  // base shared between two platforms — it must build a contest object.
+  // Wherever an accepted pair is built — a platform's own fetchAccepted, or a
+  // source's accepted() behind the base's default — it must build a contest object.
   for (const file of walk(PLATFORMS)) {
     const code = read(file);
-    if (!/\bfetchAccepted\s*\(/.test(code) || !/(async\s+fetchAccepted|function\s+fetchAccepted)\s*\(/.test(code)) continue;
+    // The base's default delegates to the source, so it builds nothing itself.
+    if (file === path.join(PLATFORMS, "platform.js")) continue;
+    if (!/(async\s+(fetchAccepted|accepted)|function\s+fetchAccepted)\s*\(/.test(code)) continue;
     builders++;
     const relative = path.relative(PLATFORMS, file);
 

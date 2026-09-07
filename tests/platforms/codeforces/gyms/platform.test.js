@@ -14,9 +14,8 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { GymSources } = await import("../../../core/platforms/codeforces/sources.js");
-const { OfficialSources } = await import("../../../core/platforms/codeforces/sources.js");
-const { getAdapter } = await import("../../../core/platforms/platforms.js");
+const { CodeforcesSources } = await import("../../../../core/platforms/codeforces/sources.js");
+const { getPlatform } = await import("../../../../core/platforms/registry.js");
 
 /**
  * The page a hidden-standings gym reads, stubbed the way Codeforces serves it
@@ -38,12 +37,12 @@ async function acquire(platformId, Sources, contestId, fake) {
     { page: parsed, contestList: async () => [] },
     fake,
   );
-  const acquired = await getAdapter(platformId).fetchContest({ contestId, session: { sources } });
+  const acquired = await getPlatform(platformId).fetchContest({ contestId, session: { sources } });
   if (acquired.status) throw new Error(`${acquired.status}: ${acquired.reason}`);
   return { contestName: acquired.name, ...acquired, ...acquired.context };
 }
-const readSolveStats = (contestId, fake) => acquire("codeforces-gyms", GymSources, contestId, fake);
-const readOfficialStats = (contestId, fake) => acquire("codeforces-official", OfficialSources, contestId, fake);
+const readSolveStats = (contestId, fake) => acquire("codeforces-gyms", CodeforcesSources, contestId, fake);
+const readOfficialStats = (contestId, fake) => acquire("codeforces-official", CodeforcesSources, contestId, fake);
 
 const PROBLEMS = [
   ["A", "Everything Everywhere All But One"],
@@ -338,7 +337,7 @@ test("gym 712373 end to end, against its real submissions", () => {
   // page is the contest's actual contest.status response, and the numbers are
   // what the contest page shows.
   const fixture = JSON.parse(
-    readFileSync(new URL("../../fixtures/gym-standings-hidden.json", import.meta.url)),
+    readFileSync(new URL("../../../fixtures/gym-standings-hidden.json", import.meta.url)),
   );
   const REAL = [
     ["A", "Everything Everywhere All But One", 800, 12],

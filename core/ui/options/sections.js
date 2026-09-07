@@ -9,7 +9,7 @@
  * This file knows about *fields*, never about platforms: it renders whatever
  * the schema declares and puts each section's slug on the markup so the page
  * can find it again. The one platform id involved is `verify.adapter`, which is
- * a string it passes to `getAdapter()` without reading.
+ * a string it passes to `getPlatform()` without reading.
  *
  * `help` and `label` are authored in the repo, in the schema, and are injected
  * as **trusted HTML** so the Codeforces key-pair note can carry a link to

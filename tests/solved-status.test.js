@@ -6,8 +6,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applySolvedStatus } from "../core/progress-manager.js";
-import { codeforcesOfficial as codeforces } from "../core/platforms/codeforces/descriptor.js";
 import { getPlatform } from "../core/platforms/registry.js";
+
+const codeforces = getPlatform("codeforces-official");
 
 const contest = (over = {}) => ({
   id: "2193",
