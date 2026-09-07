@@ -20,6 +20,7 @@
 import { Platform } from "../platform.js";
 import { estimate } from "./estimator.js";
 import { CodeforcesSources } from "./sources.js";
+import { computeTeamRating } from "../../rating-models/team-rating.js";
 
 const HANDLE_KEY = "upsolve_tracker.handle";
 
@@ -111,6 +112,45 @@ export class CodeforcesPlatform extends Platform {
     return problems;
   }
 
+  /**
+   * Fills `contest.startTimeSeconds`, which orders the contest list, from the
+   * bulk `contest.list` each platform's Source answers with its own list.
+   * Contest ids are not chronological (2205 ran a day before 2200). A finished
+   * contest's start time never changes, so there is no re-check; ordering is
+   * cosmetic, so a failed list never breaks a sync or an add.
+   *
+   * @returns {Promise<number>} contests dated
+   */
+  async syncStartTimes(session, contests, onProgress = () => {}) {
+    const pending = contests.filter((contest) => !contest.startTimeSeconds);
+    if (pending.length === 0) return 0;
+
+    onProgress("Looking up contest dates…");
+
+    const startTimes = new Map();
+    try {
+      const list = await session.sources.contestList();
+      for (const contest of list ?? []) {
+        if (contest.startTimeSeconds) startTimes.set(String(contest.id), contest.startTimeSeconds);
+      }
+    } catch (error) {
+      console.warn("[Codeforces] contest.list failed:", error.message);
+      return 0;
+    }
+
+    let resolved = 0;
+    for (const contest of pending) {
+      const startTime = startTimes.get(String(contest.id));
+      if (startTime) {
+        contest.startTimeSeconds = startTime;
+        resolved++;
+      }
+    }
+
+    console.log(`[Codeforces] Resolved ${resolved} of ${pending.length} contest(s).`);
+    return resolved;
+  }
+
   /** Both clients are module-level, so the seam is static on the Sources class. */
   reset(spacingMs = 0) {
     this.constructor.Sources.reset(spacingMs);
@@ -133,4 +173,43 @@ export class CodeforcesPlatform extends Platform {
         problem: { index: submission.problem.index },
       }));
   }
+}
+
+const CHUNK = 250;
+
+/**
+ * Handles to one effective rating per party — what both fields end in. Each
+ * platform decides *which* parties: an official round's from `ratingChanges`
+ * or sampled standings rows, a gym's from its whole standings or from who
+ * submitted. Everything below the handles is one path, so the two cannot
+ * drift: the same `user.info` chunking, the same team collapsing.
+ *
+ * @param {string[][]} parties - member handles, one array per party
+ * @returns {Promise<number[]>} one rating per party, in order
+ */
+export async function ratePartyList(sources, parties) {
+  const allHandles = [...new Set(parties.flat().filter(Boolean))];
+
+  console.log(`[Codeforces] Found ${allHandles.length} unique handles across ${parties.length} parties.`);
+  if (allHandles.length === 0) return [];
+
+  const handleToRating = {};
+  for (let i = 0; i < allHandles.length; i += CHUNK) {
+    try {
+      const usersInfo = await sources.usersInfo(allHandles.slice(i, i + CHUNK));
+      usersInfo?.forEach((u) => {
+        handleToRating[u.handle] = u.rating ?? 800;
+      });
+    } catch {
+      console.warn(`[Codeforces] Chunk ${Math.floor(i / CHUNK) + 1} rejected. Skipping.`);
+    }
+  }
+
+  // An unknown handle counts as 800 rather than dropping out, or a party whose
+  // members all failed to resolve would collapse to the search's floor and drag
+  // the whole field down with it.
+  return parties.map((members) => {
+    const ratings = members.map((handle) => handleToRating[handle] ?? 800);
+    return computeTeamRating(ratings.length > 0 ? ratings : [800]);
+  });
 }

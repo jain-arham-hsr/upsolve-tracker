@@ -18,12 +18,13 @@
 import { Platform } from "../platform.js";
 import { atcoder } from "./descriptor.js";
 import { sources } from "./sources.js";
-import { readField } from "./field.js";
 import { estimate } from "./estimator.js";
-import { sync as syncEstimates } from "./sync/estimates.js";
-import { notPublishedYet } from "../../contest-status.js";
+import { notPublishedYet, sourceUnreachable } from "../../contest-status.js";
 
 const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
+
+/** A stuck contest must not cost a standings fetch on every single refresh. */
+const MAX_RE_ESTIMATES_PER_SYNC = 1;
 
 export class AtCoder extends Platform {
   static settingsSection = "atcoder";
@@ -119,8 +120,36 @@ export class AtCoder extends Platform {
     };
   }
 
-  readField(args) {
-    return readField(args);
+  /**
+   * The contest's own standings, read whole. Failure here is a failure to
+   * *ask*: standings need a session, and signed out the refusal hook turns
+   * AtCoder's `/login` redirect into a throw — so the contest waits and
+   * retries rather than storing a queue of "???" that a tab would have filled.
+   * That is what lets `canEstimate` be true without making a signed-out add fail.
+   *
+   * @returns {Promise<object>} the standings payload, or `sourceUnreachable`.
+   */
+  async readField({ contest, session, onProgress = () => {} }) {
+    let standings;
+    try {
+      onProgress("Reading the standings…");
+      standings = await session.sources.standings(contest.id);
+    } catch (error) {
+      return sourceUnreachable(
+        `Couldn't read AtCoder's standings for ${contest.id}: ${error.message}. ` +
+          `Open atcoder.jp in a tab and refresh — difficulty is worked out from ` +
+          `the standings, which need you signed in.`,
+      );
+    }
+
+    if (standings === null) {
+      return sourceUnreachable(
+        `AtCoder's standings for ${contest.id} were not in the expected shape, so ` +
+          `there is no field to fit against yet.`,
+      );
+    }
+
+    return standings;
   }
 
   estimate(contest, field) {
@@ -150,8 +179,46 @@ export class AtCoder extends Platform {
     return accepted;
   }
 
-  /** One pass: re-estimate what was added without a readable field. */
-  syncMetadata(session, contests, onProgress = () => {}) {
-    return syncEstimates(session, contests, onProgress);
+  /**
+   * Rates contests that were added without a readable field — added signed
+   * out, say. Difficulty never changes once a contest has ended, so a rated
+   * contest is never re-read.
+   *
+   * Capped at one contest per refresh: a standings payload is around a
+   * megabyte, and a contest that can never be rated would otherwise levy that
+   * cost forever. Longest-unasked first is what makes the cap safe — sliced in
+   * stored order, the first unrated contest was retried every refresh and
+   * everything behind it never. The Codeforces re-check has no cap,
+   * deliberately: it has a six-week cutoff instead, and a cap on top of a
+   * cutoff starves.
+   *
+   * @returns {Promise<number>} problems that gained a difficulty
+   */
+  async syncMetadata(session, contests, onProgress = () => {}) {
+    const unrated = contests
+      .filter((contest) => contest.problems.some((problem) => problem.rating === null))
+      .sort((a, b) => (a.publishedDataCheckedAt ?? 0) - (b.publishedDataCheckedAt ?? 0));
+
+    if (unrated.length === 0) return 0;
+
+    let resolved = 0;
+    for (const contest of unrated.slice(0, MAX_RE_ESTIMATES_PER_SYNC)) {
+      const before = contest.problems.filter((p) => p.rating !== null).length;
+
+      // The same read-then-fit the base runs at add time; a failed read answers
+      // with a status and leaves the contest for the next refresh.
+      await this.estimateMissing({ contest, session, onProgress });
+
+      // Stamped on the attempt, not on success: stamping only on success would
+      // leave a contest that can never be rated first in the sort forever.
+      contest.publishedDataCheckedAt = Date.now();
+
+      resolved += contest.problems.filter((p) => p.rating !== null).length - before;
+    }
+
+    if (resolved > 0) {
+      console.log(`[AtCoder] ${resolved} problem(s) gained an estimated difficulty.`);
+    }
+    return resolved;
   }
 }

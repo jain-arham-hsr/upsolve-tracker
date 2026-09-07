@@ -5,14 +5,14 @@
  * official round is read entirely from the JSON API and touches no HTML,
  * while a gym can need a page. The folder answers "which am I", so nothing
  * downstream branches on it. What the two share is one account and the site
- * itself, in `../site.js`.
+ * itself, in `../descriptor.js`.
  */
-import { codeforcesSite } from "../site.js";
+import { codeforces } from "../descriptor.js";
 
 const URL_PATTERN = /^https?:\/\/(?:www\.)?codeforces\.com\/contest\/(\d+)/i;
 
 export const codeforcesOfficial = {
-  ...codeforcesSite,
+  ...codeforces,
 
   id: "codeforces-official",
   label: "Codeforces Official",

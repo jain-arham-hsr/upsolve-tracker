@@ -19,8 +19,6 @@
 import { Platform } from "../platform.js";
 import { codechef } from "./descriptor.js";
 import { CodeChefSources, sources } from "./sources.js";
-import { sync as syncPublishedDifficulty } from "./sync/published-data.js";
-import { sync as refreshPracticeFlags } from "./sync/practice-flags.js";
 import {
   notEndedYet,
   notPublishedYet,
@@ -168,10 +166,10 @@ export class CodeChef extends Platform {
   }
 
   /**
-   * Two passes on different cadences, so in different files: whether a
+   * Two passes on different cadences, each with its own gate: whether a
    * problem reached the practice archive is re-read on **every** refresh, a
-   * missing published difficulty at most weekly. Sharing one gate would let
-   * the slower pass suppress the faster.
+   * missing published difficulty at most weekly. They must never share a
+   * gate, or the slower pass suppresses the faster.
    *
    * @returns {number} records updated, for the tests; nothing in production reads it.
    */
@@ -257,4 +255,130 @@ async function buildProblem(sources, contestCode, problem, solved) {
     tags: CodeChefSources.cleanTags(detail, contestCode),
     ...CodeChefSources.practiceFlag(problem),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Post-add passes
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-reads `is_added_to_practice` for contests that might have it wrong.
+ *
+ * Writes in both directions — a problem CodeChef later mirrors has to come back
+ * to the queue, so this cannot be write-once the way `solved` is.
+ *
+ * Two reasons it runs on every refresh rather than on the weekly stamp. A
+ * wrongly-flagged problem would otherwise sit out of the queue for a week; and
+ * a contest added *hours* after it ends may
+ * plausibly report every problem as unmirrored simply because CodeChef has not
+ * got to them yet, which would empty the queue for exactly the contest you most
+ * want to upsolve. Per-refresh means that self-corrects on the next one.
+ * (Unconfirmed: the freshest contests reachable when this was written —
+ * START252D and DSAMONDAY016, four and six days old — already reported every
+ * problem mirrored, so the delay could not be reproduced.)
+ *
+ * The cost is bounded by the selection: a contest is asked about only while it
+ * still carries a flagged problem, so a fully-mirrored queue — which is the
+ * normal case — costs nothing at all. Reading the **contest** payload rather
+ * than the per-problem endpoint is what makes even the flagged case cheap: one
+ * request per affected contest, against one per affected *problem*. `sources.contest`
+ * is memoised for a minute on top of that.
+ *
+ * Note this deliberately never re-checks a contest with nothing flagged. The
+ * only thing that would find is CodeChef *removing* a problem from practice,
+ * which does not happen; paying a request per contest per refresh to look for
+ * it would be the sweep this client exists to avoid.
+ */
+async function refreshPracticeFlags(session, contests, onProgress = () => {}) {
+  const pending = contests.filter((contest) =>
+    contest.problems.some((problem) => problem.upsolvable === false),
+  );
+  if (pending.length === 0) return 0;
+
+  let changed = 0;
+
+  for (const contest of pending) {
+    try {
+      const payload = await session.sources.contest(contest.id);
+      const problems = payload?.problems ?? {};
+
+      for (const problem of contest.problems) {
+        const entry = problems[problem.index];
+        // A problem missing from the payload tells us nothing — keep what we
+        // already knew rather than guessing it back into the queue.
+        if (!entry) continue;
+
+        const wasUpsolvable = problem.upsolvable !== false;
+        const isUpsolvable = entry.is_added_to_practice !== false;
+        if (wasUpsolvable === isUpsolvable) continue;
+
+        // Deleted rather than set true, so the stored shape stays "present only
+        // when it means something" — the same rule buildProblem writes under.
+        if (isUpsolvable) delete problem.upsolvable;
+        else problem.upsolvable = false;
+
+        onProgress(
+          isUpsolvable
+            ? `${problem.index} is on practice now…`
+            : `${problem.index} isn't on practice…`,
+        );
+        changed++;
+      }
+    } catch (error) {
+      console.warn(
+        `[CodeChef] practice re-check of ${contest.id} failed:`,
+        error.message,
+      );
+    }
+  }
+
+  return changed;
+}
+
+const RECHECK_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Asks CodeChef again about the problems it had not rated yet.
+ *
+ * Converges rather than settles once: a problem stored `???` gains its real
+ * number on a later refresh, at which point the contest stops being asked
+ * about at all. Costs a request per still-unrated problem, which is why it is
+ * throttled to a week.
+ *
+ * @returns {number} problems updated. Nothing in production reads it; it exists
+ *   so the tests can tell a real update from a no-op.
+ */
+async function syncPublishedDifficulty(session, contests, onProgress = () => {}) {
+  const now = Date.now();
+  let updated = 0;
+
+  const stale = contests.filter(
+    (contest) =>
+      contest.problems.some((problem) => problem.rating === null) &&
+      now - (contest.publishedDataCheckedAt ?? 0) > RECHECK_AFTER_MS,
+  );
+  if (stale.length === 0) return updated;
+
+  for (const contest of stale) {
+    for (const problem of contest.problems) {
+      if (problem.rating !== null) continue;
+
+      onProgress(`Re-checking ${problem.index}…`);
+      try {
+        const detail = await session.sources.problem(contest.id, problem.index);
+        const rating = CodeChefSources.parseDifficulty(detail?.difficulty_rating);
+        if (rating === null) continue;
+
+        problem.rating = rating;
+        problem.ratingSource = "official";
+        problem.tags = CodeChefSources.cleanTags(detail, contest.id);
+        updated++;
+      } catch (error) {
+        console.warn(`[CodeChef] re-check of ${problem.index} failed:`, error.message);
+      }
+    }
+    contest.publishedDataCheckedAt = now;
+  }
+
+  return updated;
 }

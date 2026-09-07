@@ -127,7 +127,7 @@ test("the retired names survive nowhere", () => {
   }
 });
 
-test("no adapter throws a bare error where it should answer with a status", () => {
+test("no adapter throws a bare error where it should answer with a status", async () => {
   // The specific regression: CodeChef's "no problems listed" was a bare throw,
   // unflagged, so it failed hard where it should have waited. Adapters may
   // still throw for genuine faults — that is what makes an escaping exception
@@ -136,11 +136,14 @@ test("no adapter throws a bare error where it should answer with a status", () =
   // base in `platform.js` only passes a status through. So this is where the
   // vocabulary has to appear.
   // Every platform's own class, wherever its folder sits: the one beside a
-  // descriptor.js. A base folder's class carries no gates and is not checked.
+  // descriptor that carries an id. A base folder's descriptor is a partial
+  // with no id, and its class carries no gates, so it is not checked.
   let checked = 0;
   for (const file of sourceFiles(path.join(ROOT, "core/platforms"))) {
     if (path.basename(file) !== "platform.js") continue;
+    const descriptor = path.join(path.dirname(file), "descriptor.js");
     if (!readdirSync(path.dirname(file)).includes("descriptor.js")) continue;
+    if (!Object.values(await import(descriptor)).some((value) => value && "id" in value)) continue;
     checked++;
     const src = readFileSync(file, "utf8");
     const imported = /from\s+"(\.\.\/)+contest-status\.js"/.test(src);

@@ -7,12 +7,11 @@
  * only page those contests render, and the field is recovered from who
  * submitted, via `contest.status`.
  */
-import { CodeforcesPlatform } from "../platform.js";
+import { CodeforcesPlatform, ratePartyList } from "../platform.js";
 import { codeforcesGyms } from "./descriptor.js";
-import { readField } from "./field.js";
 import { GymSources } from "./sources.js";
-import { sync as syncStartTimes } from "./sync/start-times.js";
-import { notEndedYet } from "../../../contest-status.js";
+import { notEndedYet, unavailable } from "../../../contest-status.js";
+import { fullField, distributionSize } from "../../../rating-models/rating-distribution.js";
 
 export class CodeforcesGyms extends CodeforcesPlatform {
   static Sources = GymSources;
@@ -62,7 +61,7 @@ export class CodeforcesGyms extends CodeforcesPlatform {
 
     // No problemset sync: gyms are absent from problemset.problems entirely.
     // Tags and published ratings came off the standings response instead.
-    await syncStartTimes(session, [record], onProgress);
+    await this.syncStartTimes(session, [record], onProgress);
 
     return {
       ...record,
@@ -95,13 +94,89 @@ export class CodeforcesGyms extends CodeforcesPlatform {
       solveCountsRead: true,
       partyHandles: null,
       finished: standings?.contest?.phase ? standings.contest.phase === "FINISHED" : null,
-      // Carried, never stored: `field.js` measures the field from these rows.
+      // Carried, never stored: `readField` measures the field from these rows.
       standings,
     };
   }
 
-  readField(args) {
-    return readField(args);
+  /**
+   * A gym's field arrives whole: 5–76 parties in one `contest.standings`
+   * response, so there is nothing to sample — and far too few to sample from,
+   * which is why a gym estimate is so much noisier than an official one. When
+   * the standings are hidden the field is recovered from who submitted; that
+   * field is narrower, but a party that entered and submitted nothing solved
+   * nothing either, so the counts stay consistent with it.
+   *
+   * @returns {Promise<object>} the distribution, or `unavailable` — a gym with
+   *   no measurable field never gains one, so it refuses rather than waits.
+   */
+  async readField({ contest, context, session, onProgress = () => {} }) {
+    const { solveCountsRead, partyHandles, standings } = context;
+    const gaps = contest.problems.filter((problem) => problem.rating === null).length;
+
+    // Unreachable today — gym counts come from the API, not a parsed totals
+    // row — and kept deliberately: the alternative is estimating from counts
+    // that were never read, which invents ratings silently.
+    if (!solveCountsRead) {
+      return unavailable(
+        `Couldn't read the solve counts for gym ${contest.id}, and ${gaps} ` +
+          `problem(s) have no published rating to fall back on.`,
+      );
+    }
+
+    onProgress("Measuring the field…");
+
+    const distribution = partyHandles
+      ? await fieldFromParties(session.sources, partyHandles)
+      : await fieldFromStandings(session.sources, contest.id, standings);
+
+    console.log(
+      `[Codeforces] Distribution: ${distributionSize(distribution)} competitors read, ` +
+        `representing ~${Math.round(
+          distribution.strata.reduce((sum, s) => sum + s.ratings.length * s.scale, 0),
+        )}.`,
+    );
+
+    // Permanent: private or empty standings do not become visible later.
+    if (distributionSize(distribution) === 0) {
+      return unavailable(
+        `Couldn't rate gym ${contest.id}: its participants aren't visible, so ` +
+          `there is no field to measure against.`,
+      );
+    }
+
+    return distribution;
+  }
+
+  /**
+   * The bulk `contest.list?gym=true` first, then one `contest.standings` each
+   * for whatever it did not cover. Private gyms and mashups (the 6xxxxx ids)
+   * never appear in the list; most are dated at add time from the standings
+   * already in hand, and this covers the rest.
+   */
+  async syncStartTimes(session, contests, onProgress = () => {}) {
+    const pending = contests.filter((contest) => !contest.startTimeSeconds);
+    if (pending.length === 0) return 0;
+
+    let resolved = await super.syncStartTimes(session, contests, onProgress);
+
+    const gyms = pending.filter((contest) => !contest.startTimeSeconds);
+    for (const [index, contest] of gyms.entries()) {
+      // Deliberately slow — the API pacer spaces these — so it counts itself off.
+      onProgress(`Dating gym ${index + 1} of ${gyms.length}…`);
+      try {
+        const standings = await session.sources.contestStandings(contest.id);
+        const startTime = standings?.contest?.startTimeSeconds;
+        if (startTime) {
+          contest.startTimeSeconds = startTime;
+          resolved++;
+        }
+      } catch (error) {
+        console.warn(`[Codeforces] Gym ${contest.id} standings failed:`, error.message);
+      }
+    }
+
+    return resolved;
   }
 
   /**
@@ -111,7 +186,7 @@ export class CodeforcesGyms extends CodeforcesPlatform {
    * refresh forever.
    */
   async syncMetadata(session, contests, onProgress = () => {}) {
-    await syncStartTimes(session, contests, onProgress);
+    await this.syncStartTimes(session, contests, onProgress);
   }
 }
 
@@ -172,4 +247,37 @@ async function fromContestStatus(contestId, sources, standingsError) {
     // No standings to ask, so the sidebar says whether it has finished.
     finished: page.finished,
   };
+}
+
+/** `standings` is the response the add already paid for; the hidden path has none. */
+async function fieldFromStandings(sources, contestId, prefetched) {
+  try {
+    const standings = prefetched ?? (await sources.contestStandings(contestId));
+
+    if (!standings?.rows?.length) {
+      console.warn(`[Codeforces] Standings API returned empty for ${contestId}.`);
+      return fullField([]);
+    }
+
+    return fullField(
+      await ratePartyList(
+        sources,
+        standings.rows.map((row) => row.party.members.map((m) => m.handle)),
+      ),
+    );
+  } catch (error) {
+    console.warn(`[Codeforces] Standings method failed for ${contestId}:`, error.message);
+    return fullField([]);
+  }
+}
+
+async function fieldFromParties(sources, partyHandles) {
+  if (!partyHandles?.length) return fullField([]);
+
+  try {
+    return fullField(await ratePartyList(sources, partyHandles));
+  } catch (error) {
+    console.warn(`[Codeforces] Submission-derived field failed:`, error.message);
+    return fullField([]);
+  }
 }

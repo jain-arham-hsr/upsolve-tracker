@@ -1,12 +1,12 @@
 /**
  * What both Codeforces descriptors share: the site itself.
  *
- * Origin, host permission, mark, rank colours, and the two keys that only
- * need a platform id to differ. Each descriptor spreads this and adds what
- * tells the two apart — the URL it matches, its labels, its subtype. The
- * registry never sees this file; it sees two complete descriptors.
+ * A partial descriptor — origin, host permission, mark, rank colours, and the
+ * two keys that only need a platform id to differ — with **no `id`**, which is
+ * what keeps the registry from ever listing it. Each platform's descriptor
+ * spreads this and adds what tells the two apart.
  */
-export const codeforcesSite = {
+export const codeforces = {
   origin: "https://codeforces.com",
 
   /**

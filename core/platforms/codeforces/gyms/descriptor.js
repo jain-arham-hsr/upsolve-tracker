@@ -6,12 +6,12 @@
  * problems page is the one page such a contest still renders. See the
  * official descriptor for why the two are platforms rather than subtypes.
  */
-import { codeforcesSite } from "../site.js";
+import { codeforces } from "../descriptor.js";
 
 const URL_PATTERN = /^https?:\/\/(?:www\.)?codeforces\.com\/gym\/(\d+)/i;
 
 export const codeforcesGyms = {
-  ...codeforcesSite,
+  ...codeforces,
 
   id: "codeforces-gyms",
   label: "Codeforces Gyms",

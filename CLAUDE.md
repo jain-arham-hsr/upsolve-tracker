@@ -223,7 +223,7 @@ implements, refuses at construction a subclass missing one or one whose `canEsti
 disagrees with whether it estimates, and checks every shape that crosses the boundary,
 naming the platform when one is wrong. Before it, each folder had the same seven file names
 and a different design inside: three session shapes, two ways of reaching the site, four
-`fetchContest` signatures, a `field.js` that meant something different in each folder.
+`fetchContest` signatures, a field module that meant something different in each folder.
 
 What callers use — the orchestrators and the settings page:
 
@@ -267,28 +267,26 @@ construction if a hook is missing.
 
 #### The shape of a platform folder
 
-**The root is a closed set of five names**, and `module-boundaries.test.js` fails on a sixth.
+**The root is a closed set of four names**, and `module-boundaries.test.js` fails on a fifth.
 Anything a platform can have *N* of lives in a folder named for its kind, so `ls` says which
 is which:
 
 | file | role | where |
 |---|---|---|
 | `descriptor.js` | what the registry needs; pure | always |
-| `platform.js` | `class X extends Platform` — the contract, and every decision: gates, fallbacks, the record shape | always |
+| `platform.js` | `class X extends Platform` — the contract, every decision (gates, fallbacks, the record shape, `readField`) and every post-add pass, with helpers below the class | always |
 | `sources.js` | `class XSources extends Source` — one route per method, returning what the site said; nothing else exported but at most a singleton `sources` | always |
-| `field.js` | `readField` — the I/O that produces what the estimator fits against | iff `canEstimate` |
-| `estimator.js` | `estimate` — pure; imports no source, client or field | iff `canEstimate` |
+| `estimator.js` | `estimate` — the pure fit; imports no source, client or platform | iff `canEstimate` |
 
 | folder | one file per | today |
 |---|---|---|
 | `scrapers/` | page scraped — a `Scraper` subclass each | 6 |
-| `sync/` | pass filling in data that arrives after the add — each exports exactly `sync(session, contests, onProgress)` | 6 |
 
 **A base folder holds what two platforms share.** `codeforces/` is one: its `platform.js`
 exports a class no platform is built from and two extend, and it carries `sources.js`,
-`estimator.js`, `field.js`, `sync/` and `site.js` — the descriptor pieces its platforms
-spread — with `official/` and `gyms/` beneath it. It has no `descriptor.js`, because it is not
-a platform and the registry must not be able to list it. `module-boundaries.test.js`
+`estimator.js` and a `descriptor.js` that is a *partial* — the pieces its platforms spread,
+with no `id`, which is what keeps the registry from ever listing it — with `official/` and
+`gyms/` beneath it. `module-boundaries.test.js`
 classifies every folder under `core/platforms/` from what `platforms.js` registers — a
 platform folder, a base folder, or an offender — and keys every other check on that, so no
 check assumes a folder is named after its id.
@@ -305,8 +303,6 @@ Rules that hold, each pinned by a test that was seen to fail:
   one whole records with the hidden-standings fallback inside. Two checks pin
   it: a scraper is imported only by a `sources.js`, so a platform never sees a
   `Document`; and no `sources.js` imports `contest-status.js`.
-- **A platform's `syncMetadata` only runs `sync/` passes**, so `ls sync/` says
-  what a refresh does for that platform.
 - **Every descriptor declares its members in `DESCRIPTOR_MEMBERS` order**, read
   off the source, so a reader finds `matchUrl` in the same place in each.
 - **Nothing in a `scrapers/` folder fetches**, and every file there exports one `Scraper`
@@ -316,9 +312,9 @@ Rules that hold, each pinned by a test that was seen to fail:
 - **A source singleton is reached through the session, never imported.** A platform's class
   attaches it to the session it builds; a module that imported it instead would work in
   production and be untestable.
-- **An estimator is pure.** `field.js` reads and answers a status when it cannot;
-  `estimator.js` fits what it read. The base refuses half an estimator, and the two files
-  exist — in the platform's folder or its base's — iff `canEstimate`. Claiming the capability
+- **An estimator is pure.** The platform's `readField` reads and answers a status when
+  it cannot; `estimator.js` fits what it read. The base refuses half an estimator, and the
+  file exists — in the platform's folder or its base's — iff `canEstimate`. Claiming the capability
   with no estimator refuses every add; estimating without claiming it stores `???` beside
   numbers already worked out.
 - **`DOMParser` is constructed in exactly one place**, `services/site-client.js#getDocument`;
@@ -336,12 +332,11 @@ it is instantiable because on Codeforces it holds a **key pair** — `buildSessi
 per credential set, and Settings builds a second to check credentials typed but not saved.
 Platforms without credentials export a singleton.
 
-Two files earn their own name by cadence rather than by subject.
-`codechef/sync/published-data.js` and `codechef/sync/practice-flags.js` are both re-checks
-run from one `syncMetadata`, and they are separate files because they differ in every way
-that matters — weekly against every refresh, write-once against both directions, gated on a
-timestamp against gated on the flags already stored. Sharing a file invites sharing a gate,
-and the slower pass would then suppress the faster.
+Post-add passes are helper functions below the class, called in order from
+`syncMetadata`. CodeChef's two are worth knowing apart: they differ in every way that
+matters — weekly against every refresh, write-once against both directions, gated on a
+timestamp against gated on the flags already stored — and must never share a gate, or the
+slower pass suppresses the faster.
 
 `progress-manager.js#updateSolvedStatus()` loops over every platform with tracked contests, **isolating failures**: one site being down or unconfigured must not stop the others, and if *every* platform fails it returns before the write so a bad sync can't touch storage. `applySolvedStatus()` is split out and pure because it's the step that fails quietly.
 
@@ -568,7 +563,7 @@ Four things about it are deliberate:
 - **It is dropped in `pending-problems.js`, not in each view.** That is the single choke point the queue, the platform ring and both stats histograms all run through, so they cannot disagree about what "pending" counts. `tag-service.js` is the one iterator that bypasses it — `countPendingTags` walks contests directly — so it repeats the guard by hand, or the tag bars would count problems the coverage line directly above them has excluded.
 - **The contest's own expansion opts back in**, via `collectPendingProblems(contests, { includeUnupsolvable: true })`. Hiding the row there would make the contest look shorter than it is and give no clue why. It renders muted with a `⚠` whose title explains it; the wording names no platform, since `problem-row.js` is shared by all three. The mark goes **inside** the name cell — `.contest-problems` declares four columns and each compact row borrows them with `subgrid`, so a fifth child drops onto an implicit row of its own. The `~` rating flag *did* have that bug, latently, until the flag started firing on every estimated Codeforces rating and put a stray `~` on the line below most rows of a gym's expansion; it now lives inside the rating cell. `tests/problem-row.test.js` counts a compact row's children rather than checking where a mark sits, since that is the invariant and it is what catches the next one. And it **leads** the name rather than trailing it: `.compact-name` truncates with an ellipsis, so a trailing mark is clipped away for exactly the long titles that most need explaining. It shipped trailing once and was invisible on screen — "Maximize the Minim…" rendered muted with no mark and no clue why — while the test, which matched the HTML string, passed.
 - **The contest is deliberately not auto-deleted.** `progress-manager.js` is untouched: an unupsolvable problem never gets `solved = true`, so `allSolved` stays false and the contest keeps its place on the Contests tab with the warned row visible. It leaves only when removed by hand. Folding the flag into `allSolved` would delete the contest and the warning with it, which is the opposite of the point.
-- **`refreshPracticeFlags` (`codechef/sync/practice-flags.js`) runs on every refresh, not on the weekly `publishedDataCheckedAt` stamp that `sync/published-data.js` next door uses**, and writes in **both** directions — a problem CodeChef later mirrors has to come back to the queue, so unlike `solved` this is not write-once. It looks **only at contests that still carry a flagged problem**, so the normal fully-mirrored queue costs nothing; reading the *contest* payload rather than the per-problem endpoint is what makes even the flagged case cheap, at one request per affected contest instead of one per affected problem. A contest with nothing flagged is deliberately never re-checked: the only thing that would find is CodeChef *removing* a problem from practice, which does not happen, and paying a request per contest per refresh to look for it would be the sweep this client exists to avoid. A failed re-check leaves the flag alone rather than clearing it — guessing a problem back into the queue on a network blip would undo the point.
+- **`refreshPracticeFlags` (in `codechef/platform.js`) runs on every refresh, not on the weekly `publishedDataCheckedAt` stamp that `sync/published-data.js` next door uses**, and writes in **both** directions — a problem CodeChef later mirrors has to come back to the queue, so unlike `solved` this is not write-once. It looks **only at contests that still carry a flagged problem**, so the normal fully-mirrored queue costs nothing; reading the *contest* payload rather than the per-problem endpoint is what makes even the flagged case cheap, at one request per affected contest instead of one per affected problem. A contest with nothing flagged is deliberately never re-checked: the only thing that would find is CodeChef *removing* a problem from practice, which does not happen, and paying a request per contest per refresh to look for it would be the sweep this client exists to avoid. A failed re-check leaves the flag alone rather than clearing it — guessing a problem back into the queue on a network blip would undo the point.
 
 **Unconfirmed, and the reason for the fast cadence:** a contest added *hours* after it ends may plausibly report every problem as unmirrored simply because CodeChef has not got to them yet — which would empty the queue for exactly the contest you most want to upsolve. It could not be reproduced: the freshest contests reachable (START252D and DSAMONDAY016, four and six days old) already reported every problem mirrored, so mirroring is evidently prompt. Re-checking every refresh means that case self-corrects on the next one rather than persisting for a week. The first add of a just-finished contest is still the proof.
 
@@ -599,9 +594,9 @@ They are genuinely different pipelines, not two flavours of one:
 `codeforces/platform.js` holds identity and the submission stream; `codeforces/sources.js`
 the signed client, the signing (SHA-512 over `rand/method?sortedParams#secret`),
 `user.status`, `user.info`, and the applier that takes a standings response's published
-ratings and tags; `codeforces/estimator.js` the fit both run; `codeforces/field.js` the
-party-to-rating step both fields end in; `codeforces/site.js` the origin, mark, host
-permission, rank colours and keys both descriptors spread. Until this existed the two folders
+ratings and tags; `codeforces/estimator.js` the fit both run; `ratePartyList` in
+`codeforces/platform.js` the party-to-rating step both fields end in; `codeforces/descriptor.js`
+the partial — origin, mark, host permission, rank colours and keys — both descriptors spread. Until this existed the two folders
 held 744 byte-identical lines with a test forbidding them to diverge. **They import the base
 and never each other**, which `module-boundaries.test.js` pins.
 
@@ -768,7 +763,7 @@ with one of the five statuses above. Given a `/contest/<id>` or `/gym/<id>` URL:
      problems there, but **not necessarily rated ones** — 41 of 2,007 listed contests have no
      rated problem at all, and the newest of those are ordinary recent rounds. So presence is
      the whole question this gate asks, and a listed-but-unrated round is added with estimates
-     that `sync/published-data.js` settles later. Absent →
+     that the published-data pass settles later. Absent →
      `notPublishedYet`, and **nothing is scraped** — the alternative was tens of throttled requests
      spent producing an estimate the re-check would overwrite. The response is cached for
      60 s so the check and step 3 don't fetch ~2 MB twice.
@@ -783,7 +778,7 @@ with one of the five statuses above. Given a `/contest/<id>` or `/gym/<id>` URL:
    `solveCountsRead`, false when the totals row wouldn't parse.
 3. `codeforces/sources.js#applyStandingsProblemData` — apply Codeforces' published ratings and tags, off the standings response already in hand.
    Anything rated here needs no estimate, which is why it runs *before* the expensive steps.
-4. `field.js#readField` — produce the participant rating distribution, as
+4. `platform.js#readField` — produce the participant rating distribution, as
    **strata**: `{ strata: [{ ratings, scale }] }`, where `scale` is how many real competitors one
    read competitor stands for. Official: `contest.ratingChanges` `oldRating`s at scale 1; if empty,
    fall back to sampling the standings (below). Gym/ICPC: build from `contest.standings`, collapsing
@@ -870,7 +865,7 @@ inside the bracket, so they differ in path, not result. `Math.floor` is kept for
 fidelity to the source and for line-by-line diffability, not for safety — don't
 record it as a trap.
 
-### Sampling the field (`codeforces/official/field.js`)
+### Sampling the field (`codeforces/official/platform.js`)
 
 When `contest.ratingChanges` is empty — exactly the freshly-finished contest you most want to upsolve — the participant distribution comes from the standings **rows**, which `fetchContest` already fetched for the roster and passes along in `context`. So the rows are free; what is not free is turning them into ratings, at one throttled `user.info` per 250 handles. A 15,000-entrant Div. 3 is ~60 calls where a sample of ~1,500 is seven. `stratifyRows` takes that sample.
 
@@ -1053,7 +1048,7 @@ The tag source differs by contest type:
 
 #### The re-check stops after six weeks
 
-`sync/published-data.js` re-asks `contest.standings` for a contest that still has a
+`syncPublishedData` in `codeforces/official/platform.js` re-asks `contest.standings` for a contest that still has a
 problem without an official rating or without tags — at most weekly, and **only
 until six weeks after the round ran**.
 
@@ -1105,7 +1100,7 @@ CF tags are editable after publication, so a problem can gain tags days later �
 
 ### Start times
 
-`codeforces/sync/start-times.js` — and the gym pass that extends it — fills `contest.startTimeSeconds`, which orders the contest list. Contest IDs are *not* chronological (2205 ran a day before 2200), so sorting by ID is not a substitute.
+`CodeforcesPlatform#syncStartTimes` — and the gym override that extends it — fills `contest.startTimeSeconds`, which orders the contest list. Contest IDs are *not* chronological (2205 ran a day before 2200), so sorting by ID is not a substitute.
 
 - **Official** — `contest.list`, one ~400 KB request. A finished contest's start time never changes, so unlike tags there's no re-check: a contest is asked about once and only if the field is missing.
 - **Gym** — `contest.list?gym=true`, but private gyms and mashups (the 6xxxxx IDs) don't appear there at all. Those are covered at add time from `standings.contest.startTimeSeconds`, which `sources.js` already has in hand. Anything still unresolved sorts to the bottom rather than being treated as ancient.

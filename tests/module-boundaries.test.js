@@ -110,8 +110,8 @@ const stripComments = (source) =>
 const importsOf = (source) =>
   [...source.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
 
-/** One file per page / pass — a platform may have any number of each. */
-const PLATFORM_FOLDERS = new Set(["scrapers", "sync"]);
+/** One file per page — a platform may read any number. */
+const PLATFORM_FOLDERS = new Set(["scrapers"]);
 
 /**
  * Every folder under core/platforms/ is one of two things, and platforms.js is
@@ -438,7 +438,7 @@ test("the two Codeforces platforms do not import each other", () => {
   );
 });
 
-test("every folder under core/platforms/ is a platform or a base, and platforms.js says which", () => {
+test("every folder under core/platforms/ is a platform or a base, and platforms.js says which", async () => {
   assert.deepEqual(FOLDERS.offenders, [], "a folder that is neither has nowhere to be");
 
   assert.deepEqual(
@@ -447,16 +447,20 @@ test("every folder under core/platforms/ is a platform or a base, and platforms.
     "every registered platform has exactly one folder, and every platform folder is registered",
   );
 
-  // A platform folder carries its descriptor; a base carries none, since a
-  // base is not a platform and the registry must not be able to list it.
+  // A platform folder carries its descriptor. A base's descriptor.js is the
+  // partial its platforms spread, and it has no `id` — which is what keeps the
+  // registry from ever listing a base as a platform.
   for (const [id, folder] of FOLDERS.platforms) {
     assert.ok(readdirSync(path.join(ROOT, folder)).includes("descriptor.js"), `${id} has no descriptor.js`);
   }
   for (const folder of FOLDERS.bases) {
-    assert.ok(
-      !readdirSync(path.join(ROOT, folder)).includes("descriptor.js"),
-      `${folder} is a base folder and must not carry a descriptor of its own`,
-    );
+    const exported = await import(path.join(ROOT, folder, "descriptor.js"));
+    for (const [name, value] of Object.entries(exported)) {
+      assert.ok(
+        value && typeof value === "object" && !("id" in value),
+        `${folder}/descriptor.js exports ${name} with an id, so it reads as a platform`,
+      );
+    }
   }
 
   // Or a base could quietly become a platform, or vice versa, and pass.
@@ -531,7 +535,7 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   );
 });
 
-test("a platform has field.js and estimator.js iff its descriptor claims canEstimate", () => {
+test("a platform has estimator.js iff its descriptor claims canEstimate", () => {
   // Two declarations of one fact, in two places, and nothing but this makes
   // them agree. `contest-manager.js` reads `canEstimate` in exactly one place
   // to decide what a *gap* means: true, and a problem left unrated after the
@@ -539,66 +543,49 @@ test("a platform has field.js and estimator.js iff its descriptor claims canEsti
   // problem the site has not rated, stored as `rating: null` and shown as
   // `???`. The Platform constructor refuses a class whose methods disagree
   // with the flag; this is the same fact at the level of files, which is where
-  // a reader looks first — and the files may sit in a base folder, as the
+  // a reader looks first — and the file may sit in a base folder, as the
   // Codeforces estimator does.
   const offenders = [];
 
   for (const platform of listPlatforms()) {
-    const has = (name) => foldersOf(platform.id).some((dir) => readdirSync(dir).includes(name));
+    const has = foldersOf(platform.id).some((dir) => readdirSync(dir).includes("estimator.js"));
     const claimed = platform.capabilities.canEstimate === true;
-
-    for (const file of ["field.js", "estimator.js"]) {
-      if (has(file) === claimed) continue;
-      offenders.push(
-        has(file)
-          ? `${platform.id} ships ${file} but declares canEstimate: false`
-          : `${platform.id} declares canEstimate: true but has no ${file}`,
-      );
-    }
+    if (has === claimed) continue;
+    offenders.push(
+      has
+        ? `${platform.id} ships estimator.js but declares canEstimate: false`
+        : `${platform.id} declares canEstimate: true but has no estimator.js`,
+    );
   }
 
-  assert.deepEqual(offenders, [], "the capability and the files are one fact");
+  assert.deepEqual(offenders, [], "the capability and the file are one fact");
 });
 
-test("an estimator is pure, and a field is where the reading happens", async () => {
-  // The split that makes every fit testable without a network stack: field.js
-  // reads the site and answers a status when it cannot; estimator.js takes
-  // what it read and fits. An estimator that imported a source, a client or
-  // its own field.js would be the old shape back — I/O and maths in one
-  // function, testable only by stubbing fetch.
+test("an estimator is pure", async () => {
+  // The split that makes every fit testable without a network stack: the
+  // platform's `readField` reads the site and answers a status when it
+  // cannot; estimator.js takes what it read and fits. An estimator that
+  // imported a source, a client or its platform would be I/O and maths in one
+  // function again, testable only by stubbing fetch.
   const offenders = [];
   let estimators = 0;
-  let fields = 0;
 
   for (const file of sourceFiles(PLATFORMS, [".js"])) {
+    if (path.basename(file) !== "estimator.js") continue;
     const relative = path.relative(ROOT, file);
-    const name = path.basename(file);
-    if (name !== "estimator.js" && name !== "field.js") continue;
-
     const code = stripComments(readFileSync(file, "utf8"));
-    const exported = Object.keys(await import(file));
+    estimators++;
 
-    if (name === "estimator.js") {
-      estimators++;
-      if (!exported.includes("estimate")) offenders.push(`${relative} does not export estimate()`);
-      for (const spec of importsOf(code)) {
-        if (/(sources|site-client|field)\.js$/.test(spec)) offenders.push(`${relative} imports ${spec}`);
-      }
-      if (/\bfetch\s*\(/.test(code)) offenders.push(`${relative} calls fetch()`);
-    } else {
-      fields++;
-      // A base folder's field.js holds what the platforms' fields share, and
-      // is not itself a field; only a platform's own must read.
-      const inPlatform = [...FOLDERS.platforms.values()].some((folder) => relative.startsWith(folder + "/"));
-      if (inPlatform && !exported.includes("readField")) offenders.push(`${relative} does not export readField()`);
+    if (!Object.keys(await import(file)).includes("estimate")) offenders.push(`${relative} does not export estimate()`);
+    for (const spec of importsOf(code)) {
+      if (/(sources|site-client|platform)\.js$/.test(spec)) offenders.push(`${relative} imports ${spec}`);
     }
+    if (/\bfetch\s*\(/.test(code)) offenders.push(`${relative} calls fetch()`);
   }
 
   assert.deepEqual(offenders, []);
-  // Codeforces' base plus AtCoder's; three platforms read a field of their own
-  // and the Codeforces pair share what happens below the handles.
+  // Codeforces' base plus AtCoder's; the Codeforces pair share one fit.
   assert.equal(estimators, 2, `expected two estimators, found ${estimators}`);
-  assert.equal(fields, 4, `expected four field modules, found ${fields}`);
 });
 
 test("nothing in a scrapers/ folder fetches", () => {
@@ -733,22 +720,17 @@ test("Codeforces signs in exactly one place", () => {
  * endpoint they read, inside `sources/`.
  */
 const PLATFORM_ROOT_FILES = new Set([
-  // Always: the registry's view, the contract, and the site's reads.
+  // Always: the registry's view, the contract with every decision and every
+  // post-add pass, and the site's reads.
   "descriptor.js",
   "platform.js",
   "sources.js",
-  // Where the platform estimates.
+  // Where the platform estimates: the pure fit.
   "estimator.js",
-  "field.js",
 ]);
 
-/**
- * A base folder is a platform folder minus the descriptor — plus `site.js`,
- * the pieces of a descriptor its platforms share, which the registry never
- * sees directly.
- */
-const REQUIRED = { platform: ["descriptor.js", "platform.js", "sources.js"], base: ["platform.js", "sources.js"] };
-const BASE_ONLY_FILES = new Set(["site.js"]);
+/** A base folder has the same three; its descriptor is the partial its platforms spread. */
+const REQUIRED = { platform: ["descriptor.js", "platform.js", "sources.js"], base: ["descriptor.js", "platform.js", "sources.js"] };
 
 test("a platform's root holds only contract names", () => {
   const offenders = [];
@@ -777,7 +759,6 @@ test("a platform's root holds only contract names", () => {
         continue;
       }
 
-      if (kind === "base" && BASE_ONLY_FILES.has(entry.name)) continue;
       if (!PLATFORM_ROOT_FILES.has(entry.name)) {
         offenders.push(
           `${folder}/${entry.name} is not a contract name — put it in ` +
@@ -874,30 +855,6 @@ test("a sources.js exports one Source class, and at most a singleton of it", asy
   assert.equal(checked, 5, `expected five sources.js, found ${checked}`);
 });
 
-test("a sync pass exports sync(session, contests, onProgress) and nothing else", async () => {
-  // Four passes took four argument lists — the client first, or not at all.
-  // One shape, so `syncMetadata` composes them without knowing which is which.
-  const offenders = [];
-  let checked = 0;
-
-  for (const file of sourceFiles(PLATFORMS, [".js"]).filter((f) => path.basename(path.dirname(f)) === "sync")) {
-    const relative = path.relative(ROOT, file);
-    const exported = Object.keys(await import(file));
-    checked++;
-
-    if (exported.length !== 1 || exported[0] !== "sync") {
-      offenders.push(`${relative} exports ${exported.join(", ") || "nothing"}, expected exactly sync`);
-    }
-    const code = stripComments(readFileSync(file, "utf8"));
-    if (!/export\s+async\s+function\s+sync\s*\(\s*session\s*,\s*contests\s*,\s*onProgress\b/.test(code)) {
-      offenders.push(`${relative}'s sync() does not take (session, contests, onProgress)`);
-    }
-  }
-
-  assert.deepEqual(offenders, []);
-  assert.equal(checked, 6, `expected six sync passes, found ${checked}`);
-});
-
 test("a source singleton is reached through the session, never imported", () => {
   // The second idiom this removed. A platform's class attaches the singleton
   // to the session it builds; everything else reads `session.sources`, which
@@ -946,40 +903,6 @@ test("a source never answers with a status", () => {
     .map((file) => path.relative(ROOT, file));
 
   assert.deepEqual(offenders, []);
-});
-
-test("a platform's syncMetadata only runs sync/ passes", () => {
-  // What arrives after the add is the business of sync/, one file per pass,
-  // so `ls sync/` says what a refresh does for a platform. AtCoder's
-  // re-estimate rotation used to live inline in syncMetadata, where nothing
-  // listed it.
-  const offenders = [];
-  let overrides = 0;
-
-  for (const file of sourceFiles(PLATFORMS, [".js"]).filter((f) => path.basename(f) === "platform.js")) {
-    // The abstract base declares the default no-op; only overrides are checked.
-    if (file === path.join(PLATFORMS, "platform.js")) continue;
-    const relative = path.relative(ROOT, file);
-    const code = stripComments(readFileSync(file, "utf8"));
-    const start = code.search(/^\s+(async\s+)?syncMetadata\s*\(/m);
-    if (start === -1) continue;
-    overrides++;
-
-    // The passes this file imports, under whatever alias.
-    const passes = new Set(
-      [...code.matchAll(/import\s*\{\s*sync\s+as\s+(\w+)\s*\}\s*from\s*"[^"]*\/sync\/[^"]+"/g)].map((m) => m[1]),
-    );
-    if (passes.size === 0) offenders.push(`${relative} overrides syncMetadata but imports no sync/ pass`);
-
-    // The body: from the signature to the first line that closes it.
-    const body = code.slice(start, code.indexOf("\n  }", start));
-    for (const [, callee] of body.matchAll(/\b(?:await|return)\s+(\w+)\s*\(/g)) {
-      if (!passes.has(callee)) offenders.push(`${relative}'s syncMetadata calls ${callee}(), which is not a sync/ pass`);
-    }
-  }
-
-  assert.deepEqual(offenders, []);
-  assert.equal(overrides, 4, `expected four platforms to override syncMetadata, found ${overrides}`);
 });
 
 test("every descriptor declares its members in the base's order", async () => {
