@@ -8,7 +8,7 @@
  */
 import { CodeforcesPlatform } from "../codeforces/platform.js";
 import { codeforcesOfficial } from "./descriptor.js";
-import { fill } from "./estimator.js";
+import { readField } from "./field.js";
 import { OfficialSources, readSolveStats, isInProblemset } from "./sources.js";
 import { syncPublishedProblemData } from "./sync/published-data.js";
 import { syncStartTimes } from "./sync/start-times.js";
@@ -69,8 +69,8 @@ export class CodeforcesOfficial extends CodeforcesPlatform {
     };
   }
 
-  fill(args) {
-    return fill(args);
+  readField(args) {
+    return readField(args);
   }
 
   /**

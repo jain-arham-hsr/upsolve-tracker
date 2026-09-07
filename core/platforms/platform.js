@@ -33,8 +33,9 @@
  *   identify(session)                     → {username, rating} required
  *   fetchContest({contestId, subtype, session, onProgress})
  *                                          → Status | Acquired required
- *   fill({contest, context, session, onProgress})
- *                                          → Status | undefined  iff canEstimate
+ *   readField({contest, context, session, onProgress})
+ *                                          → Status | Field | null   iff canEstimate
+ *   estimate(contest, field)              pure; fills the gaps        iff canEstimate
  *   fetchAccepted(session, contests, onProgress)
  *                                          → Accepted[]       required
  *   syncMetadata(session, contests, onProgress)              optional
@@ -49,6 +50,13 @@
  *               publishedDataCheckedAt, sourceId?, context? }
  *   Accepted  { contest: {id}, problem }     never a bare null contest
  *   Status    from `contest-status.js`
+ *
+ * `readField` is the I/O that produces what the estimator fits against, and
+ * answers with a Status when it cannot — `sourceUnreachable` where the data
+ * will come, `unavailable` where it never will — or null when there was simply
+ * nothing to measure. `estimate` is pure over the result, so the fit tests
+ * without a network stack. `estimateMissing` composes the two and is not
+ * overridden.
  *
  * Every gate stays inside `fetchContest`, returned as a Status; the base only
  * passes one through. The gap policy — what an unrated problem means once the
@@ -90,13 +98,18 @@ export class Platform {
 
     // Two declarations of one fact. Claiming the capability with no estimator
     // refuses every add; estimating without claiming it stores "???" beside
-    // numbers already worked out.
-    const estimates = this.fill !== Platform.prototype.fill;
-    if (estimates !== descriptor.capabilities.canEstimate) {
+    // numbers already worked out. And the two halves come together: a field
+    // nobody fits, or a fit with no field, is half an estimator.
+    const reads = this.readField !== Platform.prototype.readField;
+    const fits = this.estimate !== Platform.prototype.estimate;
+    if (reads !== fits) {
+      throw new Error(`${name} implements ${reads ? "readField() without estimate()" : "estimate() without readField()"}`);
+    }
+    if (reads !== descriptor.capabilities.canEstimate) {
       throw new Error(
-        estimates
-          ? `${name} implements fill() but its descriptor declares canEstimate: false`
-          : `${name} declares canEstimate: true but does not implement fill()`,
+        reads
+          ? `${name} implements readField() and estimate() but its descriptor declares canEstimate: false`
+          : `${name} declares canEstimate: true but implements neither readField() nor estimate()`,
       );
     }
 
@@ -165,11 +178,30 @@ export class Platform {
     const contest = buildContestRecord(this.descriptor, { type: subtype, ...acquired });
 
     if (this.descriptor.capabilities.canEstimate) {
-      const verdict = await this.fill({ contest, context: acquired.context, session, onProgress });
+      const verdict = await this.estimateMissing({ contest, context: acquired.context, session, onProgress });
       if (verdict?.status) return verdict;
     }
 
     return ready(contest);
+  }
+
+  /**
+   * Rate what the site did not publish: read the field, then fit. Runs from
+   * the add and from any re-check; a contest with nothing unrated costs no
+   * request at all.
+   *
+   * @returns {Promise<object|undefined>} a Status when the field could not be
+   *   read, otherwise nothing — the problems were filled in place.
+   */
+  async estimateMissing({ contest, context = {}, session, onProgress = () => {} }) {
+    if (!contest.problems.some((problem) => problem.rating === null)) return;
+
+    const field = await this.readField({ contest, context, session, onProgress });
+    if (field?.status) return field;
+    if (field == null) return;
+
+    onProgress("Estimating problem ratings…");
+    this.estimate(contest, field);
   }
 
   /** @returns {Promise<Set<string>>} */
@@ -196,8 +228,10 @@ export class Platform {
   fetchContest(_args) { throw new Error(`${this.id} must implement fetchContest()`); }
   fetchAccepted(_session, _contests, _onProgress) { throw new Error(`${this.id} must implement fetchAccepted()`); }
 
-  /** Rate what the site did not. Only a platform with `canEstimate` overrides. */
-  async fill(_args) {}
+  /** The field the estimator fits against. Only a platform with `canEstimate` overrides. */
+  async readField(_args) { return null; }
+  /** Fill every unrated problem from the field. Pure. Only a platform with `canEstimate` overrides. */
+  estimate(_contest, _field) {}
 }
 
 // ── the stored shape ───────────────────────────────────────────────────

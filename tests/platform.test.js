@@ -39,7 +39,8 @@ function complete(descriptor = codechef, overrides = {}) {
 // Over a descriptor that estimates, the fake has to estimate too.
 function completeEstimating(descriptor) {
   const Fake = complete(descriptor);
-  Fake.prototype.fill = async () => {};
+  Fake.prototype.readField = async () => ({});
+  Fake.prototype.estimate = () => {};
   return Fake;
 }
 
@@ -60,15 +61,48 @@ test("a subclass missing a hook is refused at construction, by hook name", () =>
   }
 });
 
-test("canEstimate and fill() are one fact, refused in both directions", () => {
+test("canEstimate, readField() and estimate() are one fact, refused in every direction", () => {
   // Claims the capability, provides no estimator.
   const Claims = complete({ ...codechef, capabilities: { ...codechef.capabilities, canEstimate: true } });
-  assert.throws(() => new Claims(), /declares canEstimate: true but does not implement fill/);
+  assert.throws(() => new Claims(), /declares canEstimate: true but implements neither/);
 
   // Provides an estimator, declares none.
   const Estimates = complete();
-  Estimates.prototype.fill = async () => {};
-  assert.throws(() => new Estimates(), /implements fill\(\) but its descriptor declares canEstimate: false/);
+  Estimates.prototype.readField = async () => ({});
+  Estimates.prototype.estimate = () => {};
+  assert.throws(() => new Estimates(), /but its descriptor declares canEstimate: false/);
+
+  // Half an estimator, either half.
+  const ReadsOnly = complete();
+  ReadsOnly.prototype.readField = async () => ({});
+  assert.throws(() => new ReadsOnly(), /readField\(\) without estimate\(\)/);
+  const FitsOnly = complete();
+  FitsOnly.prototype.estimate = () => {};
+  assert.throws(() => new FitsOnly(), /estimate\(\) without readField\(\)/);
+});
+
+test("estimateMissing reads the field once, fits in place, and passes a status through", async () => {
+  const Fake = completeEstimating(atcoder);
+  const reads = [];
+  Fake.prototype.readField = async ({ contest }) => { reads.push(contest.id); return { size: 1 }; };
+  Fake.prototype.estimate = (contest, field) => {
+    for (const problem of contest.problems) if (problem.rating === null) problem.rating = field.size * 100;
+  };
+  const platform = new Fake();
+
+  const contest = { id: "x", problems: [{ index: "A", rating: null }, { index: "B", rating: 2000 }] };
+  assert.equal(await platform.estimateMissing({ contest, session: {} }), undefined);
+  assert.deepEqual(contest.problems.map((p) => p.rating), [100, 2000]);
+
+  // Nothing unrated: no read at all.
+  await platform.estimateMissing({ contest, session: {} });
+  assert.deepEqual(reads, ["x"]);
+
+  // A status from the read is the answer, and nothing is fitted.
+  Fake.prototype.readField = async () => notEndedYet("no field");
+  const untouched = { id: "y", problems: [{ index: "A", rating: null }] };
+  assert.equal((await platform.estimateMissing({ contest: untouched, session: {} })).reason, "no field");
+  assert.equal(untouched.problems[0].rating, null);
 });
 
 test("a settings section the schema does not declare is refused", () => {

@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { estimateContest } from "../core/platforms/atcoder/estimator.js";
-import { inverseAdjustRating } from "../core/platforms/atcoder/field.js";
+import { inverseAdjustRating } from "../core/platforms/atcoder/estimator.js";
 
 const { cases } = JSON.parse(
   readFileSync(new URL("./fixtures/atcoder-standings.json", import.meta.url), "utf8"),

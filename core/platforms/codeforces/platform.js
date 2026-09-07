@@ -18,6 +18,7 @@
  * class it reads through, named in `static Sources`.
  */
 import { Platform } from "../platform.js";
+import { estimate } from "./estimator.js";
 
 const HANDLE_KEY = "upsolve_tracker.handle";
 
@@ -75,6 +76,11 @@ export class CodeforcesPlatform extends Platform {
       username: user.handle,
       rating: typeof user.rating === "number" ? user.rating : null,
     };
+  }
+
+  /** Both platforms fit the same quantity; only how the field is read differs. */
+  estimate(contest, field) {
+    return estimate(contest, field);
   }
 
   /** `contests` is unused: `user.status` returns the whole history in one call. */

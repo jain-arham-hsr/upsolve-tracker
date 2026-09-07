@@ -9,7 +9,7 @@
  */
 import { CodeforcesPlatform } from "../codeforces/platform.js";
 import { codeforcesGyms } from "./descriptor.js";
-import { fill } from "./estimator.js";
+import { readField } from "./field.js";
 import { GymSources, readSolveStats } from "./sources.js";
 import { syncStartTimes } from "./sync/start-times.js";
 import { notEndedYet } from "../../contest-status.js";
@@ -69,8 +69,8 @@ export class CodeforcesGyms extends CodeforcesPlatform {
     };
   }
 
-  fill(args) {
-    return fill(args);
+  readField(args) {
+    return readField(args);
   }
 
   /**

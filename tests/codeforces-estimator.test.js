@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { estimateProblemRating } from "../core/platforms/codeforces-official/estimator.js";
+import { estimateProblemRating } from "../core/platforms/codeforces/estimator.js";
 
 const field = (ratings) => ({ strata: [{ ratings, scale: 1 }] });
 const uniform = (n, rating) => Array.from({ length: n }, () => rating);

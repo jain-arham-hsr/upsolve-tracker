@@ -1,46 +1,53 @@
-import { computeTeamRating } from "../../rating-models/team-rating.js";
-import { fullField } from "../../rating-models/rating-distribution.js";
-
 /**
  * The official field: pre-contest ratings for everyone who entered.
  *
- * Two sources, in order of directness.
- *
- * 1. `contest.ratingChanges` — the whole field's `oldRating`, exactly the
- *    quantity wanted, in one request.
- * 2. The standings rows the caller already holds, stratified and resolved
- *    through `user.info`. Reached when a round is not rated yet, which is the
- *    freshly-finished contest you most want to upsolve. See `sampling.js` for
- *    why it samples at all when every row is in hand.
- *
- * The gym platform's equivalent has neither: a gym is never rated, so there are
- * no rating changes, and its field is small enough to take whole.
- *
- * @param {object} standings - a `getPublicContestStandings` response, passed in
- *   rather than fetched. `problems.js` reads it for the roster, so re-fetching
- *   here cost a second ~8.5 MB response for bytes already in memory.
+ * Two sources, in order of directness. `contest.ratingChanges` carries the
+ * whole field's `oldRating` in one request. When a round is not rated yet —
+ * the freshly finished contest you most want to upsolve — the standings rows
+ * the add already holds are stratified and resolved through `user.info`; see
+ * the sampling section below for why it samples when every row is in hand.
  */
-export async function getOfficialRatingDist(
-  sources,
-  contestId,
-  standings = null,
-  onProgress = () => {},
-) {
+import { fullField, distributionSize } from "../../rating-models/rating-distribution.js";
+import { ratePartyList } from "../codeforces/field.js";
+
+/**
+ * @returns {Promise<object|null>} the distribution, or null when there was
+ *   nothing to measure — a transient failure the general gap policy handles,
+ *   unlike a gym's, which is permanent.
+ */
+export async function readField({ contest, context, session, onProgress = () => {} }) {
+  onProgress("Measuring the field…");
+
+  const distribution = await getOfficialRatingDist(
+    session.sources,
+    contest.id,
+    // Fetched for the roster and carried here, so the field is measured from
+    // rows already in memory rather than a second ~8.5 MB request.
+    context.standings,
+    onProgress,
+  );
+
+  console.log(
+    `[Codeforces] Distribution: ${distributionSize(distribution)} competitors read, ` +
+      `representing ~${Math.round(
+        distribution.strata.reduce((sum, s) => sum + s.ratings.length * s.scale, 0),
+      )}.`,
+  );
+
+  return distributionSize(distribution) === 0 ? null : distribution;
+}
+
+async function getOfficialRatingDist(sources, contestId, standings, onProgress) {
   try {
     const ratingChanges = await sources.getContestRatingChanges(contestId);
     if (ratingChanges?.length > 0) {
       return fullField(ratingChanges.map((user) => user.oldRating));
     }
   } catch (error) {
-    console.warn(
-      `[Rating Dist] ratingChanges failed for ${contestId}:`,
-      error.message,
-    );
+    console.warn(`[Rating Dist] ratingChanges failed for ${contestId}:`, error.message);
   }
 
-  console.warn(
-    `[Rating Dist] ratingChanges empty for ${contestId}. Falling back to standings.`,
-  );
+  console.warn(`[Rating Dist] ratingChanges empty for ${contestId}. Falling back to standings.`);
   return sampleOfficialStandings(sources, standings, onProgress);
 }
 
@@ -54,12 +61,9 @@ async function sampleOfficialStandings(sources, standings, onProgress) {
 
     onProgress("Looking up competitor ratings…");
 
-    // One lookup pass over every sampled party, then split back into strata, so
-    // the rate-limited `user.info` chunking does not happen twice.
-    const rated = await ratePartyList(
-      sources,
-      groups.flatMap((group) => group.parties),
-    );
+    // One lookup pass over every sampled party, then split back into strata,
+    // so the rate-limited `user.info` chunking does not happen twice.
+    const rated = await ratePartyList(sources, groups.flatMap((group) => group.parties));
 
     let offset = 0;
     const strata = [];
@@ -70,8 +74,7 @@ async function sampleOfficialStandings(sources, standings, onProgress) {
     }
 
     console.log(
-      `[Rating Dist] Rated ${rated.length} of ~${total} participants ` +
-        `across ${strata.length} stratum/strata.`,
+      `[Rating Dist] Rated ${rated.length} of ~${total} participants across ${strata.length} stratum/strata.`,
     );
 
     return strata.length > 0 ? { strata } : fullField([]);
@@ -81,57 +84,11 @@ async function sampleOfficialStandings(sources, standings, onProgress) {
   }
 }
 
-/**
- * Handles to one effective rating per party.
- *
- * Duplicated verbatim in `codeforces-gyms/field.js`, which is where the two
- * gym paths use it — the standings one reading parties off standings.rows, the
- * hidden-standings one off contest.status. Here it serves the sampled official
- * field. Change one copy and you must change the other.
- */
-async function ratePartyList(sources, parties) {
-  const allHandles = [
-    ...new Set(parties.flat().filter(Boolean)),
-  ];
-
-  console.log(
-    `[Rating Dist] Found ${allHandles.length} unique handles across ${parties.length} parties.`,
-  );
-  if (allHandles.length === 0) return [];
-
-  const chunkSize = 250;
-  const handleToRating = {};
-
-  for (let i = 0; i < allHandles.length; i += chunkSize) {
-    try {
-      const usersInfo = await sources.getUsersInfo(
-        allHandles.slice(i, i + chunkSize),
-      );
-      usersInfo?.forEach((u) => {
-        handleToRating[u.handle] = u.rating ?? 800;
-      });
-    } catch {
-      console.warn(
-        `[Rating Dist] Chunk ${Math.floor(i / chunkSize) + 1} rejected. Skipping.`,
-      );
-    }
-  }
-
-  // An unknown handle counts as 800 rather than dropping out, or a party
-  // whose members all failed to resolve would collapse to the search's floor
-  // and drag the whole field down with it.
-  return parties.map((members) => {
-    const ratings = members.map((handle) => handleToRating[handle] ?? 800);
-    return computeTeamRating(ratings.length > 0 ? ratings : [800]);
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Sampling: which standings rows the field is built from.
 //
-// Pure maths with no I/O, so it is not a *source* — it decides which of the
-// rows already in hand get resolved through `user.info`. It lives beside its
-// only caller rather than in `sources.js`, which is about reading the site.
+// Pure maths with no I/O: it decides which of the rows already in hand get
+// resolved through `user.info`, so it lives beside its only caller.
 // ---------------------------------------------------------------------------
 
 /**

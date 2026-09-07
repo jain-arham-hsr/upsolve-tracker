@@ -142,6 +142,7 @@ function candidateDirs(root) {
 async function classifyFolders() {
   const platforms = new Map();
   const bases = [];
+  const baseClasses = new Map();
   const offenders = [];
 
   for (const dir of candidateDirs(PLATFORMS)) {
@@ -166,7 +167,10 @@ async function classifyFolders() {
     );
 
     if (builtFrom.length === 1 && extending.length === 0) platforms.set(builtFrom[0].id, relative);
-    else if (builtFrom.length === 0 && extending.length >= 2) bases.push(relative);
+    else if (builtFrom.length === 0 && extending.length >= 2) {
+      bases.push(relative);
+      baseClasses.set(relative, cls);
+    }
     else {
       offenders.push(
         `${relative}/platform.js: ${cls.name} is built by ${builtFrom.length} platform(s) ` +
@@ -175,13 +179,21 @@ async function classifyFolders() {
     }
   }
 
-  return { platforms, bases, offenders };
+  return { platforms, bases, baseClasses, offenders };
 }
 
 const FOLDERS = await classifyFolders();
 
 /** Absolute folder of a registered platform. */
 const folderOf = (id) => path.join(ROOT, FOLDERS.platforms.get(id));
+
+/** A platform's own folder, then every base folder it inherits from. */
+const foldersOf = (id) => [
+  folderOf(id),
+  ...[...FOLDERS.baseClasses]
+    .filter(([, cls]) => getAdapter(id) instanceof cls)
+    .map(([folder]) => path.join(ROOT, folder)),
+];
 
 test("shared code covers the whole of core/, not just its top level", () => {
   const files = sharedFiles();
@@ -516,34 +528,74 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   );
 });
 
-test("a platform has estimator.js iff its descriptor claims canEstimate", () => {
-  // These are two declarations of one fact, in two files, and nothing made them
-  // agree. `contest-manager.js` reads `canEstimate` in exactly one place to
-  // decide what a *gap* means: true, and a problem left unrated after the
-  // estimator ran is a bug it refuses loudly on; false, and the same gap is
-  // simply a problem the site has not rated, stored as `rating: null` and shown
-  // as `???`. So a platform claiming the capability with no estimator to run
-  // would refuse every add, and one estimating without the claim would quietly
-  // store `???` beside numbers it had already worked out.
-  //
-  // It holds on all four today, but only since AtCoder flipped — before that
-  // AtCoder shipped an estimator and declared `false`, which is exactly the
-  // half-migrated state this catches.
+test("a platform has field.js and estimator.js iff its descriptor claims canEstimate", () => {
+  // Two declarations of one fact, in two places, and nothing but this makes
+  // them agree. `contest-manager.js` reads `canEstimate` in exactly one place
+  // to decide what a *gap* means: true, and a problem left unrated after the
+  // estimator ran is a bug it refuses loudly on; false, and the same gap is a
+  // problem the site has not rated, stored as `rating: null` and shown as
+  // `???`. The Platform constructor refuses a class whose methods disagree
+  // with the flag; this is the same fact at the level of files, which is where
+  // a reader looks first — and the files may sit in a base folder, as the
+  // Codeforces estimator does.
   const offenders = [];
 
   for (const platform of listPlatforms()) {
-    const hasEstimator = readdirSync(folderOf(platform.id)).includes("estimator.js");
+    const has = (name) => foldersOf(platform.id).some((dir) => readdirSync(dir).includes(name));
     const claimed = platform.capabilities.canEstimate === true;
-    if (hasEstimator === claimed) continue;
 
-    offenders.push(
-      hasEstimator
-        ? `${platform.id} ships estimator.js but declares canEstimate: false`
-        : `${platform.id} declares canEstimate: true but has no estimator.js`,
-    );
+    for (const file of ["field.js", "estimator.js"]) {
+      if (has(file) === claimed) continue;
+      offenders.push(
+        has(file)
+          ? `${platform.id} ships ${file} but declares canEstimate: false`
+          : `${platform.id} declares canEstimate: true but has no ${file}`,
+      );
+    }
   }
 
-  assert.deepEqual(offenders, [], "the capability and the file are one fact");
+  assert.deepEqual(offenders, [], "the capability and the files are one fact");
+});
+
+test("an estimator is pure, and a field is where the reading happens", async () => {
+  // The split that makes every fit testable without a network stack: field.js
+  // reads the site and answers a status when it cannot; estimator.js takes
+  // what it read and fits. An estimator that imported a source, a client or
+  // its own field.js would be the old shape back — I/O and maths in one
+  // function, testable only by stubbing fetch.
+  const offenders = [];
+  let estimators = 0;
+  let fields = 0;
+
+  for (const file of sourceFiles(PLATFORMS, [".js"])) {
+    const relative = path.relative(ROOT, file);
+    const name = path.basename(file);
+    if (name !== "estimator.js" && name !== "field.js") continue;
+
+    const code = stripComments(readFileSync(file, "utf8"));
+    const exported = Object.keys(await import(file));
+
+    if (name === "estimator.js") {
+      estimators++;
+      if (!exported.includes("estimate")) offenders.push(`${relative} does not export estimate()`);
+      for (const spec of importsOf(code)) {
+        if (/(sources|site-client|field)\.js$/.test(spec)) offenders.push(`${relative} imports ${spec}`);
+      }
+      if (/\bfetch\s*\(/.test(code)) offenders.push(`${relative} calls fetch()`);
+    } else {
+      fields++;
+      // A base folder's field.js holds what the platforms' fields share, and
+      // is not itself a field; only a platform's own must read.
+      const inPlatform = [...FOLDERS.platforms.values()].some((folder) => relative.startsWith(folder + "/"));
+      if (inPlatform && !exported.includes("readField")) offenders.push(`${relative} does not export readField()`);
+    }
+  }
+
+  assert.deepEqual(offenders, []);
+  // Codeforces' base plus AtCoder's; three platforms read a field of their own
+  // and the Codeforces pair share what happens below the handles.
+  assert.equal(estimators, 2, `expected two estimators, found ${estimators}`);
+  assert.equal(fields, 4, `expected four field modules, found ${fields}`);
 });
 
 test("nothing in a scrapers/ folder fetches", () => {

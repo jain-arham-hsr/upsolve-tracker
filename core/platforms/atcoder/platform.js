@@ -20,7 +20,8 @@ import { atcoder } from "./descriptor.js";
 import { sources } from "./sources.js";
 import { ProfilePage } from "./scrapers/profile.js";
 import { PageGlobals } from "./scrapers/page-globals.js";
-import { fill } from "./estimator.js";
+import { readField } from "./field.js";
+import { estimate } from "./estimator.js";
 import { notPublishedYet } from "../../contest-status.js";
 
 const HANDLE_KEY = "upsolve_tracker.atcoder_handle";
@@ -122,8 +123,12 @@ export class AtCoder extends Platform {
     };
   }
 
-  fill(args) {
-    return fill(args);
+  readField(args) {
+    return readField(args);
+  }
+
+  estimate(contest, field) {
+    return estimate(contest, field);
   }
 
   /**
@@ -171,11 +176,11 @@ export class AtCoder extends Platform {
     let resolved = 0;
     for (const contest of unrated.slice(0, MAX_RETRIES_PER_SYNC)) {
       const before = contest.problems.filter((p) => p.rating !== null).length;
-      await this.fill({ contest, session, onProgress });
+      await this.estimateMissing({ contest, session, onProgress });
 
-      // Stamped on the attempt, not on success: `fill` swallows its own
-      // failures, and stamping only on success would leave a contest that can
-      // never be rated first in the sort forever.
+      // Stamped on the attempt, not on success: a failed read answers with a
+      // status rather than a throw, and stamping only on success would leave a
+      // contest that can never be rated first in the sort forever.
       contest.publishedDataCheckedAt = Date.now();
 
       resolved += contest.problems.filter((p) => p.rating !== null).length - before;
