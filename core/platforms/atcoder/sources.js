@@ -1,5 +1,17 @@
 /**
- * Everything this extension reads from AtCoder itself.
+ * Everything this extension reads from AtCoder itself — one function per route.
+ *
+ * Named `sources.js` rather than `scraping.js` because scraping is what
+ * `scrapers/` does: turning markup into facts. This half fetches, and one of the
+ * three routes below is JSON, so "scraping" was wrong twice over.
+ *
+ * The fetching itself is not here — `http.js` configures the shared
+ * `services/site-client.js`, which owns pacing, transport and refusal detection.
+ * What each route owns is its URL, how many requests it takes, what an unusable
+ * answer means for it, and what the caller gets back. Those differ per route even
+ * on one site: `fetchContestTasks` returns null so the contest waits, while
+ * `fetchAcceptedTaskIds` throws, because `solved` is sticky and a silent empty
+ * would strand the queue permanently.
  *
  * Three routes, and none of them is matched by AtCoder's robots.txt — every
  * directive there ends in a slash (`/contests/*​/standings/`,
@@ -17,8 +29,8 @@
  * fallback here; it is the only interface.
  */
 import { getDocument, getJson } from "./http.js";
-import { TasksPage } from "./dom-readers/tasks.js";
-import { SubmissionsPage } from "./dom-readers/submissions.js";
+import { TasksPage } from "./scrapers/tasks.js";
+import { SubmissionsPage } from "./scrapers/submissions.js";
 
 const ORIGIN = "https://atcoder.jp";
 
@@ -41,10 +53,10 @@ const MAX_SUBMISSION_PAGES = 20;
 export async function fetchContestTasks(contestId) {
   const doc = await getDocument(`${ORIGIN}/contests/${encodeURIComponent(contestId)}/tasks`);
 
-  const page = TasksPage.read(doc);
+  const page = TasksPage.scrape(doc);
   if (page === null) return null;
 
-  // Only the display fallback is left here: a reader returns null rather than
+  // Only the display fallback is left here: a scraper returns null rather than
   // inventing a name, so choosing what to show instead is the caller's.
   return { ...page, name: page.name ?? `Contest ${contestId}` };
 }
@@ -58,7 +70,7 @@ export async function fetchContestTasks(contestId) {
  * caught a task solved in a *different* contest from the one being tracked.
  *
  * Filtered server-side to accepted submissions, but the verdict is re-read from
- * each row anyway; see `dom-readers/submissions.js` for why that is not
+ * each row anyway; see `scrapers/submissions.js` for why that is not
  * redundant.
  */
 export async function fetchAcceptedTaskIds(contestId, handle) {
@@ -66,7 +78,7 @@ export async function fetchAcceptedTaskIds(contestId, handle) {
     `${ORIGIN}/contests/${encodeURIComponent(contestId)}/submissions` +
     `?f.User=${encodeURIComponent(handle)}&f.Status=AC`;
 
-  const first = SubmissionsPage.read(await getDocument(base));
+  const first = SubmissionsPage.scrape(await getDocument(base));
 
   // A missing table is a layout change, not an empty history. Refuse rather
   // than report "nothing solved", which `solved` being sticky would make
@@ -82,7 +94,7 @@ export async function fetchAcceptedTaskIds(contestId, handle) {
 
   for (let page = 2; page <= pages; page++) {
     // Only page one is asked how many pages there are; the rest contribute ids.
-    const next = SubmissionsPage.read(await getDocument(`${base}&page=${page}`));
+    const next = SubmissionsPage.scrape(await getDocument(`${base}&page=${page}`));
     if (next === null) break;
     for (const id of next.acceptedTaskIds) accepted.add(id);
   }

@@ -357,7 +357,7 @@ test("a folder under core/platforms/ has a descriptor iff it is registered", () 
   // was written but never wired into registry.js, which would simply never run.
   //
   // Note this reads **one level only**, which is deliberate rather than an
-  // oversight: `dom-readers/` is a folder under a platform and has no
+  // oversight: `scrapers/` is a folder under a platform and has no
   // descriptor, so a recursive walk would fail it.
   const registered = new Set(listPlatforms().map((platform) => platform.id));
   const folders = readdirSync(PLATFORMS, { withFileTypes: true })
@@ -390,7 +390,7 @@ test("the official Codeforces platform reaches no HTML at all", () => {
   // `tests/codeforces-adapter.test.js` asserts the same thing dynamically, by
   // failing if a request is issued while reaching the estimator. This one
   // catches the import before it can ever run.
-  const forbidden = ["http.js", "scraping.js", "dom-readers", "DOMParser"];
+  const forbidden = ["http.js", "scraping.js", "scrapers", "DOMParser"];
   const offenders = [];
 
   for (const file of sourceFiles(path.join(PLATFORMS, "codeforces-official"), [".js"])) {
@@ -424,10 +424,10 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
     .filter((file) => importsOf(readFileSync(file, "utf8")).some((s) => s.endsWith("http.js")))
     .map((file) => path.relative(ROOT, file));
 
-  assert.deepEqual(importers, ["core/platforms/codeforces-gyms/scraping.js"]);
+  assert.deepEqual(importers, ["core/platforms/codeforces-gyms/sources.js"]);
 
-  const scraping = readFileSync(
-    path.join(PLATFORMS, "codeforces-gyms", "scraping.js"),
+  const sources = readFileSync(
+    path.join(PLATFORMS, "codeforces-gyms", "sources.js"),
     "utf8",
   );
   // Inspect the fetched URLs themselves, not the file. The import path used to
@@ -438,7 +438,7 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   // is how this goes vacuous without failing: it was `.get` until the client
   // started answering with a parsed Document, at which point a name-specific
   // regex matches nothing and "exactly one page fetch" reads as zero.
-  const fetched = [...stripComments(scraping).matchAll(/CodeforcesHttp\.\w+\(([^)]*)\)/g)]
+  const fetched = [...stripComments(sources).matchAll(/CodeforcesHttp\.\w+\(([^)]*)\)/g)]
     .map((m) => m[1].trim());
 
   assert.equal(fetched.length, 1, `expected one page fetch, got ${fetched.length}`);
@@ -478,10 +478,10 @@ test("a platform has estimator.js iff its descriptor claims canEstimate", () => 
   assert.deepEqual(offenders, [], "the capability and the file are one fact");
 });
 
-test("nothing in a dom-readers/ folder fetches", () => {
+test("nothing in a scrapers/ folder fetches", () => {
   // This one carries more weight than it used to. "Read" is the verb of I/O,
   // so the folder's name no longer says by itself that these never go and get
-  // anything — a `dom-readers/` file that opened a connection would read as
+  // anything — a `scrapers/` file that opened a connection would read as
   // doing exactly what it says. This assertion is what keeps it unambiguous,
   // and it is the same objection that ruled out calling the folder scrapers/.
   // What the folder is for. Its files take a page the platform already has —
@@ -497,16 +497,16 @@ test("nothing in a dom-readers/ folder fetches", () => {
   // the testability is gone.
   const clients = ["http.js", "api.js", "site-client.js", "scraping.js"];
   const offenders = [];
-  const readers = [];
+  const scrapers = [];
 
   for (const platform of listPlatforms()) {
     const root = path.join(PLATFORMS, platform.id);
-    if (!readdirSync(root).includes("dom-readers")) continue;
+    if (!readdirSync(root).includes("scrapers")) continue;
 
-    for (const file of sourceFiles(path.join(root, "dom-readers"), [".js"])) {
+    for (const file of sourceFiles(path.join(root, "scrapers"), [".js"])) {
       const relative = path.relative(ROOT, file);
       const code = stripComments(readFileSync(file, "utf8"));
-      readers.push(relative);
+      scrapers.push(relative);
 
       for (const spec of importsOf(code)) {
         if (clients.some((name) => spec.endsWith(name))) {
@@ -517,13 +517,13 @@ test("nothing in a dom-readers/ folder fetches", () => {
     }
   }
 
-  assert.deepEqual(offenders, [], "a reader takes a page, it does not go and get one");
+  assert.deepEqual(offenders, [], "a scraper takes a page, it does not go and get one");
 
   // Or the loop above proves nothing: a rename that emptied every folder would
   // pass it silently. Six files across three platforms, and codeforces-official
   // deliberately has none — it reads no HTML at all, which the test above pins
   // from the other direction.
-  assert.equal(readers.length, 6, `expected six readers, found ${readers.join(", ")}`);
+  assert.equal(scrapers.length, 6, `expected six scrapers, found ${scrapers.join(", ")}`);
 });
 
 test("a site client routes through its own platform's descriptor", () => {
@@ -635,7 +635,7 @@ test("both Codeforces clients share one signing implementation", () => {
 /**
  * The root of a platform folder is a closed set.
  *
- * `dom-readers/` was the first half of this idea and was left half-done: HTML
+ * `scrapers/` was the first half of this idea and was left half-done: HTML
  * readers got a folder, and everything else open-ended stayed loose at the
  * root, where you could not tell a contract file from that platform's own
  * invention. Nine names below are the contract. Anything a platform can have N
@@ -661,11 +661,11 @@ const PLATFORM_ROOT_FILES = new Set([
   // How it reaches the site.
   "api.js",
   "http.js",
-  "scraping.js",
+  "sources.js",
 ]);
 
 /** One file per page / pass / endpoint — a platform may have any number. */
-const PLATFORM_FOLDERS = new Set(["dom-readers", "sync", "sources"]);
+const PLATFORM_FOLDERS = new Set(["scrapers", "sync"]);
 
 test("a platform's root holds only contract names", () => {
   const offenders = [];
@@ -684,7 +684,8 @@ test("a platform's root holds only contract names", () => {
       if (!PLATFORM_ROOT_FILES.has(entry.name)) {
         offenders.push(
           `${platform.id}/${entry.name} is not a contract name — put it in ` +
-            `${[...PLATFORM_FOLDERS].join("/, ")}/, or say why it is a tenth root name`,
+            `${[...PLATFORM_FOLDERS].map((f) => `${f}/`).join(" or ")}, or argue ` +
+            `here for widening the root`,
         );
       }
     }
@@ -693,8 +694,8 @@ test("a platform's root holds only contract names", () => {
   assert.deepEqual(offenders, [], "the root of a platform folder is a closed set");
 });
 
-test("every reader is one, by the definition rather than by folder", async () => {
-  // `dom-readers/` held six files that shared a folder and nothing else — some
+test("every scraper is one, by the definition rather than by folder", async () => {
+  // `scrapers/` held six files that shared a folder and nothing else — some
   // exporting one extractor, some three, one keeping its selectors in a block
   // and the rest scattering them. This is the definition, asserted: one class
   // per page, `read` overridden, selectors declared in one place.
@@ -702,17 +703,17 @@ test("every reader is one, by the definition rather than by folder", async () =>
   // The base's `read` throws rather than returning null on purpose, so a
   // subclass that forgets to override it fails loudly here and at runtime,
   // rather than reading as "this page never matches".
-  const { DomReader } = await import("../core/platforms/dom-reader.js");
+  const { Scraper } = await import("../core/platforms/scraper.js");
   const offenders = [];
-  let readers = 0;
+  let scrapers = 0;
 
   for (const platform of listPlatforms()) {
     const root = path.join(PLATFORMS, platform.id);
-    if (!readdirSync(root).includes("dom-readers")) continue;
+    if (!readdirSync(root).includes("scrapers")) continue;
 
-    for (const file of sourceFiles(path.join(root, "dom-readers"), [".js"])) {
+    for (const file of sourceFiles(path.join(root, "scrapers"), [".js"])) {
       const relative = path.relative(ROOT, file);
-      readers++;
+      scrapers++;
 
       const exported = Object.values(await import(file)).filter(
         (value) => typeof value === "function",
@@ -723,22 +724,22 @@ test("every reader is one, by the definition rather than by folder", async () =>
         continue;
       }
 
-      const reader = exported[0];
-      if (!(reader.prototype instanceof DomReader)) {
-        offenders.push(`${relative}'s ${reader.name} does not extend DomReader`);
+      const scraper = exported[0];
+      if (!(scraper.prototype instanceof Scraper)) {
+        offenders.push(`${relative}'s ${scraper.name} does not extend Scraper`);
         continue;
       }
-      if (reader.read === DomReader.read) {
-        offenders.push(`${relative}'s ${reader.name} never overrides read()`);
+      if (scraper.scrape === Scraper.scrape) {
+        offenders.push(`${relative}'s ${scraper.name} never overrides scrape()`);
       }
-      if (Object.keys(reader.selectors ?? {}).length === 0) {
-        offenders.push(`${relative}'s ${reader.name} declares no selectors`);
+      if (Object.keys(scraper.selectors ?? {}).length === 0) {
+        offenders.push(`${relative}'s ${scraper.name} declares no selectors`);
       }
     }
   }
 
-  assert.deepEqual(offenders, [], "a reader owns one page and says how it reads it");
-  assert.equal(readers, 6, `expected six readers, found ${readers}`);
+  assert.deepEqual(offenders, [], "a scraper owns one page and says how it reads it");
+  assert.equal(scrapers, 6, `expected six scrapers, found ${scrapers}`);
 });
 
 test("DOMParser is constructed in exactly one place", () => {

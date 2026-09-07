@@ -60,7 +60,7 @@ export const CodeforcesHttp = {
   /**
    * @param {string} url
    * @param {RequestInit} [options]
-   * @returns {Promise<Document>} the parsed page, ready for `dom-readers/`
+   * @returns {Promise<Document>} the parsed page, ready for `scrapers/`
    */
   getDocument: (url, options = {}) => client.getDocument(url, options),
 };

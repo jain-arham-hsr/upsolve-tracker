@@ -95,7 +95,7 @@ export function createSiteClient({ site = null, pacer, refusal, fetchImpl = null
      *
      * The third return type, beside `get` and `getJson`, and between them they
      * cover what the consumers want: a `Document` for everything in a platform's
-     * `dom-readers/`, an object for JSON, a raw string for whatever wants neither.
+     * `scrapers/`, an object for JSON, a raw string for whatever wants neither.
      * Having it here is what keeps `DOMParser` out of platform code, where it was
      * once spelled out beside each fetch — `module-boundaries.test.js` asserts it
      * is constructed in this file and nowhere else.

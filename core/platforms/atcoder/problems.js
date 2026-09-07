@@ -12,7 +12,7 @@
  * the contest's standings by `estimator.js` — which is a separate concern with a
  * separate failure mode, and is allowed to fail softly where this is not.
  */
-import { fetchContestTasks } from "./scraping.js";
+import { fetchContestTasks } from "./sources.js";
 import { fill } from "./estimator.js";
 import { notPublishedYet } from "../../contest-status.js";
 

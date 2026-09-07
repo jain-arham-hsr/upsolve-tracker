@@ -16,8 +16,8 @@
  * it, plus three more spread across the modules below. The folder answers that
  * question now, so neither pipeline asks it.
  */
-import { readSolveStats } from "./sources/standings.js";
-import { isInProblemset } from "./sources/problemset.js";
+import { readSolveStats } from "./sources.js";
+import { isInProblemset } from "./sources.js";
 import { syncPublishedProblemData } from "./sync/published-data.js";
 import { syncStartTimes } from "./sync/start-times.js";
 import { notPublishedYet } from "../../contest-status.js";

@@ -9,7 +9,7 @@
  * another account permanently corrupts the queue *and* overwrites the backup.
  */
 import { getDashboardPage } from "./api.js";
-import { DashboardPage } from "./dom-readers/page-globals.js";
+import { DashboardPage } from "./scrapers/page-globals.js";
 import { getSettings } from "../../settings/store.js";
 
 const HANDLE_KEY = "upsolve_tracker.codechef_handle";
@@ -30,7 +30,7 @@ export async function createSessionFrom(values) {
   // Null both when signed out and when the shell no longer carries the
   // bootstrap object. Either way the caller must not read an empty solved list
   // as "nothing solved".
-  const page = DashboardPage.read(await getDashboardPage());
+  const page = DashboardPage.scrape(await getDashboardPage());
 
   return {
     handle: values[HANDLE_KEY],

@@ -16,7 +16,7 @@
  * rerun of it. There is no way around that: AtCoder does not publish the list
  * that would answer it. The failure is a stale queue row, not a wrong one.
  */
-import { fetchAcceptedTaskIds } from "./scraping.js";
+import { fetchAcceptedTaskIds } from "./sources.js";
 
 /**
  * @returns {Promise<Array<{contest: object, problem: object}>>} pairs the trunk

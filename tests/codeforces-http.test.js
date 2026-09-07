@@ -63,12 +63,12 @@ test("a 200 carrying Cloudflare's interstitial is caught too", async () => {
   }
 });
 
-test("an ordinary page comes back parsed, ready for the dom-readers", async () => {
+test("an ordinary page comes back parsed, ready for the scrapers", async () => {
   resetHttpState();
   const stub = stubFetch(async () => ok("<html><table class='problems'></table></html>"));
   try {
     const doc = await CodeforcesHttp.getDocument("https://codeforces.com/gym/1");
-    // A Document rather than the string: everything in `dom-readers/` takes one,
+    // A Document rather than the string: everything in `scrapers/` takes one,
     // and the parse happening in the client is what keeps `DOMParser` out of
     // platform code entirely.
     assert.ok(doc.querySelector("table.problems"), "the page should arrive queryable");

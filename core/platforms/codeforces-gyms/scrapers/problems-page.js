@@ -7,15 +7,15 @@
  *
  * This file was called `standings-dom.js` long after the standings scrape was
  * deleted, holding no standings parsing at all, and nothing noticed — because
- * nothing tied a reader's name to the page it reads. Naming it for the page is
+ * nothing tied a scraper's name to the page it reads. Naming it for the page is
  * what makes the next such drift visible.
  */
-import { DomReader } from "../../dom-reader.js";
+import { Scraper } from "../../scraper.js";
 
 /** Shared by both problem readers so their fallbacks can't drift. */
 const UNKNOWN_PROBLEM = "Unknown Problem";
 
-export class ProblemsPage extends DomReader {
+export class ProblemsPage extends Scraper {
   static selectors = {
     problemsTable: "table.problems",
     problemRow: "tr",
@@ -26,11 +26,11 @@ export class ProblemsPage extends DomReader {
      * The contest name lives in the sidebar box's header link, whose href is
      * the contest root — **not** in a `.caption`.
      *
-     * The standings reader's chain was `.contest-name` → `.caption` →
+     * The standings scraper's chain was `.contest-name` → `.caption` →
      * `<title>`. A problems page has no `.contest-name`, and its first
      * `.caption` is the "→ About Contest" sidebox heading — so pointing that
      * chain here filed the first real gym in the queue under the name
-     * **"→ About Contest"**. That reader is gone; the warning stays.
+     * **"→ About Contest"**. That scraper is gone; the warning stays.
      */
     contestName: ["#sidebar .rtable th a", "#sidebar .rtable th"],
     title: "title",
@@ -51,7 +51,7 @@ export class ProblemsPage extends DomReader {
    *   a layout change, and the caller refuses loudly rather than storing a
    *   contest that merely looks short.
    */
-  static read(doc, { contestPath = null } = {}) {
+  static scrape(doc, { contestPath = null } = {}) {
     const problems = this.#problems(doc);
     if (problems === null) return null;
 
@@ -64,7 +64,7 @@ export class ProblemsPage extends DomReader {
 
   /**
    * Null rather than `Contest <id>` when unreadable: a display fallback is the
-   * caller's to choose, and this folder's rule is that a reader never invents a
+   * caller's to choose, and this folder's rule is that a scraper never invents a
    * plausible value. Note the name is read once at add time and never re-read,
    * so a contest added under the wrong name keeps it until removed and re-added.
    */

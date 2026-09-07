@@ -8,12 +8,12 @@
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
-import { DashboardPage } from "../core/platforms/codechef/dom-readers/page-globals.js";
+import { DashboardPage } from "../core/platforms/codechef/scrapers/page-globals.js";
 
 // The bootstrap object lives in a `<script>`, so these now go through a real
 // document the way production does, rather than being regexed off a string.
 const extractSession = (html) =>
-  DashboardPage.read(parseHTML(`<html><body>${html ?? ""}</body></html>`).document);
+  DashboardPage.scrape(parseHTML(`<html><body>${html ?? ""}</body></html>`).document);
 import { resetApiState } from "../core/platforms/codechef/api.js";
 import { getAdapter } from "../core/platforms/adapters.js";
 

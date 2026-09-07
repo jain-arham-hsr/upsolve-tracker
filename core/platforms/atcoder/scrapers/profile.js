@@ -9,9 +9,9 @@
  * AtCoder problem in the queue, because one rating shifts a whole platform's
  * block at once. Hence the folder rule: null, never a plausible default.
  */
-import { DomReader } from "../../dom-reader.js";
+import { Scraper } from "../../scraper.js";
 
-export class ProfilePage extends DomReader {
+export class ProfilePage extends Scraper {
   static selectors = {
     header: "th",
   };
@@ -25,9 +25,9 @@ export class ProfilePage extends DomReader {
    * The page has no load-bearing table whose absence would mean "this is not a
    * profile" — a profile with no rating row is a real profile belonging to
    * someone who has not competed. So the *field* is nullable and the page is
-   * not, which is the distinction `dom-reader.js` exists to keep.
+   * not, which is the distinction `scraper.js` exists to keep.
    */
-  static read(doc) {
+  static scrape(doc) {
     return { rating: this.#rating(doc) };
   }
 

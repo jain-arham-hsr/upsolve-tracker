@@ -1,8 +1,31 @@
-import { scrapeProblemsPage } from "../scraping.js";
-import {
-  summariseSubmissions,
-  fetchContestSubmissions,
-} from "./contest-status.js";
+/**
+ * Everything this platform reads from Codeforces — one section per endpoint.
+ *
+ * Named `sources.js` rather than `scraping.js` because scraping is what
+ * `scrapers/` does: turning markup into facts. Only the last section below
+ * reads markup at all, and even it only fetches the page and hands it to
+ * `scrapers/problems-page.js`.
+ *
+ * The fetching is not here: `api.js` signs the JSON calls, `http.js` configures
+ * the shared `services/site-client.js` for the one HTML route, and
+ * `request-pacer.js` spaces both. What each source owns is which endpoint
+ * answers its question, how many requests that takes, and what an unusable
+ * answer means for it.
+ *
+ * Three endpoints, in the order a gym add reaches them:
+ *
+ *   contest.standings   the roster, ratings, tags, times, solve counts
+ *   contest.status      the same, rebuilt from submissions, when standings are hidden
+ *   /gym/<id>           the definitive problem list, likewise
+ */
+
+import { CodeforcesHttp } from "./http.js";
+import { ProblemsPage } from "./scrapers/problems-page.js";
+
+
+// -------------------------------------------------------------------------
+// contest.standings
+// -------------------------------------------------------------------------
 
 /**
  * Fetches a gym's problem metadata and solve counts.
@@ -233,4 +256,226 @@ function populateSolveCountsFromApi(standings, problems) {
   problems.forEach((problem) => {
     problem.officialSolves = solveCountMap[problem.index] ?? 0;
   });
+}
+
+// -------------------------------------------------------------------------
+// contest.status — for gyms whose standings are hidden
+// -------------------------------------------------------------------------
+
+/**
+ * Rebuilding a gym from its submissions, for contests whose standings
+ * Codeforces has hidden.
+ *
+ * A gym can be set to "Standings will not be visible as original contest".
+ * When it is, both halves of the usual acquisition path are gone at once: the
+ * standings page carries no table, and contest.standings answers FAILED with
+ * "Standings are not available". contest.status still answers, and it carries
+ * everything the standings response was being mined for — problem metadata,
+ * who competed, and what they solved.
+ *
+ * The derivation is pure so it can be tested against a captured contest
+ * without a network stack, the way applySolvedStatus is. See
+ * tests/contest-status.test.js, which pins it to a real hidden-standings gym.
+ */
+
+/** Matches getContestStandings' participantTypes, so both gym paths agree. */
+const OFFICIAL_PARTICIPANT_TYPES = new Set(["CONTESTANT", "VIRTUAL"]);
+
+/** contest.status pages; 10k is accepted in one request. */
+const PAGE_SIZE = 10000;
+
+/**
+ * Refuse rather than walk an unbounded contest. A submission is ~400 bytes of
+ * JSON, so this is already a larger response than the ~12MB standings the
+ * scraper pays for on a big Div. 3.
+ */
+const MAX_SUBMISSIONS = 50000;
+
+/**
+ * Every submission to a contest, paged.
+ *
+ * @param {CodeforcesService} cfService
+ * @param {string|number} contestId
+ * @returns {Promise<object[]>}
+ */
+export async function fetchContestSubmissions(cfService, contestId) {
+  const submissions = [];
+  let from = 1;
+
+  while (true) {
+    const page = await cfService.getContestStatus(contestId, {
+      from,
+      count: PAGE_SIZE,
+    });
+    if (!page?.length) break;
+
+    submissions.push(...page);
+    if (page.length < PAGE_SIZE) break;
+
+    from += PAGE_SIZE;
+
+    // Truncating silently would understate every solve count, and an
+    // understated count reads as a harder problem rather than as a failure.
+    if (submissions.length >= MAX_SUBMISSIONS) {
+      throw new Error(
+        `Gym ${contestId} has more than ${MAX_SUBMISSIONS} submissions, which is too many to ` +
+          `rebuild its standings from.`,
+      );
+    }
+  }
+
+  return submissions;
+}
+
+/**
+ * Derives everything the add path needs from a contest's submissions.
+ *
+ * Practice submissions are excluded throughout: they happen after the contest,
+ * so counting them would overstate how many people solved a problem under
+ * contest conditions, which is exactly the quantity the estimator is fitted
+ * to. Ghost parties are excluded for the same reason the standings path
+ * excludes them.
+ *
+ * @param {object[]} submissions - contest.status rows
+ * @returns {{
+ *   solveCounts: Record<string, number>,
+ *   problemMeta: Map<string, {name: string, rating: number|null, tags: string[]}>,
+ *   partyHandles: string[][],
+ *   startTimeSeconds: number|null,
+ * }}
+ */
+export function summariseSubmissions(submissions) {
+  const solvers = new Map(); // problem index -> Set of party id
+  const problemMeta = new Map();
+  const parties = new Map(); // party id -> string[] of handles
+  const startTimes = new Map(); // startTimeSeconds -> party count
+
+  for (const submission of submissions ?? []) {
+    const problem = submission?.problem;
+    const author = submission?.author;
+    if (!problem?.index || !author) continue;
+
+    // Problem metadata is worth taking from any submission, including a
+    // practice one: it describes the problem, not the attempt.
+    if (!problemMeta.has(problem.index)) {
+      problemMeta.set(problem.index, {
+        name: problem.name ?? null,
+        rating: typeof problem.rating === "number" ? problem.rating : null,
+        tags: problem.tags ?? [],
+      });
+    }
+
+    if (!OFFICIAL_PARTICIPANT_TYPES.has(author.participantType)) continue;
+    if (author.ghost) continue;
+
+    const partyId = author.participantId;
+    if (partyId == null) continue;
+
+    if (!parties.has(partyId)) {
+      parties.set(
+        partyId,
+        (author.members ?? []).map((member) => member.handle).filter(Boolean),
+      );
+      if (author.startTimeSeconds != null) {
+        startTimes.set(
+          author.startTimeSeconds,
+          (startTimes.get(author.startTimeSeconds) ?? 0) + 1,
+        );
+      }
+    }
+
+    if (submission.verdict !== "OK") continue;
+
+    // A party that solves the same problem twice still solved it once.
+    if (!solvers.has(problem.index)) solvers.set(problem.index, new Set());
+    solvers.get(problem.index).add(partyId);
+  }
+
+  const solveCounts = {};
+  for (const [index, partySet] of solvers) solveCounts[index] = partySet.size;
+
+  return {
+    solveCounts,
+    problemMeta,
+    partyHandles: [...parties.values()],
+    startTimeSeconds: mostCommon(startTimes),
+  };
+}
+
+/**
+ * Virtual entrants each carry their own start time, so the contest's own is
+ * the one the most parties share rather than the first one seen.
+ */
+function mostCommon(tally) {
+  let best = null;
+  let bestCount = 0;
+  for (const [value, count] of tally) {
+    if (count > bestCount) {
+      best = value;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+// -------------------------------------------------------------------------
+// /gym/<id> — the one page this extension still reads
+// -------------------------------------------------------------------------
+
+/**
+ * The last HTML the extension reads on Codeforces, and only for one case.
+ *
+ * A gym whose standings the setter hid answers `FAILED` to `contest.standings`,
+ * so the roster has to come from somewhere — and the `/gym/<id>` problems page
+ * is the one page those contests still render. Every other Codeforces path,
+ * official and gym alike, is now pure JSON API.
+ *
+ * `scrapeContestProblems` used to live here and read a visible gym's standings
+ * page for its roster, name and solve counts. It was redundant: the very next
+ * call fetched `contest.standings`, which carries all three, and
+ * `populateSolveCountsFromApi` overwrote the counts the page had just been
+ * parsed for.
+ */
+
+
+/**
+ * Problem metadata from a contest's own problems page.
+ *
+ * The page carries no solve counts and no field, so the caller sources those
+ * from `contest.status` instead; what it does carry is the definitive problem
+ * list, **including problems nobody submitted to** — which is why the list
+ * cannot be derived from the submissions themselves.
+ *
+ * @param {string} contestId
+ * @returns {{ contestName: string, problems: object[] }|null}
+ *   null when the page can't be parsed, so the caller can refuse loudly.
+ */
+export async function scrapeProblemsPage(contestId) {
+  const path = `/gym/${contestId}`;
+  const doc = await CodeforcesHttp.getDocument(`https://codeforces.com${path}`);
+
+  const page = ProblemsPage.scrape(doc, { contestPath: path });
+  if (!page) return null;
+
+  // Which selector finds the name is the scraper's business and now lives
+  // there. What is left here is a *display* fallback and the stored shape,
+  // neither of which is a fact about the page — a scraper that invented
+  // "Contest 712373" would be doing the thing this folder forbids.
+  return {
+    contestName: page.contestName ?? `Contest ${contestId}`,
+    problems: page.problems.map(blankProblem),
+    finished: page.finished,
+  };
+}
+
+/** The stored shape, before anything is known about difficulty or solves. */
+function blankProblem(problem) {
+  return {
+    ...problem,
+    rating: null,
+    ratingSource: null,
+    officialSolves: 0,
+    solved: false,
+    tags: [],
+  };
 }
