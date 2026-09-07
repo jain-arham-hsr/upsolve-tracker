@@ -236,7 +236,7 @@ Before it, all three were triplicated — each platform's adapter wrote
 translation.** Three platforms each turned that flag into `sourceUnreachable`
 themselves, and two of the three were the same six lines. The platform's job is
 to *flag* the error at the point that knows — a Cloudflare challenge in
-`codeforces-gyms/http.js`, a failed problem fetch in `codechef/api.js` — not to
+`codeforces-gyms/sources.js`, a failed problem fetch in `codechef/sources.js` — not to
 remember which of the five statuses a flag maps to. `pipeline.js` reads it, and
 anything unflagged still escapes, which is what keeps an unrecognised exception
 a bug rather than a case. A platform may still return the status itself where it
@@ -274,8 +274,9 @@ The composed adapter exposes six things, two of them optional:
 Four files are the contract above; the rest is convention. **Where a platform does
 the thing, the file carries the name, so the parallel is visible from a directory
 listing; where it does not, the file is simply absent** — and the absence says
-something too. `codeforces-official/` having no `http.js` and no
-`scrapers/` is how you can see at a glance that it never touches HTML.
+something too. `codeforces-official/` having no `scrapers/` is how you can see at a
+glance that it never touches HTML — the only such signal left, now that one
+`sources.js` per platform means a *file name* can no longer carry it.
 
 **The root is a closed set of nine names**, and `module-boundaries.test.js` fails on
 a tenth. Anything a platform can have *N* of lives in a folder named for its kind, so
@@ -289,9 +290,7 @@ a tenth. Anything a platform can have *N* of lives in a folder named for its kin
 | `submissions.js` | `fetchAccepted` | always |
 | `estimator.js` | `fill` — fit the difficulties the site did not publish | **iff `canEstimate`** |
 | `field.js` | standings → the data the estimator fits against | where it estimates |
-| `api.js` | the site's structured API client | where one exists |
-| `http.js` | names its `site` to `createSiteClient`, and says what a refusal looks like | where it scrapes |
-| `sources.js` | every endpoint this platform reads, one section each | where it reads anything |
+| `sources.js` | the client, and every endpoint this platform reads | where it reads anything |
 
 | folder | one file per | today |
 |---|---|---|
@@ -343,6 +342,20 @@ Four of those rows are load-bearing rather than tidy:
   misnamed: a `scraping.js` that fetched and delegated, holding the word while
   doing none of the work. Splitting fetch (`sources.js`) from extract
   (`scrapers/`) is what made one name fit.
+- **A source owns one site's reads, and `Source` in `core/platforms/source.js` is
+  what they extend.** It holds the client, joins paths onto an origin, and hands
+  back text, JSON or a `Document`. It absorbed five hand-rolled reset seams, two
+  TTL memos and four copies of the accessors — but only once `api.js` folded in;
+  measured against the old layout, where the client sat in a separate file, a
+  base would have carried nothing, and this file said so.
+
+  **It is instantiable where `Scraper` is statics-only**, and that asymmetry is
+  the point rather than an inconsistency. Scraping is pure — a `Document` in,
+  facts out — so a scraper needs no state and no `new`. A source holds a client,
+  sometimes a cache, and on Codeforces a **key pair**: `identity.js` builds one
+  per credential set and Settings builds a second to check credentials you have
+  typed but not saved. Platforms with no credentials export a singleton, so their
+  callers still never write `new` either.
 - **`estimator.js` is *not* pure**: it acquires the field it fits against
   (`codeforces-gyms/field.js` calls `getContestStandings`, AtCoder's fetches
   `standings/json`). Only the models under `core/rating-models/` are pure.
@@ -485,7 +498,7 @@ Things that are easy to get wrong:
   `fetch` follows the 302, so a signed-out request arrives as a healthy 200 containing the login form,
   and parsing it yields no submissions, which is indistinguishable from having
   solved nothing. `solved` is sticky, so that would strand the queue silently. Both
-  clients check `response.url`'s path for `/login`; see `http.js`.
+  clients check `response.url`'s path for `/login`; see each `sources.js`.
 
 **Two costs of leaving kenkoooo, both known trades rather than bugs:**
 
@@ -511,7 +524,7 @@ explanation is false, and worth stating so it is not reached for again.
 
 `core/platforms/codechef/`. No estimator here either: CodeChef publishes `difficulty_rating` and does so promptly — Starters 252 was fully rated within two days of running. `/api/rankings/` is CSRF-gated and returns 403, but nothing needs it.
 
-CodeChef's public API was retired years ago and the site is an SPA, so the only route to its data is the same `/api/` endpoints the front end calls. **Its ToS §14 forbids crawling**, which is why `api.js` is written to be strictly user-session shaped: only the contest the user is looking at, its problems, and their own solve history; `/api/` paths only (robots.txt disallows `/problems/*`, `/status/*` and `/recent/user`); and a 403 stops and surfaces an error rather than retrying. What would make it a crawler is **enumeration** — paging the ~21,000-problem catalogue. `/api/list/problems` *is* used, but only ever scoped by `group=attempted` and behind a page cap; see below.
+CodeChef's public API was retired years ago and the site is an SPA, so the only route to its data is the same `/api/` endpoints the front end calls. **Its ToS §14 forbids crawling**, which is why `sources.js` is written to be strictly user-session shaped: only the contest the user is looking at, its problems, and their own solve history; `/api/` paths only (robots.txt disallows `/problems/*`, `/status/*` and `/recent/user`); and a 403 stops and surfaces an error rather than retrying. What would make it a crawler is **enumeration** — paging the ~21,000-problem catalogue. `/api/list/problems` *is* used, but only ever scoped by `group=attempted` and behind a page cap; see below.
 
 Four traps, all confirmed against the live API:
 
@@ -612,8 +625,8 @@ They are genuinely different pipelines, not two flavours of one:
 Three API methods each, disjoint. The user-visible consequence is that **an official add needs
 no codeforces.com tab open** — every call on that path is either the signed JSON API or the
 unsigned `contest.standings`, and neither is challenged. A gym add still needs one.
-**`codeforces-official/` carries no `http.js`,
-no `scrapers/` at all**, which is asserted structurally in
+**`codeforces-official/` carries no `scrapers/` folder at all**, which is asserted
+structurally in
 `module-boundaries.test.js` as well as dynamically in the adapter tests.
 
 **What they share is an account, not code.** One handle, one key pair, one
@@ -625,7 +638,8 @@ has a `descriptor.js` **iff** it is registered — which is what stops a
 platform and there is nowhere else for one to sit.
 
 **The duplication is larger than this file used to claim, and now measured.** It
-said "`identity.js`, `submissions.js` and the signing half of `api.js`, ~180
+said "`identity.js`, `submissions.js` and the signing half of what is now
+`sources.js`, ~180
 lines each way" — right about those three (96 + 33 + 55 = 184) and wrong about
 the total, which is **744 identical lines, ~245 of them substantive code**:
 
@@ -633,7 +647,7 @@ the total, which is **744 identical lines, ~245 of them substantive code**:
 |---|---|
 | `identity.js` — whole file, same md5 | 96 |
 | `descriptor.js` — `ratingBands`, `ratingBandClass`, `hostPermissions`, icon | 60 |
-| `api.js` — `_callMethod` + `_sha512` | 55 |
+| `sources.js` — `_callMethod` + `_sha512` | 55 |
 | `estimator.js` — `estimateProblemRating` | 49 |
 | `field.js` — `ratePartyList` | 42 |
 | `sources.js` — `populateSolveCountsFromApi` + tail of the applier | 39 |
@@ -681,7 +695,7 @@ search are two things free to disagree about what a team is worth.
 
    **The recorded reason for the gym scrape did not survive checking.** It said "a gym's roster has no API source: its standings need signing". Needing a key is not an obstacle when the key is in hand, and that call is signed and works. Verified against real gyms — 100001, 102253, 702859 — `contest.standings` returns `contest.name` and a `problems[]` where every entry carries an index and a name. A hidden gym (712373) returns `FAILED — contestId: Standings are not available`, which `api.js#getContestStandings` matches **once** and converts to `isStandingsHidden`, so nothing downstream reads prose. That match is the one place a message comparison is unavoidable: Codeforces gives no distinct status code for it.
 
-   The consequence worth knowing: **an add needs no codeforces.com tab** unless the gym's standings are hidden. `tests/module-boundaries.test.js` pins it structurally — `http.js` must have exactly one importer, which must fetch exactly one page, and that page must not be a standings page.
+   The consequence worth knowing: **an add needs no codeforces.com tab** unless the gym's standings are hidden. `tests/module-boundaries.test.js` pins it structurally — `codeforces-gyms/sources.js` must make exactly one page read, and its URL must not be a standings page. It used to count importers of `http.js`; with the client folded in there is no such file, so it counts the reads themselves, which is what it was always about.
 
 ### Requests go through a page, not from the panel
 
@@ -743,9 +757,14 @@ Four things about it are load-bearing:
   from a body cannot carry `url`, and `url` is exactly what AtCoder's refusal
   check reads to notice it was bounced to `/login`.
 
-`codeforces-official/api.js` deliberately stays on `createPacer` directly: it is the
-signed JSON API, which is not challenged, needs no session, and expresses
-failure in the payload (`status: "FAILED"`) rather than the transport.
+**Every platform now goes through `site-client.js`, the signed Codeforces API
+included.** It used to talk to a bare `createPacer`, on the reasoning that it is not
+challenged, needs no session, and expresses failure in the payload
+(`status: "FAILED"`) rather than the transport. All of that is still true — it just
+turned out to be expressible as *parameters* rather than as a separate transport: a
+direct `fetchImpl`, because routing it through a tab would add a dependency it does
+not need, and `refusal: () => null`, because it genuinely does not refuse at the
+transport. That is what lets one `Source.json()` serve all four platforms.
 
 **`services/ttl-cache.js` is the only short-lived cache.** Two platforms had
 grown the same eleven lines independently — the same `{body, at}` entry, the same
@@ -768,10 +787,10 @@ and never expiring.
 
 | caller | configuration |
 |---|---|
-| `atcoder/http.js` (via site-client) | `gapMs: 1500`, `credentials: "include"` |
-| `codechef/api.js` (via site-client) | `gapMs: 1500`, `credentials: "include"` |
-| `codeforces-gyms/http.js` (scrape, via site-client) | `gapMs: [1000, 2500]`, `measureFrom: "end"`, `cooldown: { everyNth: 15, gapMs: [6000, 12000] }`, `credentials: "include"` |
-| `codeforces-official/api.js` (signed) | `gapMs: 2000` |
+| `atcoder/sources.js` | `gapMs: 1500`, `credentials: "include"` |
+| `codechef/sources.js` | `gapMs: 1500`, `credentials: "include"` |
+| `codeforces-gyms/sources.js` (the HTML half) | `gapMs: [1000, 2500]`, `measureFrom: "end"`, `cooldown: { everyNth: 15, gapMs: [6000, 12000] }`, `credentials: "include"` |
+| both `codeforces-*/sources.js` (the signed half) | `gapMs: 2000`, `budget: "codeforces-api"`, `credentials: "omit"` |
 
 Each caller makes its own pacer, so budgets are independent — `HttpClient`'s counter was a single static shared by everything, which is now per-instance state and structurally impossible to cross.
 
@@ -788,7 +807,7 @@ What that does *not* reach is the waiting branches: those contests were already 
 Codeforces' own half stays in `codeforces-gyms/http.js`: `credentials: "include"` so the user's session cookie is sent, plus 403 / "Just a moment" detection that surfaces a "visit codeforces.com" error.
 
 **A Cloudflare challenge now waits rather than failing the add.** It used to throw
-bare from `http.js`, and nothing converted it — so `contest-manager.js` never set
+bare from the HTML client, and nothing converted it — so `contest-manager.js` never set
 `isNotPublishedYet`, no waiting entry was created, and the user had to notice the
 red message and press Add again, at the one moment they least wanted to.
 `contest-status.js` had always defined `sourceUnreachable` for exactly this case
