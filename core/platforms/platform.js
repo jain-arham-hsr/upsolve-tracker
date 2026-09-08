@@ -9,13 +9,14 @@
  *
  * A **site** is the host behind it: `site.js` in the site's folder is a pure
  * object every platform of that site takes on — origin, host permission, mark,
- * settings section — and `sources.js` is the site's routes. AtCoder and
- * CodeChef are a site with one platform; Codeforces is a site with two.
+ * settings section — `api.js` is the site's JSON and `scraper.js`, where the
+ * site reads pages, its HTML. AtCoder and CodeChef are a site with one
+ * platform; Codeforces is a site with two.
  *
  * One subclass per platform, in `platform.js`, one instance each in
  * `registry.js`. The orchestrators and the settings page only ever call the
  * **public** methods below; the **hooks** are what a subclass implements, and
- * three of them have defaults that work through the site's source, so a
+ * three of them have defaults that work through the site's API, so a
  * platform overrides them only where its site's account works differently.
  *
  * ## Describing the platform
@@ -39,26 +40,28 @@
  *
  * ## Hooks — what a subclass implements
  *
- *   static site, static Sources           the site's object and Source class   required
+ *   static site, static Api               the site's object and Api class      required
+ *   static Scraper                        the site's Scraper class             iff it reads pages
  *   fetchContest({contestId, subtype, session, onProgress})
  *                                          → Status | Acquired                 required
- *   buildSession(values)                  → Session      default: handle + Sources.fromSettings
+ *   buildSession(values)                  → Session      default: handle + Api/Scraper.fromSettings
  *   identify(session)                     → {username, rating}
- *                                                        default: sources.identity(handle)
+ *                                                        default: api.identity(handle)
  *   fetchAccepted(session, contests, onProgress)
- *                                          → Accepted[]  default: sources.accepted(handle)
+ *                                          → Accepted[]  default: api.accepted(handle)
  *   readField({contest, context, session, onProgress})
  *                                          → Status | Field | null   iff canEstimate
  *   estimate(contest, field)              pure; fills the gaps       iff canEstimate
  *   syncMetadata(session, contests, onProgress)              optional
- *   syncStartTimes(session, contests, onProgress)            default: from sources.contestList()
+ *   syncStartTimes(session, contests, onProgress)            default: from api.contestList()
  *   describeIdentity(identity)                               optional
  *
  * ## Shapes
  *
- *   Session   { handle: string|null, sources: Source, ... }
- *             every read of the site goes through `session.sources`, so a
- *             fake source is injected the same way on every platform
+ *   Session   { handle: string|null, api: Api, scraper: Scraper|null, ... }
+ *             every read of the site goes through `session.api` or
+ *             `session.scraper`, so a fake is injected the same way on
+ *             every platform
  *   Acquired  { id, name, problems: [{index, name, ...}], startTimeSeconds,
  *               publishedDataCheckedAt, sourceId?, context? }
  *   Accepted  { contest: {id}, problem }     never a bare null contest
@@ -79,7 +82,8 @@
 import { getSettings } from "../settings/store.js";
 import { SECTIONS } from "../settings/schema.js";
 import { ready, sourceUnreachable } from "../contest-status.js";
-import { Source } from "./source.js";
+import { Api } from "./api.js";
+import { Scraper } from "./scraper.js";
 
 /** What every platform declares, in this order, before any hook. */
 export const DESCRIPTOR_MEMBERS = [
@@ -94,13 +98,19 @@ export class Platform {
   /** The site's object: what every platform of the site takes on. */
   static site = null;
 
-  /** The site's Source class. `fromSettings(values)` builds the instance a session carries. */
-  static Sources = null;
+  /** The site's Api class. `fromSettings(values)` builds the instance a session carries. */
+  static Api = null;
+
+  /** The site's Scraper class, where it reads pages at all; null where it does not. */
+  static Scraper = null;
 
   constructor() {
-    const { site, Sources, name } = new.target;
+    const { site, Api: api, Scraper: scraper, name } = new.target;
     if (!site || typeof site !== "object") throw new Error(`${name} declares no site`);
-    if (typeof Sources !== "function") throw new Error(`${name} declares no Sources class`);
+    if (typeof api !== "function") throw new Error(`${name} declares no Api class`);
+    if (scraper !== null && typeof scraper !== "function") {
+      throw new Error(`${name} declares a Scraper that is not a class`);
+    }
     Object.assign(this, site);
   }
 
@@ -121,9 +131,9 @@ export class Platform {
     }
     if (
       instance.fetchAccepted === Platform.prototype.fetchAccepted &&
-      typeof instance.constructor.Sources.prototype.accepted !== "function"
+      typeof instance.constructor.Api.prototype.accepted !== "function"
     ) {
-      throw new Error(`${name} must implement fetchAccepted(), or its source accepted()`);
+      throw new Error(`${name} must implement fetchAccepted(), or its API accepted()`);
     }
 
     // Two declarations of one fact. Claiming the capability with no estimator
@@ -180,8 +190,11 @@ export class Platform {
     if (!session || typeof session !== "object" || !("handle" in session)) {
       throw new Error(`${this.id} built a session with no handle field`);
     }
-    if (!(session.sources instanceof Source)) {
-      throw new Error(`${this.id} built a session that carries no Source to read the site through`);
+    if (!(session.api instanceof Api)) {
+      throw new Error(`${this.id} built a session that carries no Api to read the site through`);
+    }
+    if (session.scraper != null && !(session.scraper instanceof Scraper)) {
+      throw new Error(`${this.id} built a session whose scraper is not a Scraper`);
     }
     return session;
   }
@@ -259,14 +272,20 @@ export class Platform {
 
   /** Test seam: resets the site's clients and caches between cases. */
   reset(spacingMs = 0) {
-    this.constructor.Sources.reset(spacingMs);
+    this.constructor.Api.reset(spacingMs);
+    this.constructor.Scraper?.reset(spacingMs);
   }
 
-  // ── hooks with defaults, through the site's source ────────────────────
+  // ── hooks with defaults, through the site's API ───────────────────────
 
-  /** The handle from settings, and the source built from them. */
+  /** The handle from settings, and the API and scraper built from them. */
   buildSession(values) {
-    return { handle: values[this.handleSlug], sources: this.constructor.Sources.fromSettings(values) };
+    const { Api: api, Scraper: scraper } = this.constructor;
+    return {
+      handle: values[this.handleSlug],
+      api: api.fromSettings(values),
+      scraper: scraper ? scraper.fromSettings(values) : null,
+    };
   }
 
   /**
@@ -279,7 +298,7 @@ export class Platform {
     if (!session?.handle) {
       throw new Error(`No ${this.constructor.site.label} handle set. Add one in Settings.`);
     }
-    const identity = await session.sources.identity(session.handle);
+    const identity = await session.api.identity(session.handle);
     if (!identity) {
       throw new Error(`${this.constructor.site.label} doesn't recognise the handle "${session.handle}".`);
     }
@@ -289,12 +308,12 @@ export class Platform {
   /** A site with a per-user submission list answers in one call. */
   async fetchAccepted(session, _contests, onProgress = () => {}) {
     onProgress("Checking your submissions…");
-    return session.sources.accepted(session.handle);
+    return session.api.accepted(session.handle);
   }
 
   /** The bulk contest list this platform dates contests from, where the site has one. */
   contestList(session) {
-    return typeof session.sources.contestList === "function" ? session.sources.contestList() : null;
+    return typeof session.api.contestList === "function" ? session.api.contestList() : null;
   }
 
   /**

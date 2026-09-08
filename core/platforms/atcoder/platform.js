@@ -2,7 +2,11 @@
  * AtCoder.
  *
  * Needs no key or secret — only a handle, which is a *parameter* to the routes
- * rather than state on the client, so one Source serves every session.
+ * rather than state on the client, so one API and one scraper serve every
+ * session. AtCoder publishes no API, so nearly everything here is a page:
+ * the tasks page, the submissions list and the profile are `scraper.js`, and
+ * only the standings — the field difficulty is fitted from — are JSON.
+ * Difficulty itself is fitted locally; AtCoder publishes none.
  *
  * Whose account this is: AtCoder is asked *about* a handle, so submissions are
  * the configured handle's whoever is signed in. `identify` therefore refuses a
@@ -17,7 +21,8 @@
  */
 import { Platform } from "../platform.js";
 import { site } from "./site.js";
-import { AtCoderSources } from "./sources.js";
+import { AtCoderApi, field } from "./api.js";
+import { AtCoderScraper } from "./scraper.js";
 import { estimate } from "./estimator.js";
 import { notPublishedYet, sourceUnreachable } from "../../contest-status.js";
 
@@ -38,7 +43,8 @@ const MAX_RE_ESTIMATES_PER_SYNC = 1;
 
 export class AtCoder extends Platform {
   static site = site;
-  static Sources = AtCoderSources;
+  static Api = AtCoderApi;
+  static Scraper = AtCoderScraper;
 
   id = "atcoder";
 
@@ -131,7 +137,7 @@ export class AtCoder extends Platform {
 
     let profile;
     try {
-      profile = await session.sources.profile(session.handle);
+      profile = await session.scraper.profile(session.handle);
     } catch (error) {
       if (error?.status === 404) {
         throw new Error(`AtCoder has no user "${session.handle}".`);
@@ -170,7 +176,7 @@ export class AtCoder extends Platform {
    */
   async fetchContest({ contestId, session, onProgress = () => {} }) {
     onProgress("Reading the contest's problems…");
-    const tasks = await session.sources.contestTasks(contestId);
+    const tasks = await session.scraper.tasks(contestId);
 
     // Before a contest ends its task list is not public. That resolves on its
     // own once it finishes, so it waits rather than failing.
@@ -206,13 +212,14 @@ export class AtCoder extends Platform {
    * retries rather than storing a queue of "???" that a tab would have filled.
    * That is what lets `canEstimate` be true without making a signed-out add fail.
    *
-   * @returns {Promise<object>} the standings payload, or `sourceUnreachable`.
+   * @returns {Promise<object>} the datasets the fit takes, read from the
+   *   standings by `api.js#field`, or `sourceUnreachable`.
    */
   async readField({ contest, session, onProgress = () => {} }) {
     let standings;
     try {
       onProgress("Reading the standings…");
-      standings = await session.sources.standings(contest.id);
+      standings = await session.api.standings(contest.id);
     } catch (error) {
       return sourceUnreachable(
         `Couldn't read AtCoder's standings for ${contest.id}: ${error.message}. ` +
@@ -228,11 +235,11 @@ export class AtCoder extends Platform {
       );
     }
 
-    return standings;
+    return field(standings);
   }
 
-  estimate(contest, field) {
-    return estimate(contest, field);
+  estimate(contest, datasets) {
+    return estimate(contest, datasets);
   }
 
   /**
@@ -250,7 +257,7 @@ export class AtCoder extends Platform {
       // with an empty set. An empty answer is indistinguishable from having
       // solved nothing, and `solved` is sticky, so a swallowed failure would
       // strand the queue silently. `progress-manager` isolates the throw.
-      for (const problemId of await session.sources.acceptedTaskIds(contest.id, session.handle)) {
+      for (const problemId of await session.scraper.acceptedTaskIds(contest.id, session.handle)) {
         accepted.push({ contest: { id: null }, problem: { problemId } });
       }
     }

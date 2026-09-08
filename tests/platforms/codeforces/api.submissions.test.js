@@ -17,7 +17,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { summariseSubmissions } from "../../../core/platforms/codeforces/payloads.js";
+import { summariseSubmissions } from "../../../core/platforms/codeforces/api.js";
 
 const FIXTURE = JSON.parse(
   readFileSync(new URL("../../fixtures/gym-standings-hidden.json", import.meta.url)),

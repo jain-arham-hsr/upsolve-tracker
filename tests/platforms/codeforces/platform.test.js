@@ -18,12 +18,13 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { CodeforcesSources } = await import("../../../core/platforms/codeforces/sources.js");
+const { CodeforcesApi } = await import("../../../core/platforms/codeforces/api.js");
+const { CodeforcesScraper } = await import("../../../core/platforms/codeforces/scraper.js");
 const { getPlatform } = await import("../../../core/platforms/registry.js");
 
 /**
  * The one page a hidden-standings gym reads. These cases stub it the way
- * Codeforces serves it — as HTML — and the source's `getDocument` is what
+ * Codeforces serves it — as HTML — and the scraper's `document` is what
  * parses, so each stub stays a readable page rather than a constructed DOM.
  * The real `getDocument`, refusal and parse included, is covered by
  * `tests/codeforces-http.test.js`.
@@ -31,17 +32,17 @@ const { getPlatform } = await import("../../../core/platforms/registry.js");
 const pages = { get: async () => { throw new Error("no page served"); } };
 
 /**
- * A real source with the fake API answers assigned over it, which is how every
- * Codeforces test injects: the methods the platform composes — reading a
- * contest off the standings, rebuilding one from submissions — stay real, and
- * only the API calls beneath them are stubbed.
+ * A real API with the fake answers assigned over it, and a real scraper with
+ * the page read stubbed, which is how every Codeforces test injects: the
+ * methods the platform composes — reading a contest off the standings,
+ * rebuilding one from submissions — stay real, and only the calls beneath
+ * them are stubbed.
  */
-const real = (subtype, fake) =>
-  Object.assign(
-    new CodeforcesSources("k", "s"),
-    { page: async (url) => new DOMParser().parseFromString(await pages.get(url), "text/html") },
-    fake,
-  );
+const real = (fake) => Object.assign(new CodeforcesApi("k", "s"), fake);
+const pageStub = () =>
+  Object.assign(new CodeforcesScraper(), {
+    document: async (url) => new DOMParser().parseFromString(await pages.get(url), "text/html"),
+  });
 
 /**
  * Codeforces is two platforms, and the subtype is what picks between them —
@@ -50,7 +51,7 @@ const real = (subtype, fake) =>
  */
 const fetchContestRecord = ({ subtype, session, ...rest }) =>
   getPlatform(subtype === "GYM" ? "codeforces-gyms" : "codeforces-official")
-    .fetchContestRecord({ subtype, session: { ...session, sources: real(subtype, session.sources) }, ...rest });
+    .fetchContestRecord({ subtype, session: { ...session, api: real(session.api), scraper: pageStub() }, ...rest });
 
 const INDEXES = ["A", "B", "C"];
 
@@ -123,7 +124,7 @@ const record = async (service) => {
   const result = await fetchContestRecord({
     contestId: "702859",
     subtype: "GYM",
-    session: { sources: service },
+    session: { api: service },
   });
   if (result.status !== "ready") {
     throw Object.assign(new Error(result.reason), { contestStatus: result.status });
@@ -260,7 +261,7 @@ test("a hidden-standings gym with nothing to estimate never asks for the field",
 // ---------------------------------------------------------------------------
 
 const status = (args, service) =>
-  fetchContestRecord({ session: { sources: service }, ...args });
+  fetchContestRecord({ session: { api: service }, ...args });
 
 test("an official round Codeforces has not published waits, and is not scraped", async () => {
   // The scrape is the expensive half — tens of deliberately throttled requests.
@@ -368,7 +369,7 @@ test("a blocked scrape answers sourceUnreachable, and that status waits", async 
     contestId: "702859",
     subtype: "GYM",
     session: {
-      sources: {
+      api: {
         contestStandings: async () => {
           throw Object.assign(new Error("contestId: Standings are not available"), {
             isStandingsHidden: true,
@@ -395,7 +396,7 @@ test("a scrape failure that is not a block still escapes", async () => {
         contestId: "702859",
         subtype: "GYM",
         session: {
-          sources: {
+          api: {
             contestStandings: async () => {
               throw Object.assign(new Error("contestId: Standings are not available"), {
                 isStandingsHidden: true,
@@ -424,7 +425,7 @@ test("an official contest takes Codeforces' published ratings, not estimates", a
     contestId: "2197",
     subtype: "OFFICIAL",
     session: {
-      sources: {
+      api: {
         problemsetProblems: async () => ({
           problems: INDEXES.map((index, i) => ({
             contestId: 2197,
@@ -503,7 +504,7 @@ test("a shared Div 1 / Div 2 problem takes its published rating, not an estimate
     contestId: "2197",
     subtype: "OFFICIAL",
     session: {
-      sources: {
+      api: {
         // Only A is filed under this contest; B and C live under the Div 1 twin.
         problemsetProblems: async () => ({
           problems: [{ contestId: 2197, index: "A", rating: 800, tags: ["math"] }],
@@ -546,7 +547,7 @@ test("losing the standings answers sourceUnreachable, so the add retries", async
     contestId: "2197",
     subtype: "OFFICIAL",
     session: {
-      sources: {
+      api: {
         problemsetProblems: async () => ({
           problems: [{ contestId: 2197, index: "A", rating: 800, tags: [] }],
         }),
@@ -581,7 +582,7 @@ test("the official path makes no HTML request at all, estimator included", async
     contestId: "2197",
     subtype: "OFFICIAL",
     session: {
-      sources: {
+      api: {
         problemsetProblems: async () => ({
           problems: [{ contestId: 2197, index: "A", rating: 800, tags: ["math"] }],
         }),

@@ -6,10 +6,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DOMParser } from "linkedom";
-import { ProfilePage } from "../../../../core/platforms/atcoder/scrapers/profile.js";
+import { parseProfile } from "../../../core/platforms/atcoder/scraper.js";
 
 /** The page is never null; only the rating field is. */
-const extractRating = (doc) => ProfilePage.scrape(doc).rating;
+const extractRating = (doc) => parseProfile(doc).rating;
 
 const doc = (body) =>
   new DOMParser().parseFromString(`<html><body>${body}</body></html>`, "text/html");

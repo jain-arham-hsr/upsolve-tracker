@@ -8,13 +8,14 @@
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
-import { DashboardPage } from "../../../core/platforms/codechef/scrapers/page-globals.js";
+import { parseDashboard } from "../../../core/platforms/codechef/scraper.js";
 
 // The bootstrap object lives in a `<script>`, so these now go through a real
 // document the way production does, rather than being regexed off a string.
 const extractSession = (html) =>
-  DashboardPage.scrape(parseHTML(`<html><body>${html ?? ""}</body></html>`).document);
-import { sources } from "../../../core/platforms/codechef/sources.js";
+  parseDashboard(parseHTML(`<html><body>${html ?? ""}</body></html>`).document);
+import { api } from "../../../core/platforms/codechef/api.js";
+import { scraper } from "../../../core/platforms/codechef/scraper.js";
 import { getPlatform } from "../../../core/platforms/registry.js";
 
 // The platform is instantiated in registry.js, so this exercises the real
@@ -174,7 +175,7 @@ test("a changed page shape returns null rather than a plausible session", () => 
 test("solved is read from an object, which is the shape that carries data", () => {
   // Signed out it is [], signed in it is {code: true}. Array methods would see
   // nothing on the second — the one that matters.
-  return record({ contestId: "START252D", subtype: "STARTERS", session: { sources } })
+  return record({ contestId: "START252D", subtype: "STARTERS", session: { api, scraper } })
     .then((contest) => {
       const byCode = Object.fromEntries(contest.problems.map((p) => [p.index, p]));
       assert.equal(byCode.IOI7.solved, true);
@@ -183,7 +184,7 @@ test("solved is read from an object, which is the shape that carries data", () =
 });
 
 test("partially solved stays in the queue — scoring subtasks isn't finishing", () => {
-  return record({ contestId: "START252D", subtype: "STARTERS", session: { sources } })
+  return record({ contestId: "START252D", subtype: "STARTERS", session: { api, scraper } })
     .then((contest) => {
       const modsub = contest.problems.find((p) => p.index === "MODSUB");
       assert.equal(modsub.solved, false);
@@ -192,7 +193,7 @@ test("partially solved stays in the queue — scoring subtasks isn't finishing",
 
 test("both difficulty sentinels become null, never a rating", async () => {
   const contest = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   const byCode = Object.fromEntries(contest.problems.map((p) => [p.index, p]));
 
@@ -206,7 +207,7 @@ test("both difficulty sentinels become null, never a rating", async () => {
 
 test("contest-code and setter-handle noise is stripped from tags", async () => {
   const contest = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   const byCode = Object.fromEntries(contest.problems.map((p) => [p.index, p]));
   assert.deepEqual(byCode.IOI7.tags, ["cakewalk"]);
@@ -217,7 +218,7 @@ test("a parent contest resolves to the division matching your rating", async () 
   // /START252 returns an empty problem list rather than an error, so without
   // this it would store as a contest with no problems.
   const contest = await record({
-    contestId: "START252", subtype: "STARTERS", session: { sources, rating: 1450 },
+    contestId: "START252", subtype: "STARTERS", session: { api, scraper, rating: 1450 },
   });
   assert.equal(contest.id, "START252C");
   assert.equal(contest.problems.length, 1);
@@ -227,7 +228,7 @@ test("a resolved parent records the id the user navigated from", async () => {
   // Without this the add banner compares /START252 against a stored START252D
   // and offers to add an already-tracked contest.
   const viaParent = await record({
-    contestId: "START252", subtype: "STARTERS", session: { sources, rating: 1450 },
+    contestId: "START252", subtype: "STARTERS", session: { api, scraper, rating: 1450 },
   });
   assert.equal(viaParent.id, "START252C");
   assert.equal(viaParent.sourceId, "START252");
@@ -235,14 +236,14 @@ test("a resolved parent records the id the user navigated from", async () => {
 
 test("a contest added directly carries no sourceId", async () => {
   const direct = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   assert.equal(direct.sourceId, undefined);
 });
 
 test("a parent contest with no known rating names the divisions instead of guessing", async () => {
   await assert.rejects(
-    () => record({ contestId: "START252", subtype: "STARTERS", session: { sources } }),
+    () => record({ contestId: "START252", subtype: "STARTERS", session: { api, scraper } }),
     /START252A, START252C/,
   );
 });
@@ -272,7 +273,7 @@ test("the wrong account signed in refuses before reading anything", async () => 
   );
 });
 
-const SESSION = { sources, handle: "me", signedIn: true, signedInAs: "me" };
+const SESSION = { api, scraper, handle: "me", signedIn: true, signedInAs: "me" };
 
 test("only an Accepted status counts as solved", async () => {
   // CodeChef's own map: 0 unattempted, 1 accepted, 2 partially correct,
@@ -344,7 +345,7 @@ test("the listing is scoped to the signed-in account and includes unrated proble
  */
 test("a problem never added to practice is flagged, and no other problem is", async () => {
   const contest = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   const byCode = Object.fromEntries(contest.problems.map((p) => [p.index, p]));
 
@@ -359,7 +360,7 @@ test("a problem never added to practice is flagged, and no other problem is", as
 
 test("detecting it costs no extra request", async () => {
   requestLog = [];
-  await record({ contestId: "START252D", subtype: "STARTERS", session: { sources } });
+  await record({ contestId: "START252D", subtype: "STARTERS", session: { api, scraper } });
 
   // One contest payload plus one detail per problem — the flag rides along on
   // the payload that was already being fetched.
@@ -369,7 +370,7 @@ test("detecting it costs no extra request", async () => {
 
 test("a problem CodeChef later mirrors comes back to the queue", async () => {
   const contest = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   const updqs = contest.problems.find((p) => p.index === "UPDQS");
   assert.equal(updqs.upsolvable, false);
@@ -378,7 +379,7 @@ test("a problem CodeChef later mirrors comes back to the queue", async () => {
   platform.reset();
   contests.START252D.problems.UPDQS.is_added_to_practice = true;
 
-  const changed = await syncMetadata({ sources }, [contest]);
+  const changed = await syncMetadata({ api, scraper }, [contest]);
 
   assert.equal(changed, 1);
   // Deleted rather than set true, so the stored shape stays consistent with
@@ -388,14 +389,14 @@ test("a problem CodeChef later mirrors comes back to the queue", async () => {
 
 test("the re-check runs every refresh, not on the weekly rating stamp", async () => {
   const contest = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   // Freshly stamped, so the weekly rating re-check is skipped entirely.
   contest.publishedDataCheckedAt = Date.now();
 
   platform.reset();
   contests.START252D.problems.UPDQS.is_added_to_practice = true;
-  await syncMetadata({ sources }, [contest]);
+  await syncMetadata({ api, scraper }, [contest]);
 
   assert.equal("upsolvable" in contest.problems.find((p) => p.index === "UPDQS"), false);
 });
@@ -406,39 +407,39 @@ test("a contest with nothing flagged is never asked about", async () => {
   // each, forever, to find something that does not happen — CodeChef does not
   // pull problems back out of practice.
   const contest = await record({
-    contestId: "START252C", subtype: "STARTERS", session: { sources },
+    contestId: "START252C", subtype: "STARTERS", session: { api, scraper },
   });
   assert.deepEqual(contest.problems.filter((p) => p.upsolvable === false), []);
 
   platform.reset();
   requestLog = [];
-  await syncMetadata({ sources }, [contest]);
+  await syncMetadata({ api, scraper }, [contest]);
   assert.equal(requestLog.length, 0);
 });
 
 test("a flagged contest is re-checked until it clears, then stops costing anything", async () => {
   const contest = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
 
   // Still unmirrored: asked again, and stays flagged.
   platform.reset();
   requestLog = [];
-  await syncMetadata({ sources }, [contest]);
+  await syncMetadata({ api, scraper }, [contest]);
   assert.equal(requestLog.length, 1);
   assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
 
   // CodeChef mirrors it: the flag clears...
   platform.reset();
   contests.START252D.problems.UPDQS.is_added_to_practice = true;
-  await syncMetadata({ sources }, [contest]);
+  await syncMetadata({ api, scraper }, [contest]);
   assert.equal("upsolvable" in contest.problems.find((p) => p.index === "UPDQS"), false);
 
   // ...and with nothing left flagged, the contest drops out of the pass.
   platform.reset();
   requestLog = [];
-  await syncMetadata({ sources }, [contest]);
+  await syncMetadata({ api, scraper }, [contest]);
   assert.equal(requestLog.length, 0, "a settled contest must cost nothing");
 });
 
@@ -446,12 +447,12 @@ test("a failed re-check leaves the flag alone rather than clearing it", async ()
   // The contest is not in the stub, so getContest throws. Guessing the problem
   // back into the queue on a network blip would undo the whole point.
   const contest = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   platform.reset();
   delete contests.START252D;
 
-  await syncMetadata({ sources }, [contest]);
+  await syncMetadata({ api, scraper }, [contest]);
 
   assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
 });
@@ -461,12 +462,12 @@ test("a problem missing from the payload keeps its flag rather than being guesse
   // mention the problem. Treating that as "mirrored" would put a problem that
   // cannot be submitted back into the queue on a payload shape change.
   const contest = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   platform.reset();
   delete contests.START252D.problems.UPDQS;
 
-  await syncMetadata({ sources }, [contest]);
+  await syncMetadata({ api, scraper }, [contest]);
 
   assert.equal(contest.problems.find((p) => p.index === "UPDQS").upsolvable, false);
 });
@@ -479,7 +480,7 @@ test("a problem missing from the payload keeps its flag rather than being guesse
  */
 test("a difficulty published after the contest was added is filled in", async () => {
   const contest = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   const modsub = contest.problems.find((p) => p.index === "MODSUB");
   assert.equal(modsub.rating, null, "-1 is CodeChef's 'not rated'");
@@ -489,7 +490,7 @@ test("a difficulty published after the contest was added is filled in", async ()
   details.MODSUB = { difficulty_rating: "1500", user_tags: ["greedy", "start252"] };
   contest.publishedDataCheckedAt = Date.now() - 14 * 24 * 60 * 60 * 1000;
 
-  await syncMetadata({ sources }, [contest]);
+  await syncMetadata({ api, scraper }, [contest]);
 
   assert.equal(modsub.rating, 1500);
   assert.equal(modsub.ratingSource, "official");
@@ -498,7 +499,7 @@ test("a difficulty published after the contest was added is filled in", async ()
 
 test("the difficulty re-check is throttled to a week, unlike the practice one", async () => {
   const contest = await record({
-    contestId: "START252D", subtype: "STARTERS", session: { sources },
+    contestId: "START252D", subtype: "STARTERS", session: { api, scraper },
   });
   // Looked at today. The practice pass still runs — UPDQS is flagged — so this
   // pins that the two cadences really are independent rather than both firing.
@@ -507,7 +508,7 @@ test("the difficulty re-check is throttled to a week, unlike the practice one", 
   platform.reset();
   details.MODSUB = { difficulty_rating: "1500", user_tags: [] };
   requestLog = [];
-  await syncMetadata({ sources }, [contest]);
+  await syncMetadata({ api, scraper }, [contest]);
 
   assert.equal(contest.problems.find((p) => p.index === "MODSUB").rating, null);
   assert.equal(
@@ -522,7 +523,7 @@ test("the difficulty re-check is throttled to a week, unlike the practice one", 
 // ---------------------------------------------------------------------------
 
 const statusOf = (contestId = "START252D") =>
-  fetchContestRecord({ contestId, subtype: "STARTERS", session: { sources } });
+  fetchContestRecord({ contestId, subtype: "STARTERS", session: { api, scraper } });
 
 test("a contest still running waits, and its problems are never fetched", async () => {
   // CodeChef reports its own clock beside the contest's end, so this asks *its*
@@ -578,7 +579,7 @@ test("but CodeChef answering -1 still stores the contest, with ???", async () =>
   const contest = await record({
     contestId: "START252D",
     subtype: "STARTERS",
-    session: { sources },
+    session: { api, scraper },
   });
 
   const modsub = contest.problems.find((p) => p.index === "MODSUB");
@@ -594,7 +595,7 @@ test("a parent contest with no rating refuses outright rather than waiting", asy
   const result = await fetchContestRecord({
     contestId: "START252",
     subtype: "STARTERS",
-    session: { sources },
+    session: { api, scraper },
   });
   assert.equal(result.status, "unavailable");
   assert.match(result.reason, /Open the division/);

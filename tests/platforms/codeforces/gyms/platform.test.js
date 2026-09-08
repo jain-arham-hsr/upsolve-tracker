@@ -14,35 +14,34 @@ import { DOMParser } from "linkedom";
 
 globalThis.DOMParser = DOMParser;
 
-const { CodeforcesSources } = await import("../../../../core/platforms/codeforces/sources.js");
+const { CodeforcesApi } = await import("../../../../core/platforms/codeforces/api.js");
+const { CodeforcesScraper } = await import("../../../../core/platforms/codeforces/scraper.js");
 const { getPlatform } = await import("../../../../core/platforms/registry.js");
 
 /**
  * The page a hidden-standings gym reads, stubbed the way Codeforces serves it
- * — as HTML — and parsed by the source's own `getDocument`, so each stub stays
+ * — as HTML — and parsed the way the scraper's `document` would, so each stub stays
  * a readable page. `tests/codeforces-http.test.js` covers the real one.
  */
 const pages = { get: async () => { throw new Error("no page served"); } };
 const parsed = async (url) => new DOMParser().parseFromString(await pages.get(url), "text/html");
 
 /**
- * Drives the platform's `fetchContest` over a real source with the fake API
- * answers assigned over it, and flattens what it acquired — the record plus
- * its `context` — into one object, which is the shape these cases assert on.
- * `contest.list` is stubbed empty so the start-time pass makes no request.
+ * Drives the platform's `fetchContest` over a real API with the fake answers
+ * assigned over it and a real scraper with the page read stubbed, and
+ * flattens what it acquired — the record plus its `context` — into one
+ * object, which is the shape these cases assert on. `contest.list` is
+ * stubbed empty so the start-time pass makes no request.
  */
-async function acquire(platformId, Sources, contestId, fake) {
-  const sources = Object.assign(
-    new Sources("k", "s"),
-    { page: parsed, contestList: async () => [] },
-    fake,
-  );
-  const acquired = await getPlatform(platformId).fetchContest({ contestId, session: { sources } });
+async function acquire(platformId, contestId, fake) {
+  const api = Object.assign(new CodeforcesApi("k", "s"), { contestList: async () => [] }, fake);
+  const scraper = Object.assign(new CodeforcesScraper(), { document: parsed });
+  const acquired = await getPlatform(platformId).fetchContest({ contestId, session: { api, scraper } });
   if (acquired.status) throw new Error(`${acquired.status}: ${acquired.reason}`);
   return { contestName: acquired.name, ...acquired, ...acquired.context };
 }
-const acquireGym = (contestId, fake) => acquire("codeforces-gyms", CodeforcesSources, contestId, fake);
-const acquireOfficial = (contestId, fake) => acquire("codeforces-official", CodeforcesSources, contestId, fake);
+const acquireGym = (contestId, fake) => acquire("codeforces-gyms", contestId, fake);
+const acquireOfficial = (contestId, fake) => acquire("codeforces-official", contestId, fake);
 
 const PROBLEMS = [
   ["A", "Everything Everywhere All But One"],

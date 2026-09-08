@@ -16,10 +16,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { CodeforcesSources } from "../../../core/platforms/codeforces/sources.js";
+import { CodeforcesApi } from "../../../core/platforms/codeforces/api.js";
 
-const reset = (ms) => CodeforcesSources.reset(ms);
-const GymService = CodeforcesSources;
+const reset = (ms) => CodeforcesApi.reset(ms);
+const GymService = CodeforcesApi;
 const resetGymApiState = (ms) => GymService.reset(ms);
 
 /**
@@ -43,7 +43,7 @@ test("consecutive API calls are paced", async () => {
   // A pinned, small gap: the real one is 2s, which is not worth spending here.
   reset(60);
   const stub = stubFetch();
-  const service = new CodeforcesSources("key", "secret");
+  const service = new CodeforcesApi("key", "secret");
 
   try {
     await service.usersInfo(["tourist"]);
@@ -65,8 +65,8 @@ test("every service instance shares one budget", async () => {
   const stub = stubFetch();
 
   try {
-    await new CodeforcesSources("a", "b").contestList();
-    await new CodeforcesSources("c", "d").contestList();
+    await new CodeforcesApi("a", "b").contestList();
+    await new CodeforcesApi("c", "d").contestList();
 
     const gap = stub.calls[1].at - stub.calls[0].at;
     assert.ok(gap >= 50, `a second instance skipped the queue — fired ${gap}ms later`);
@@ -81,7 +81,7 @@ test("a request is signed, and the secret never appears in the URL", async () =>
   const stub = stubFetch();
 
   try {
-    await new CodeforcesSources("thekey", "thesecret").usersInfo(["tourist"]);
+    await new CodeforcesApi("thekey", "thesecret").usersInfo(["tourist"]);
     const { url } = stub.calls[0];
 
     assert.match(url, /apiKey=thekey/);
@@ -105,7 +105,7 @@ test("a FAILED response becomes the comment Codeforces gave", async () => {
   });
 
   try {
-    // This exact string is what codeforces/sources.js keys its
+    // This exact string is what codeforces/api.js keys its
     // hidden-standings fallback off, so it has to survive the round trip.
     // `contest.standings` is a gym-only endpoint — the official client dropped
     // it in the split — so this is the gym half of the client.
@@ -119,7 +119,7 @@ test("a FAILED response becomes the comment Codeforces gave", async () => {
 });
 
 /**
- * Both platforms sign through one base, `codeforces/sources.js`. These cases
+ * Both platforms sign through one class, `codeforces/api.js`. These cases
  * drive each subclass through it and pin what is hashed, since signing is not
  * observable from a response — a wrong `apiSig` comes back as an ordinary
  * FAILED — and a subclass could still override its way out.
@@ -139,7 +139,7 @@ test("both Codeforces clients sign a request identically", async () => {
   };
 
   try {
-    await new CodeforcesSources("thekey", "thesecret").usersInfo(["tourist"]);
+    await new CodeforcesApi("thekey", "thesecret").usersInfo(["tourist"]);
     await new GymService("thekey", "thesecret").usersInfo(["tourist"]);
   } finally {
     globalThis.fetch = original;
@@ -174,7 +174,7 @@ test("both clients agree on which parameters they append", async () => {
   };
 
   try {
-    await new CodeforcesSources("k", "s").contestList();
+    await new CodeforcesApi("k", "s").contestList();
     await new GymService("k", "s").contestList({ gym: true });
   } finally {
     globalThis.fetch = original;
@@ -219,7 +219,7 @@ test("both clients hash the same string, not merely the same shape", async () =>
   const stub = stubFetch();
 
   try {
-    await new CodeforcesSources("thekey", "thesecret").usersInfo(["tourist"]);
+    await new CodeforcesApi("thekey", "thesecret").usersInfo(["tourist"]);
     await new GymService("thekey", "thesecret").usersInfo(["tourist"]);
 
     assert.equal(hashed.length, 2, "both clients should have signed once");
@@ -258,7 +258,7 @@ test("the unsigned standings call goes through the same paced client, unsigned",
   const stub = stubFetch({ contest: { name: "Round" }, problems: [], rows: [] });
 
   try {
-    const result = await new CodeforcesSources("k", "s").publicContestStandings(2197);
+    const result = await new CodeforcesApi("k", "s").publicContestStandings(2197);
     assert.equal(stub.calls.length, 1);
     const url = new URL(stub.calls[0].url);
     assert.equal(url.pathname, "/api/contest.standings");
@@ -268,4 +268,41 @@ test("the unsigned standings call goes through the same paced client, unsigned",
     stub.restore();
     reset();
   }
+});
+
+// ---------------------------------------------------------------------------
+// Paging `contest.status`, for a gym rebuilt from submissions.
+// ---------------------------------------------------------------------------
+
+/** A real API with the one route stubbed, the way every Codeforces test injects. */
+const fetchContestSubmissions = (service, contestId) =>
+  Object.assign(new CodeforcesApi("k", "s"), service).contestSubmissions(contestId);
+
+test("pages until a short page, then stops", async () => {
+  const asked = [];
+  const service = {
+    contestStatus: async (contestId, { from, count }) => {
+      asked.push({ from, count });
+      return asked.length === 1
+        ? Array.from({ length: count }, (_, i) => ({ id: i }))
+        : [{ id: 999 }];
+    },
+  };
+
+  const all = await fetchContestSubmissions(service, 1);
+  assert.equal(asked.length, 2);
+  assert.equal(asked[1].from, asked[0].from + asked[0].count);
+  assert.equal(all.length, asked[0].count + 1);
+});
+
+test("refuses a contest too large to rebuild rather than truncating", async () => {
+  // An understated solve count reads as a harder problem, not as a failure.
+  const service = {
+    contestStatus: async (contestId, { count }) =>
+      Array.from({ length: count }, (_, i) => ({ id: i })),
+  };
+  await assert.rejects(
+    () => fetchContestSubmissions(service, 1),
+    /too many to rebuild/,
+  );
 });

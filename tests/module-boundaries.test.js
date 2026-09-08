@@ -110,12 +110,10 @@ const stripComments = (source) =>
 const importsOf = (source) =>
   [...source.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
 
-/** One file per page — a platform may read any number. */
-const PLATFORM_FOLDERS = new Set(["scrapers"]);
-
 /**
  * Two words, each meaning one thing. A **site** is a host the extension talks
- * to: a folder with `site.js`, `sources.js`, its scrapers and its fit. A
+ * to: a folder with `site.js`, its `api.js`, its `scraper.js` where it reads
+ * pages, and its fit where it estimates. A
  * **platform** is a registered kind of contest on a site: a folder whose
  * `platform.js` exports the class a registered instance was built from,
  * which is the site folder itself (AtCoder, CodeChef) or a direct child of it
@@ -131,7 +129,7 @@ const INSTANCES = listPlatforms();
 function candidateDirs(root) {
   const out = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory() || PLATFORM_FOLDERS.has(entry.name)) continue;
+    if (!entry.isDirectory()) continue;
     const full = path.join(root, entry.name);
     out.push(full, ...candidateDirs(full));
   }
@@ -390,6 +388,13 @@ test("the retired names survive nowhere", () => {
     "resetApiState",
     "resetHttpState",
     "CodeforcesHttp",
+    // The three-layer split — transport, routes, payload readers, and a
+    // folder of page classes — folded into one `api.js` and one `scraper.js`
+    // per site, each owning its own client and its own reading.
+    "sources.js",
+    "payloads.js",
+    "scrapers/",
+    "Sources",
   ];
   const offenders = [];
 
@@ -436,14 +441,46 @@ function classBody(source, name) {
   return source.slice(start, source.indexOf("\n}\n", start));
 }
 
+/** Every `api.js` and `scraper.js` under a site, with its kind. */
+function siteReaders() {
+  const out = [];
+  for (const root of siteFolders()) {
+    for (const name of ["api.js", "scraper.js"]) {
+      const file = path.join(root, name);
+      if (readdirSync(root).includes(name)) out.push({ file, kind: name, relative: path.relative(ROOT, file) });
+    }
+  }
+  return out;
+}
+
+/**
+ * The name and body of every `export function` in a file, matched by braces.
+ * A parser has no template literal with a brace in it, so naive matching is
+ * enough here; anything cleverer would be a parser of its own.
+ */
+function exportedFunctions(code) {
+  const out = [];
+  for (const match of code.matchAll(/^export\s+(?:async\s+)?function\s+(\w+)\s*\(/gm)) {
+    let depth = 0;
+    let i = code.indexOf("{", match.index);
+    const start = i;
+    for (; i < code.length; i++) {
+      if (code[i] === "{") depth++;
+      else if (code[i] === "}" && --depth === 0) break;
+    }
+    out.push({ name: match[1], body: code.slice(start, i + 1) });
+  }
+  return out;
+}
+
 test("the official Codeforces platform reaches no HTML at all", () => {
   // The reason the split is worth having, asserted structurally rather than by
   // counting requests. An official add is pure JSON API: it cannot be
   // Cloudflare-challenged, and needs no tab open on codeforces.com. The two
-  // platforms share a source, so this reads the official class's file: it
-  // may not reach the page seam, the problems page or a scraper.
+  // platforms share a site, so this reads the official class's file: it may
+  // not name the scraper, read a page, or build a Document.
   const code = stripComments(readFileSync(path.join(folderOf("codeforces-official"), "platform.js"), "utf8"));
-  const offenders = ["page(", "problemsPage", "scrapers/", "DOMParser"].filter((name) => code.includes(name));
+  const offenders = ["scraper", "Scraper", "document(", "DOMParser"].filter((name) => code.includes(name));
   assert.deepEqual(offenders, [], "the official path must stay pure JSON API");
 });
 
@@ -451,32 +488,20 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
   // Officially there is no HTML left at all, which the test above pins. On the
   // gym side one page survives: a gym whose standings the setter hid answers
   // FAILED to `contest.standings`, and the `/gym/<id>` problems page is the one
-  // page those contests still render.
-  //
-  // This used to count importers of `http.js`. That file is gone — the client
-  // lives on the platform's `Source` now — so it counts **page reads** instead,
-  // which is what it was really about. A second one would mean a visible gym
-  // had started scraping again, and no other test would notice: the result is
-  // correct either way and only the request count differs.
-  const sources = stripComments(
-    readFileSync(path.join(siteOf("codeforces-gyms"), "sources.js"), "utf8"),
-  );
+  // page those contests still render. A second read here would mean a visible
+  // gym had started scraping again, and no other test would notice: the
+  // result is correct either way and only the request count differs.
+  const code = stripComments(readFileSync(path.join(siteOf("codeforces-gyms"), "scraper.js"), "utf8"));
 
-  // Any method on the client, not `getDocument` specifically. Pinning the
-  // method name is how this goes vacuous without failing: it was `.get` until
-  // the client started answering with a parsed Document, at which point a
-  // name-specific regex matches nothing and "exactly one page read" reads as
-  // zero.
-  // `this.page(...)` is the one way a page is read; the method's own
-  // definition is `page(url)`, which this pattern does not match.
-  const fetched = [...sources.matchAll(/\bthis\.page\(([^)]*)\)/g)].map((m) => m[1].trim());
+  // `this.document(...)` is the one way a page is read; the base's own
+  // definition is `document(path, init)`, which this pattern does not match.
+  const fetched = [...code.matchAll(/\bthis\.document\(([^)]*)\)/g)].map((m) => m[1].trim());
 
   assert.equal(fetched.length, 1, `expected one page read, got ${fetched.length}`);
   assert.ok(
     !fetched[0].includes("standings"),
     `a standings page is being read again — a visible gym comes from the API: ${fetched[0]}`,
   );
-
 });
 
 test("a site has estimator.js iff its platforms claim canEstimate", () => {
@@ -505,101 +530,100 @@ test("a site has estimator.js iff its platforms claim canEstimate", () => {
   assert.deepEqual(offenders, [], "the capability and the file are one fact");
 });
 
-test("a parser is pure: estimator.js and payloads.js read what a source fetched, and never fetch", async () => {
-  // The split that makes every fit and every payload reading testable without
-  // a network stack: the platform's `readField` and the source's routes do the
-  // I/O; `estimator.js` fits and `payloads.js` parses what came back. A parser
-  // that imported a client, a source or its platform would be I/O and maths
-  // in one function again, testable only by stubbing fetch. `scrapers/` is the
-  // same rule for pages.
+test("an estimator is only the fit: it imports the models and nothing else", async () => {
+  // `core/rating-models/` is the maths with no site in it; `estimator.js` is
+  // what a site does around it — its scale, its bounds, its policy for a
+  // problem nobody solved. Which rows a field is read from is the API's
+  // question, so an estimator that imported `api.js` would be reading again,
+  // and one that imported a client would be I/O and maths in one function,
+  // testable only by stubbing fetch.
   const offenders = [];
   let estimators = 0;
-  let parsers = 0;
 
   for (const file of sourceFiles(PLATFORMS, [".js"])) {
-    const name = path.basename(file);
-    if (name !== "estimator.js" && name !== "payloads.js") continue;
+    if (path.basename(file) !== "estimator.js") continue;
     const relative = path.relative(ROOT, file);
     const code = stripComments(readFileSync(file, "utf8"));
-    if (name === "estimator.js") {
-      estimators++;
-      if (!Object.keys(await import(file)).includes("estimate")) offenders.push(`${relative} does not export estimate()`);
-    } else {
-      parsers++;
-    }
+    estimators++;
+
+    if (!Object.keys(await import(file)).includes("estimate")) offenders.push(`${relative} does not export estimate()`);
     for (const spec of importsOf(code)) {
-      if (/(client|sources|site-client|platform)\.js$/.test(spec)) offenders.push(`${relative} imports ${spec}`);
+      if (!spec.includes("/rating-models/")) offenders.push(`${relative} imports ${spec}`);
     }
     if (/\bfetch\s*\(/.test(code)) offenders.push(`${relative} calls fetch()`);
   }
 
   assert.deepEqual(offenders, []);
   assert.equal(estimators, 2, `expected two estimators, found ${estimators}`);
-  assert.equal(parsers, 2, `expected two payload parsers, found ${parsers}`);
 });
 
-test("nothing in a scrapers/ folder fetches", () => {
-  // This one carries more weight than it used to. "Read" is the verb of I/O,
-  // so the folder's name no longer says by itself that these never go and get
-  // anything — a `scrapers/` file that opened a connection would read as
-  // doing exactly what it says. This assertion is what keeps it unambiguous,
-  // and it is the same objection that ruled out calling the folder scrapers/.
-  // What the folder is for. Its files take a page the platform already has —
-  // a `Document`, or the raw HTML string in the two `page-globals.js` — and
-  // return values; the fetching lives one level up in `scraping.js` and
-  // `http.js`. That separation is what lets every reader be exercised in Node
-  // against `linkedom` with no network stack anywhere, which is most of the
-  // coverage these platforms have.
-  //
-  // It is also the first thing a hurried change would break: reaching for the
-  // client from inside a reader is the shortest path to "just fetch page two
-  // here", and nothing else would notice, since the result is correct and only
-  // the testability is gone.
-  const clients = ["http.js", "api.js", "site-client.js", "scraping.js"];
+test("a parse* export takes a document or a payload and never fetches", () => {
+  // The rule that keeps every parser runnable in Node against linkedom with
+  // no network stack, which is most of the coverage these sites have. A
+  // parser lives beside the route that fetches for it, in the same file, and
+  // reaching for `this.client` from inside one is the shortest path to "just
+  // fetch page two here" — nothing else would notice, since the result is
+  // correct and only the testability is gone.
   const offenders = [];
-  const scrapers = [];
+  let parsers = 0;
 
-  for (const root of siteFolders()) {
-    if (!readdirSync(root).includes("scrapers")) continue;
-
-    for (const file of sourceFiles(path.join(root, "scrapers"), [".js"])) {
-      const relative = path.relative(ROOT, file);
-      const code = stripComments(readFileSync(file, "utf8"));
-      scrapers.push(relative);
-
-      for (const spec of importsOf(code)) {
-        if (clients.some((name) => spec.endsWith(name))) {
-          offenders.push(`${relative} imports ${spec}`);
-        }
+  for (const { file, relative } of siteReaders()) {
+    const code = stripComments(readFileSync(file, "utf8"));
+    for (const { name, body } of exportedFunctions(code)) {
+      if (!name.startsWith("parse")) continue;
+      parsers++;
+      for (const forbidden of ["fetch(", "this.", "client", "await "]) {
+        if (body.includes(forbidden)) offenders.push(`${relative}#${name} contains "${forbidden}"`);
       }
-      if (/\bfetch\s*\(/.test(code)) offenders.push(`${relative} calls fetch()`);
     }
   }
 
-  assert.deepEqual(offenders, [], "a scraper takes a page, it does not go and get one");
-
-  // Or the loop above proves nothing: a rename that emptied every folder would
-  // pass it silently. Six files across three platforms, and codeforces-official
-  // deliberately has none — it reads no HTML at all, which the test above pins
-  // from the other direction.
-  assert.equal(scrapers.length, 6, `expected six scrapers, found ${scrapers.join(", ")}`);
+  assert.deepEqual(offenders, [], "a parser takes what was fetched; it does not go and get it");
+  // Or the loop above proves nothing: a rename that dropped the prefix from
+  // every parser would pass it silently. Six page parsers across three sites
+  // plus CodeChef's difficulty sentinel reader.
+  assert.equal(parsers, 7, `expected seven parse* exports, found ${parsers}`);
 });
 
-test("a site client is built in client.js, and routes through its own site", () => {
+test("pages are read only in a scraper.js, and JSON only in an api.js", () => {
+  // The two ways data arrives, kept to their two files. An `api.js` that read a
+  // page, or a `platform.js` that did, would put page knowledge back where the
+  // three-layer split used to have it; a `scraper.js` that read JSON would be
+  // an API with the wrong name.
+  const offenders = [];
+
+  for (const file of sourceFiles(PLATFORMS, [".js"])) {
+    const name = path.basename(file);
+    const relative = path.relative(ROOT, file);
+    const code = stripComments(readFileSync(file, "utf8"));
+
+    if (name !== "scraper.js" && /\bgetDocument\b|\.document\(/.test(code)) {
+      offenders.push(`${relative} reads a page — only a scraper.js does`);
+    }
+    if (name !== "api.js" && /\bgetJson\b|\.json\(/.test(code)) {
+      offenders.push(`${relative} reads JSON — only an api.js does`);
+    }
+  }
+
+  assert.deepEqual(offenders, []);
+});
+
+test("a client is built in api.js or scraper.js, and routes through its own site", () => {
   // `createSiteClient({ site })` derives the tab-routing match patterns from the
   // site's `hostPermissions`. Naming the *wrong* site is the failure worth
   // pinning, because nothing else notices it: there is no matching tab, so
   // every request falls back to a direct fetch and still succeeds — it just
   // stops carrying the session, and only the session-gated routes break, the
   // same way they do when the user has no tab open. So the only `site` a
-  // client may be handed is the one `client.js` imports from its own `site.js`.
+  // client may be handed is the one the file imports from its own `site.js`.
   //
-  // And the client is built in `client.js` alone: transport is its own layer,
-  // and a `sources.js` that configured pacing or a refusal would be the old
-  // conflated file back. A client with no `site` is deliberate in exactly one
-  // place — Codeforces' signed API passes a direct `fetchImpl`, because it
-  // works anonymously and routing it through a tab would add a dependency it
-  // does not need.
+  // Each of the two files owns its client: an API's is tuned for JSON routes,
+  // a scraper's for pages, and on Codeforces they differ in every parameter.
+  // A `platform.js` that built one would be transport and decision in one
+  // place again. A client with no `site` is deliberate in exactly one place —
+  // Codeforces' signed API passes a direct `fetchImpl`, because it works
+  // anonymously and routing it through a tab would add a dependency it does
+  // not need.
   const offenders = [];
   const clients = [];
 
@@ -607,8 +631,8 @@ test("a site client is built in client.js, and routes through its own site", () 
     const code = stripComments(readFileSync(file, "utf8"));
     if (!code.includes("createSiteClient(")) continue;
     const relative = path.relative(ROOT, file);
-    if (path.basename(file) !== "client.js") {
-      offenders.push(`${relative} builds a client — transport belongs in client.js`);
+    if (!["api.js", "scraper.js"].includes(path.basename(file))) {
+      offenders.push(`${relative} builds a client — only api.js and scraper.js do`);
       continue;
     }
     clients.push(relative);
@@ -624,57 +648,38 @@ test("a site client is built in client.js, and routes through its own site", () 
   }
 
   assert.deepEqual(offenders, [], "a client must speak to the site it belongs to");
-  assert.equal(clients.length, 3, `expected three client.js files, found ${clients.join(", ")}`);
+  assert.equal(clients.length, 6, `expected six clients — two per site — found ${clients.join(", ")}`);
 });
 
-test("Codeforces signs in exactly one place, and it is transport", () => {
+test("Codeforces signs in exactly one place, and it is the API", () => {
   // The duplication with a real failure mode used to be two copies of the
   // signing routine. A wrong `apiSig` comes back as an ordinary FAILED, so
   // nothing else would notice a fix landing in one copy. Now there is one, in
-  // `codeforces/client.js` beside the client it signs for — and the hash is
+  // `codeforces/api.js` beside the routes it signs — and the hash is
   // constructed nowhere else under core/platforms/.
   const signers = sourceFiles(PLATFORMS, [".js"])
     .filter((file) => stripComments(readFileSync(file, "utf8")).includes("crypto.subtle"))
     .map((file) => path.relative(ROOT, file));
 
-  assert.deepEqual(signers, ["core/platforms/codeforces/client.js"]);
+  assert.deepEqual(signers, ["core/platforms/codeforces/api.js"]);
 });
 
 /**
- * The root of a platform folder is a closed set.
+ * The root of a site folder is a closed set.
  *
- * `scrapers/` was the first half of this idea and was left half-done: HTML
- * readers got a folder, and everything else open-ended stayed loose at the
- * root, where you could not tell a contract file from that platform's own
- * invention. Nine names below are the contract. Anything a platform can have N
- * of belongs in a folder named for its kind, so `ls` answers which is which.
+ * Five names, and a reader can tell from `ls` what a site does: `scraper.js`
+ * present means it reads pages, `estimator.js` present means it estimates.
+ * Where a site does not do the thing the file is simply absent, and the
+ * absence says something too.
  *
- * It is not a style rule. A flat root let two names mislead for months, with
- * nothing to contradict them: `contest-submissions.js` sat beside
- * `submissions.js` doing something unrelated — everyone's submissions, to
- * rebuild a hidden-standings gym, against yours, to clear the queue — and
- * `solve-stats.js` returned a contest's name, problems, ratings, tags, start
- * time and phase, of which counts were one field. Both are now named for the
- * endpoint they read, inside `sources/`.
+ * It is not a style rule. A flat root once let two invented names mislead
+ * for months, with nothing to contradict them: `contest-submissions.js` sat
+ * beside `submissions.js` doing something unrelated, and `solve-stats.js`
+ * returned a contest's name, problems, ratings, tags, start time and phase,
+ * of which counts were one field.
  */
-const PLATFORM_ROOT_FILES = new Set([
-  // Always: the registry's view, the contract with every decision and every
-  // post-add pass, and the site's reads.
-  "descriptor.js",
-  "platform.js",
-  "sources.js",
-  // Where the platform estimates: the pure fit.
-  "estimator.js",
-]);
-
-/**
- * Three layers for talking to a site, each its own file, plus the pure fit and
- * the site's data. `client.js` is transport, `sources.js` the API surface,
- * `payloads.js` the parsers of what came back — the same layer `scrapers/` is
- * for pages.
- */
-const SITE_FILES = new Set(["site.js", "client.js", "sources.js", "payloads.js", "platform.js", "estimator.js"]);
-const SITE_REQUIRED = ["site.js", "client.js", "sources.js"];
+const SITE_FILES = new Set(["site.js", "api.js", "scraper.js", "estimator.js", "platform.js"]);
+const SITE_REQUIRED = ["site.js", "api.js"];
 const CHILD_FILES = new Set(["platform.js"]);
 
 test("a site's root holds only contract names, and a child platform's only its class", () => {
@@ -688,13 +693,13 @@ test("a site's root holds only contract names, and a child platform's only its c
     }
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (!PLATFORM_FOLDERS.has(entry.name) && !children.has(`${folder}/${entry.name}`)) {
-          offenders.push(`${folder}/${entry.name}/ is neither scrapers/ nor a platform of this site`);
+        if (!children.has(`${folder}/${entry.name}`)) {
+          offenders.push(`${folder}/${entry.name}/ is not a platform of this site`);
         }
         continue;
       }
       if (!SITE_FILES.has(entry.name)) {
-        offenders.push(`${folder}/${entry.name} is not a contract name — put it in scrapers/, or argue here for widening the root`);
+        offenders.push(`${folder}/${entry.name} is not a contract name — it belongs in api.js or scraper.js, or argue here for widening the root`);
       }
     }
   }
@@ -710,133 +715,112 @@ test("a site's root holds only contract names, and a child platform's only its c
   assert.deepEqual(offenders, [], "the root of a site folder is a closed set");
 });
 
-test("every scraper is one, by the definition rather than by folder", async () => {
-  // `scrapers/` held six files that shared a folder and nothing else — some
-  // exporting one extractor, some three, one keeping its selectors in a block
-  // and the rest scattering them. This is the definition, asserted: one class
-  // per page, `read` overridden, selectors declared in one place.
-  //
-  // The base's `read` throws rather than returning null on purpose, so a
-  // subclass that forgets to override it fails loudly here and at runtime,
-  // rather than reading as "this page never matches".
+test("an api.js is one Api class and its readers; a scraper.js one Scraper class and its parsers", async () => {
+  // What each file may export, so "what do these have in common" has one
+  // answer per kind. An `api.js`: exactly one `Api` subclass, at most one
+  // instance of it named `api`, and otherwise functions and constants that
+  // read a payload. A `scraper.js`: exactly one `Scraper` subclass, at most
+  // one instance named `scraper`, and otherwise only `parse*` functions. And
+  // each class answers the two statics itself rather than inheriting the
+  // base's throw.
+  const { Api } = await import("../core/platforms/api.js");
   const { Scraper } = await import("../core/platforms/scraper.js");
   const offenders = [];
+  let apis = 0;
   let scrapers = 0;
 
-  for (const root of siteFolders()) {
-    if (!readdirSync(root).includes("scrapers")) continue;
-
-    for (const file of sourceFiles(path.join(root, "scrapers"), [".js"])) {
-      const relative = path.relative(ROOT, file);
-      scrapers++;
-
-      const exported = Object.values(await import(file)).filter(
-        (value) => typeof value === "function",
-      );
-
-      if (exported.length !== 1) {
-        offenders.push(`${relative} exports ${exported.length} things, expected one class`);
-        continue;
-      }
-
-      const scraper = exported[0];
-      if (!(scraper.prototype instanceof Scraper)) {
-        offenders.push(`${relative}'s ${scraper.name} does not extend Scraper`);
-        continue;
-      }
-      if (scraper.scrape === Scraper.scrape) {
-        offenders.push(`${relative}'s ${scraper.name} never overrides scrape()`);
-      }
-      if (Object.keys(scraper.selectors ?? {}).length === 0) {
-        offenders.push(`${relative}'s ${scraper.name} declares no selectors`);
-      }
-    }
-  }
-
-  assert.deepEqual(offenders, [], "a scraper owns one page and says how it reads it");
-  assert.equal(scrapers, 6, `expected six scrapers, found ${scrapers}`);
-});
-
-test("a sources.js exports one Source class, and at most a singleton of it", async () => {
-  // What made "what do these have in common" hard to answer: one sources.js
-  // exported a class and six free functions, another a singleton and a reset
-  // seam, a third a constant. Everything a site's reads need is now on the
-  // class — endpoints as methods, payload vocabulary as statics — so the file
-  // is the class, plus the one instance a platform with no credentials keeps.
-  const { Source } = await import("../core/platforms/source.js");
-  const offenders = [];
-  let checked = 0;
-
-  for (const file of sourceFiles(PLATFORMS, [".js"]).filter((f) => path.basename(f) === "sources.js")) {
-    const relative = path.relative(ROOT, file);
+  for (const { file, kind, relative } of siteReaders()) {
+    const Base = kind === "api.js" ? Api : Scraper;
+    const singleton = kind === "api.js" ? "api" : "scraper";
     const exported = await import(file);
-    checked++;
+    if (kind === "api.js") apis++;
+    else scrapers++;
 
     const classes = Object.values(exported).filter(
-      (value) => typeof value === "function" && value.prototype instanceof Source,
+      (value) => typeof value === "function" && value.prototype instanceof Base,
     );
     if (classes.length !== 1) {
-      offenders.push(`${relative} exports ${classes.length} Source classes, expected one — a site has one set of routes`);
+      offenders.push(`${relative} exports ${classes.length} ${Base.name} classes, expected one`);
       continue;
+    }
+    const [Class] = classes;
+    for (const member of ["fromSettings", "reset"]) {
+      if (Class[member] === Base[member]) offenders.push(`${relative}'s ${Class.name} inherits static ${member}() rather than answering it`);
     }
 
     for (const [name, value] of Object.entries(exported)) {
-      if (value === classes[0]) continue;
-      if (name === "sources" && value instanceof classes[0]) continue;
-      offenders.push(`${relative} also exports ${name} — put it on the class, or in the module that owns it`);
+      if (value === Class) continue;
+      if (name === singleton && value instanceof Class) continue;
+      if (typeof value === "function" && value.prototype instanceof Base) continue;
+      if (kind === "scraper.js" && !(typeof value === "function" && name.startsWith("parse"))) {
+        offenders.push(`${relative} also exports ${name} — a scraper.js exports its class, its instance and parse* functions only`);
+      }
+      if (kind === "api.js" && typeof value === "function" && value.prototype instanceof Object && /^[A-Z]/.test(name)) {
+        offenders.push(`${relative} also exports the class ${name}`);
+      }
     }
   }
 
   assert.deepEqual(offenders, []);
-  assert.equal(checked, 3, `expected three sources.js, found ${checked}`);
+  assert.equal(apis, 3, `expected three api.js, found ${apis}`);
+  assert.equal(scrapers, 3, `expected three scraper.js, found ${scrapers}`);
 });
 
-test("a source singleton is reached through the session, never imported", () => {
-  // The second idiom this removed. A platform's class attaches the singleton
-  // to the session it builds; everything else reads `session.sources`, which
-  // is the seam a test injects a fake through. A module that imported the
-  // singleton instead would work in production and be untestable.
+test("a platform's static Api and Scraper are its site's classes", async () => {
+  // The session is built from them, so a platform naming another site's
+  // class would read the wrong site and every route would 404 politely.
+  // And a site's scraper.js exists for a reason: at least one of its
+  // platforms reads pages through it.
+  const offenders = [];
+
+  for (const platform of INSTANCES) {
+    const site = siteOf(platform.id);
+    const { Api: api, Scraper: scraper } = platform.constructor;
+    const { [api?.name]: siteApi } = await import(path.join(site, "api.js"));
+    if (siteApi !== api) offenders.push(`${platform.id}'s Api is not its site's api.js class`);
+
+    const hasScraper = readdirSync(site).includes("scraper.js");
+    if (scraper && !hasScraper) offenders.push(`${platform.id} declares a Scraper but its site has no scraper.js`);
+    if (scraper && hasScraper) {
+      const { [scraper.name]: siteScraper } = await import(path.join(site, "scraper.js"));
+      if (siteScraper !== scraper) offenders.push(`${platform.id}'s Scraper is not its site's scraper.js class`);
+    }
+  }
+
+  for (const folder of siteFolders()) {
+    if (!readdirSync(folder).includes("scraper.js")) continue;
+    const relative = path.relative(ROOT, folder);
+    const readers = INSTANCES.filter((p) => siteOf(p.id) === folder && p.constructor.Scraper);
+    if (readers.length === 0) offenders.push(`${relative}/scraper.js exists but no platform of the site declares it`);
+  }
+
+  assert.deepEqual(offenders, []);
+});
+
+test("a singleton is reached through the session, never imported", () => {
+  // A platform's class names the singleton's class in `static Api`; the base
+  // attaches the instance to the session it builds; everything else reads
+  // `session.api` or `session.scraper`, which is the seam a test injects a
+  // fake through. A module that imported the singleton instead would work in
+  // production and be untestable.
   const offenders = [];
 
   for (const file of sourceFiles(PLATFORMS, [".js"])) {
-    if (path.basename(file) === "platform.js") continue;
     const code = stripComments(readFileSync(file, "utf8"));
-    if (/import\s*\{[^}]*\bsources\b[^}]*\}\s*from\s*"[^"]*sources\.js"/.test(code)) {
-      offenders.push(`${path.relative(ROOT, file)} imports the sources singleton`);
+    if (/import\s*\{[^}]*\b(api|scraper)\b[^}]*\}\s*from\s*"[^"]*(api|scraper)\.js"/.test(code)) {
+      offenders.push(`${path.relative(ROOT, file)} imports a singleton`);
     }
   }
 
   assert.deepEqual(offenders, []);
 });
 
-test("a scraper is called only from a sources.js, so a platform never sees a Document", () => {
-  // The rule that makes every folder read alike: a source answers routes — a
-  // JSON endpoint, or a page handed to its scraper — and a platform decides
-  // over what came back. AtCoder's class used to scrape the profile itself and
-  // CodeChef's the dashboard, so the same kind of work sat in two places.
-  const offenders = [];
-  let importers = 0;
-
-  for (const file of sourceFiles(PLATFORMS, [".js"])) {
-    const code = stripComments(readFileSync(file, "utf8"));
-    if (!importsOf(code).some((spec) => spec.includes("/scrapers/"))) continue;
-    importers++;
-    if (path.basename(file) !== "sources.js") {
-      offenders.push(`${path.relative(ROOT, file)} imports a scraper`);
-    }
-  }
-
-  assert.deepEqual(offenders, [], "a scraper takes a page the source fetched; only the source calls it");
-  assert.equal(importers, 3, `expected three sources to scrape, found ${importers}`);
-});
-
-test("a source never answers with a status", () => {
+test("neither an api.js nor a scraper.js answers with a status", () => {
   // A status is a decision — wait, refuse, retry — and deciding is the
-  // platform's. A source that imported the vocabulary would be deciding.
-  const offenders = sourceFiles(PLATFORMS, [".js"])
-    .filter((file) => path.basename(file) === "sources.js")
-    .filter((file) => importsOf(stripComments(readFileSync(file, "utf8"))).some((spec) => spec.endsWith("contest-status.js")))
-    .map((file) => path.relative(ROOT, file));
+  // platform's. A reader that imported the vocabulary would be deciding.
+  const offenders = siteReaders()
+    .filter(({ file }) => importsOf(stripComments(readFileSync(file, "utf8"))).some((spec) => spec.endsWith("contest-status.js")))
+    .map(({ relative }) => relative);
 
   assert.deepEqual(offenders, []);
 });
@@ -847,19 +831,19 @@ test("every platform declares its describing members first, in the base's order"
   // `DESCRIPTOR_MEMBERS` come first, in that order, and every hook after them.
   const { DESCRIPTOR_MEMBERS } = await import("../core/platforms/platform.js");
   const rank = new Map(DESCRIPTOR_MEMBERS.map((name, i) => [name, i]));
+  const statics = new Set(["site", "Api", "Scraper"]);
   const offenders = [];
 
   for (const platform of INSTANCES) {
     const source = stripComments(readFileSync(path.join(folderOf(platform.id), "platform.js"), "utf8"));
-    const start = source.indexOf(`class ${platform.constructor.name} `);
-    const body = source.slice(start, source.indexOf("\n}\n", start));
+    const body = classBody(source, platform.constructor.name);
     const declared = [...body.matchAll(/^  (?:static\s+|async\s+)?(\w+)\s*[=(]/gm)].map((m) => m[1]);
 
     const describing = declared.filter((n) => rank.has(n));
     const sorted = [...describing].sort((a, b) => rank.get(a) - rank.get(b));
     if (describing.join() !== sorted.join()) offenders.push(`${platform.id}: ${describing.join(", ")}`);
 
-    const firstHook = declared.findIndex((n) => !rank.has(n) && n !== "site" && n !== "Sources");
+    const firstHook = declared.findIndex((n) => !rank.has(n) && !statics.has(n));
     const lastDescribing = declared.map((n) => rank.has(n)).lastIndexOf(true);
     if (firstHook !== -1 && lastDescribing > firstHook) {
       offenders.push(`${platform.id}: ${declared[lastDescribing]} is declared after the hook ${declared[firstHook]}`);
@@ -870,10 +854,9 @@ test("every platform declares its describing members first, in the base's order"
 });
 
 test("DOMParser is constructed in exactly one place", () => {
-  // What makes every reader testable in Node against linkedom: they take a
-  // Document and never build one. It was three places until the two
-  // `page-globals.js` stopped regexing raw HTML — those globals live in a
-  // `<script>`, so they select it like anything else.
+  // What makes every parser testable in Node against linkedom: they take a
+  // Document and never build one. The string→Document step happens once, in
+  // `site-client.js#getDocument`.
   const built = sourceFiles(CORE, [".js"])
     .filter((file) => stripComments(readFileSync(file, "utf8")).includes("new DOMParser"))
     .map((file) => path.relative(ROOT, file));

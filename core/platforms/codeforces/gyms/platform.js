@@ -10,17 +10,18 @@
  */
 import { Platform } from "../../platform.js";
 import { site } from "../site.js";
-import { CodeforcesSources } from "../sources.js";
-import { problemsFrom, summariseSubmissions } from "../payloads.js";
+import { CodeforcesApi, problemsFrom, summariseSubmissions } from "../api.js";
+import { CodeforcesScraper } from "../scraper.js";
 import { estimate } from "../estimator.js";
 import { notEndedYet, unavailable } from "../../../contest-status.js";
-import { fullField, distributionSize } from "../../../rating-models/rating-distribution.js";
+import { distributionSize } from "../../../rating-models/rating-distribution.js";
 
 const URL_PATTERN = /^https?:\/\/(?:www\.)?codeforces\.com\/gym\/(\d+)/i;
 
 export class CodeforcesGyms extends Platform {
   static site = site;
-  static Sources = CodeforcesSources;
+  static Api = CodeforcesApi;
+  static Scraper = CodeforcesScraper;
 
   id = "codeforces-gyms";
 
@@ -75,19 +76,17 @@ export class CodeforcesGyms extends Platform {
    *   the standings are hidden.
    */
   async fetchContest({ contestId, session, onProgress = () => {} }) {
-    const { sources } = session;
-
     onProgress("Reading the standings…");
     let read;
     try {
-      read = this.fromStandings(contestId, await sources.contestStandings(contestId));
+      read = this.fromStandings(contestId, await session.api.contestStandings(contestId));
     } catch (error) {
       // Opens only where the add would otherwise fail outright: a gym whose
       // standings Codeforces has hidden. Anything else — a network fault, a
       // bad key — rethrows untouched, since routing around one would turn a
       // broken request into a silently shorter contest.
       if (!error.isStandingsHidden) throw error;
-      read = await fromContestStatus(contestId, sources, error);
+      read = await fromContestStatus(contestId, session, error);
     }
     const { contestName, problems, tagsSynced, startTimeSeconds, solveCountsRead, partyHandles, finished, standings } = read;
 
@@ -176,8 +175,8 @@ export class CodeforcesGyms extends Platform {
     onProgress("Measuring the field…");
 
     const distribution = partyHandles
-      ? await fieldFromParties(session.sources, partyHandles)
-      : await fieldFromStandings(session.sources, contest.id, standings);
+      ? await session.api.partyField(partyHandles)
+      : await session.api.gymField(contest.id, standings);
 
     console.log(
       `[Codeforces] Distribution: ${distributionSize(distribution)} competitors read, ` +
@@ -199,7 +198,7 @@ export class CodeforcesGyms extends Platform {
 
   /** Gyms are a separate list from official rounds. */
   contestList(session) {
-    return session.sources.contestList({ gym: true });
+    return session.api.contestList({ gym: true });
   }
 
   /**
@@ -219,7 +218,7 @@ export class CodeforcesGyms extends Platform {
       // Deliberately slow — the API pacer spaces these — so it counts itself off.
       onProgress(`Dating gym ${index + 1} of ${gyms.length}…`);
       try {
-        const standings = await session.sources.contestStandings(contest.id);
+        const standings = await session.api.contestStandings(contest.id);
         const startTime = standings?.contest?.startTimeSeconds;
         if (startTime) {
           contest.startTimeSeconds = startTime;
@@ -262,8 +261,8 @@ export class CodeforcesGyms extends Platform {
  * @param {Error} standingsError - what the standings call threw, so a failure
  *   here can name the original cause rather than replacing it.
  */
-async function fromContestStatus(contestId, sources, standingsError) {
-  const page = await sources.problemsPage(contestId);
+async function fromContestStatus(contestId, session, standingsError) {
+  const page = await session.scraper.problemsPage(contestId);
 
   // Never fall back to a submission-derived list: it would look like a
   // shorter contest rather than a failure.
@@ -274,7 +273,7 @@ async function fromContestStatus(contestId, sources, standingsError) {
     );
   }
 
-  const derived = summariseSubmissions(await sources.contestSubmissions(contestId));
+  const derived = summariseSubmissions(await session.api.contestSubmissions(contestId));
 
   const problems = page.problems.map((problem) => {
     const meta = derived.problemMeta.get(problem.index);
@@ -307,36 +306,4 @@ async function fromContestStatus(contestId, sources, standingsError) {
     // No standings to ask, so the sidebar says whether it has finished.
     finished: page.finished,
   };
-}
-
-/** `standings` is the response the add already paid for; the hidden path has none. */
-async function fieldFromStandings(sources, contestId, prefetched) {
-  try {
-    const standings = prefetched ?? (await sources.contestStandings(contestId));
-
-    if (!standings?.rows?.length) {
-      console.warn(`[Codeforces] Standings API returned empty for ${contestId}.`);
-      return fullField([]);
-    }
-
-    return fullField(
-      await sources.partyRatings(
-        standings.rows.map((row) => row.party.members.map((m) => m.handle)),
-      ),
-    );
-  } catch (error) {
-    console.warn(`[Codeforces] Standings method failed for ${contestId}:`, error.message);
-    return fullField([]);
-  }
-}
-
-async function fieldFromParties(sources, partyHandles) {
-  if (!partyHandles?.length) return fullField([]);
-
-  try {
-    return fullField(await sources.partyRatings(partyHandles));
-  } catch (error) {
-    console.warn(`[Codeforces] Submission-derived field failed:`, error.message);
-    return fullField([]);
-  }
 }

@@ -50,7 +50,8 @@ import { createPageFetch } from "./page-transport.js";
  *   they are what routes a request through a tab on that site.
  * @param {object} options.pacer - passed straight to `createPacer`. Defaults
  *   `credentials: "include"`, since a client routed through a page is there to
- *   act as the signed-in user; a caller may still override it.
+ *   act as the signed-in user, and `budget` to the site's id, so every client
+ *   of one site shares one queue; a caller may still override either.
  * @param {(context: {response: Response, body: string, url: string}) => Error|null} options.refusal
  *   Returns the error to throw when the site refused, or null when it answered.
  *   **Throwing rather than returning empty is the point**; see above.
@@ -66,8 +67,13 @@ export function createSiteClient({ site = null, pacer, refusal, fetchImpl = null
     throw new Error("createSiteClient needs a `site` to route through, or a `fetchImpl` to stand in for one.");
   }
 
+  // Two clients on one site — its `api.js` and its `scraper.js` — queue as
+  // one by default, so a site is never hit faster than one client would hit
+  // it. A caller may still name its own budget: Codeforces' signed API does,
+  // since it is a different surface on a different pace from the page client.
   const send = createPacer({
     credentials: "include",
+    budget: site?.id ?? null,
     ...pacer,
     fetchImpl: fetchImpl ?? createPageFetch({ matchPatterns: site.hostPermissions }),
   });

@@ -16,8 +16,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { estimateContest } from "../../../core/platforms/atcoder/estimator.js";
-import { inverseAdjustRating } from "../../../core/platforms/atcoder/estimator.js";
+import { estimateContest as fit } from "../../../core/platforms/atcoder/estimator.js";
+import { field as readField, inverseAdjustRating } from "../../../core/platforms/atcoder/api.js";
+
+/** The read in `api.js` and the fit in `estimator.js`, which these cases drive together. */
+const estimateContest = (standings) => fit(readField(standings));
 
 const { cases } = JSON.parse(
   readFileSync(new URL("../../fixtures/atcoder-standings.json", import.meta.url), "utf8"),

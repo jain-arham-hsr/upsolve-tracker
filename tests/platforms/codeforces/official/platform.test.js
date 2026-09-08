@@ -11,11 +11,11 @@ import { contestsOnPlatform } from "../../../../core/platforms/registry.js";
 import { getPlatform } from "../../../../core/platforms/registry.js";
 import { syncPublishedData } from "../../../../core/platforms/codeforces/official/platform.js";
 
-// Every pass takes the session; these hand it a fake source the way a test
+// Every pass takes the session; these hand it a fake API the way a test
 // hands the platform one.
 const official = getPlatform("codeforces-official");
-const syncStartTimes = (service, contests, onProgress) => official.syncStartTimes({ sources: service }, contests, onProgress);
-const syncPublishedProblemData = (service, contests, onProgress) => syncPublishedData({ sources: service }, contests, onProgress);
+const syncStartTimes = (service, contests, onProgress) => official.syncStartTimes({ api: service }, contests, onProgress);
+const syncPublishedProblemData = (service, contests, onProgress) => syncPublishedData({ api: service }, contests, onProgress);
 
 /**
  * `startTimeSeconds` defaults to *now* because the re-check stops asking about a

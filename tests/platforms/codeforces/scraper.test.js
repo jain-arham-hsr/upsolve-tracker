@@ -1,63 +1,22 @@
 /**
- * The Codeforces source's two non-JSON-shaped concerns: paging `contest.status`
- * for a gym rebuilt from submissions, and the HTML client a hidden gym reads
- * its problems page through.
+ * The Codeforces page client: recognising when Codeforces refuses, and being
+ * paced while asking. Neither half is executed by any platform test, which
+ * all stub the page read wholesale — so a blocked scrape would otherwise hand
+ * Cloudflare's interstitial to the problems-page parser, which would find no
+ * table and report something unrelated.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const { CodeforcesSources } = await import("../../../core/platforms/codeforces/sources.js");
-
-/** A real source with the one API method stubbed, the way every Codeforces test injects. */
-const fetchContestSubmissions = (service, contestId) =>
-  Object.assign(new CodeforcesSources("k", "s"), service).contestSubmissions(contestId);
-
-test("pages until a short page, then stops", async () => {
-  const asked = [];
-  const service = {
-    contestStatus: async (contestId, { from, count }) => {
-      asked.push({ from, count });
-      return asked.length === 1
-        ? Array.from({ length: count }, (_, i) => ({ id: i }))
-        : [{ id: 999 }];
-    },
-  };
-
-  const all = await fetchContestSubmissions(service, 1);
-  assert.equal(asked.length, 2);
-  assert.equal(asked[1].from, asked[0].from + asked[0].count);
-  assert.equal(all.length, asked[0].count + 1);
-});
-
-test("refuses a contest too large to rebuild rather than truncating", async () => {
-  // An understated solve count reads as a harder problem, not as a failure.
-  const service = {
-    contestStatus: async (contestId, { count }) =>
-      Array.from({ length: count }, (_, i) => ({ id: i })),
-  };
-  await assert.rejects(
-    () => fetchContestSubmissions(service, 1),
-    /too many to rebuild/,
-  );
-});
-
-// ---------------------------------------------------------------------------
-// The HTML client: recognising when Codeforces refuses, and being paced while
-// asking. Neither half was executed by any adapter test, which all stub the
-// page read wholesale — so a blocked scrape would otherwise hand Cloudflare's
-// interstitial to the problems-page scraper, which would find no table and
-// report something unrelated.
-// ---------------------------------------------------------------------------
-
 import { DOMParser } from "linkedom";
+
+const { CodeforcesScraper } = await import("../../../core/platforms/codeforces/scraper.js");
 
 // The client parses before it answers, so these need a DOM the way the browser
 // gives production one.
 globalThis.DOMParser = DOMParser;
 
-
-const client = new CodeforcesSources("k", "s");
-const reset = (ms) => CodeforcesSources.reset(ms);
+const client = new CodeforcesScraper();
+const reset = (ms) => CodeforcesScraper.reset(ms);
 
 function stubFetch(handler) {
   const calls = [];
@@ -76,7 +35,7 @@ test("a 403 becomes a sentence about visiting codeforces.com", async () => {
   const stub = stubFetch(async () => ({ status: 403, async text() { return ""; } }));
   try {
     await assert.rejects(
-      () => client.page("https://codeforces.com/contest/1/standings"),
+      () => client.document("https://codeforces.com/contest/1/standings"),
       /blocking requests.*visit codeforces\.com/s,
     );
   } finally {
@@ -92,7 +51,7 @@ test("a 200 carrying Cloudflare's interstitial is caught too", async () => {
   const stub = stubFetch(async () => ok("<html><body>Just a moment...</body></html>"));
   try {
     await assert.rejects(
-      () => client.page("https://codeforces.com/contest/1/standings"),
+      () => client.document("https://codeforces.com/contest/1/standings"),
       /blocking requests/,
     );
   } finally {
@@ -104,8 +63,8 @@ test("an ordinary page comes back parsed, ready for the scrapers", async () => {
   reset();
   const stub = stubFetch(async () => ok("<html><table class='problems'></table></html>"));
   try {
-    const doc = await client.page("https://codeforces.com/gym/1");
-    // A Document rather than the string: everything in `scrapers/` takes one,
+    const doc = await client.document("https://codeforces.com/gym/1");
+    // A Document rather than the string: every `parse*` takes one,
     // and the parse happening in the client is what keeps `DOMParser` out of
     // platform code entirely.
     assert.ok(doc.querySelector("table.problems"), "the page should arrive queryable");
@@ -118,7 +77,7 @@ test("the session cookie is sent, which is what makes a private gym readable", a
   reset();
   const stub = stubFetch(async () => ok("<html></html>"));
   try {
-    await client.page("https://codeforces.com/gym/712373/standings");
+    await client.document("https://codeforces.com/gym/712373/standings");
     assert.equal(
       stub.calls[0].init.credentials,
       "include",
@@ -136,8 +95,8 @@ test("requests actually go through the pacer", async () => {
   reset(60);
   const stub = stubFetch(async () => ok("<html></html>"));
   try {
-    await client.page("https://codeforces.com/contest/1/standings");
-    await client.page("https://codeforces.com/contest/2/standings");
+    await client.document("https://codeforces.com/contest/1/standings");
+    await client.document("https://codeforces.com/contest/2/standings");
 
     const gap = stub.calls[1].at - stub.calls[0].at;
     assert.ok(gap >= 50, `the second request was not paced — fired ${gap}ms after the first`);
@@ -164,7 +123,7 @@ test("a block is flagged, so it can wait instead of failing the add", async () =
     reset();
     globalThis.fetch = async () => response;
 
-    const error = await client.page("https://codeforces.com/contest/1/standings").then(
+    const error = await client.document("https://codeforces.com/contest/1/standings").then(
       () => null,
       (e) => e,
     );
@@ -178,6 +137,6 @@ test("an ordinary failure is not flagged, so it still fails loudly", async () =>
   // quietly retried forever under the same flag.
   reset();
   globalThis.fetch = async () => ({ status: 200, async text() { return "<html><p>fine</p></html>"; } });
-  const doc = await client.page("https://codeforces.com/x");
+  const doc = await client.document("https://codeforces.com/x");
   assert.match(doc.querySelector("p").textContent, /fine/);
 });

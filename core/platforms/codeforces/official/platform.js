@@ -5,7 +5,7 @@
  * official round is read entirely from the JSON API and touches no HTML,
  * while a gym can need a page. The class answers "which am I", so nothing
  * downstream branches on it. What the two share is the site, in `../site.js`,
- * and the account, which the base handles through `../sources.js`.
+ * and the account, which the base handles through `../api.js`.
  *
  * One unsigned `contest.standings` call carries the contest name, the
  * problems in order with their published ratings and tags, the start time,
@@ -14,17 +14,16 @@
  */
 import { Platform } from "../../platform.js";
 import { site } from "../site.js";
-import { CodeforcesSources } from "../sources.js";
-import { problemsFrom, applyStandingsProblemData } from "../payloads.js";
-import { estimate, stratifyRows } from "../estimator.js";
+import { CodeforcesApi, problemsFrom, applyStandingsProblemData } from "../api.js";
+import { estimate } from "../estimator.js";
 import { notPublishedYet } from "../../../contest-status.js";
-import { fullField, distributionSize } from "../../../rating-models/rating-distribution.js";
+import { distributionSize } from "../../../rating-models/rating-distribution.js";
 
 const URL_PATTERN = /^https?:\/\/(?:www\.)?codeforces\.com\/contest\/(\d+)/i;
 
 export class CodeforcesOfficial extends Platform {
   static site = site;
-  static Sources = CodeforcesSources;
+  static Api = CodeforcesApi;
 
   id = "codeforces-official";
 
@@ -88,7 +87,7 @@ export class CodeforcesOfficial extends Platform {
    *   without being fetched twice.
    */
   async fetchContest({ contestId, session, onProgress = () => {} }) {
-    const { sources } = session;
+    const { api } = session;
 
     // problemset.problems is where Codeforces publishes an official contest's
     // problems, so its absence is the whole "not published yet" question,
@@ -96,7 +95,7 @@ export class CodeforcesOfficial extends Platform {
     // no equivalent gate on a gym: gyms are absent from the problemset
     // entirely, which is why the two pipelines are two classes.
     onProgress("Checking whether Codeforces has published it…");
-    if (!inProblemset(await sources.problemsetProblems(), contestId)) {
+    if (!inProblemset(await api.problemsetProblems(), contestId)) {
       return notPublishedYet(
         `Codeforces hasn't published contest ${contestId} yet. It'll be added ` +
           `on a refresh once it appears.`,
@@ -109,7 +108,7 @@ export class CodeforcesOfficial extends Platform {
     // under this contest's own index. Failure is hard: it is the only source
     // of the roster, and it is flagged so the add waits rather than refuses.
     onProgress("Reading the standings…");
-    const standings = await sources.publicContestStandings(contestId);
+    const standings = await api.publicContestStandings(contestId);
     const problems = problemsFrom(contestId, standings);
 
     // A running round cannot reach here — it would not be in the problemset —
@@ -138,11 +137,9 @@ export class CodeforcesOfficial extends Platform {
   }
 
   /**
-   * The official field: pre-contest ratings for everyone who entered.
-   * `contest.ratingChanges` carries the whole field's `oldRating` in one
-   * request; when a round is not rated yet — the freshly finished contest you
-   * most want to upsolve — the standings rows the add already holds are
-   * stratified and resolved through `user.info`.
+   * The official field, read by `api.js#officialField`: `contest.ratingChanges`
+   * when the round is rated, else the standings rows the add already holds,
+   * sampled and resolved through `user.info`.
    *
    * @returns {Promise<object|null>} the distribution, or null when there was
    *   nothing to measure — a transient failure the general gap policy handles,
@@ -153,7 +150,7 @@ export class CodeforcesOfficial extends Platform {
 
     // `context.standings` was fetched for the roster and carried here, so the
     // field is measured from rows already in memory, not a second ~8.5 MB request.
-    const distribution = await officialField(session.sources, contest.id, context.standings, onProgress);
+    const distribution = await session.api.officialField(contest.id, context.standings, onProgress);
 
     console.log(
       `[Codeforces] Distribution: ${distributionSize(distribution)} competitors read, ` +
@@ -192,57 +189,6 @@ export class CodeforcesOfficial extends Platform {
 function inProblemset(problemset, contestId) {
   const wanted = String(contestId);
   return (problemset?.problems ?? []).some((problem) => String(problem.contestId) === wanted);
-}
-
-// ---------------------------------------------------------------------------
-// The field
-// ---------------------------------------------------------------------------
-
-async function officialField(sources, contestId, standings, onProgress) {
-  try {
-    const ratingChanges = await sources.contestRatingChanges(contestId);
-    if (ratingChanges?.length > 0) {
-      return fullField(ratingChanges.map((user) => user.oldRating));
-    }
-  } catch (error) {
-    console.warn(`[Codeforces] ratingChanges failed for ${contestId}:`, error.message);
-  }
-
-  console.warn(`[Codeforces] ratingChanges empty for ${contestId}. Falling back to standings.`);
-  return sampleOfficialStandings(sources, standings, onProgress);
-}
-
-async function sampleOfficialStandings(sources, standings, onProgress) {
-  try {
-    const { groups, total } = stratifyRows(standings?.rows);
-    if (groups.length === 0) {
-      console.warn("[Codeforces] Standings carried no rows to sample.");
-      return fullField([]);
-    }
-
-    onProgress("Looking up competitor ratings…");
-
-    // One lookup pass over every sampled party, then split back into strata,
-    // so the rate-limited `user.info` chunking does not happen twice.
-    const rated = await sources.partyRatings(groups.flatMap((group) => group.parties));
-
-    let offset = 0;
-    const strata = [];
-    for (const group of groups) {
-      const ratings = rated.slice(offset, offset + group.parties.length);
-      offset += group.parties.length;
-      if (ratings.length > 0) strata.push({ ratings, scale: group.scale });
-    }
-
-    console.log(
-      `[Codeforces] Rated ${rated.length} of ~${total} participants across ${strata.length} stratum/strata.`,
-    );
-
-    return strata.length > 0 ? { strata } : fullField([]);
-  } catch (error) {
-    console.warn(`[Codeforces] Standings sampling failed:`, error.message);
-    return fullField([]);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +319,7 @@ export async function syncPublishedData(session, contests, onProgress = () => {}
   let updated = 0;
   for (const contest of pending) {
     try {
-      const standings = await session.sources.publicContestStandings(contest.id);
+      const standings = await session.api.publicContestStandings(contest.id);
       // The same applier the add path uses, so the two cannot disagree about
       // what "published" means or which fields it sets.
       applyStandingsProblemData(standings, contest.problems);

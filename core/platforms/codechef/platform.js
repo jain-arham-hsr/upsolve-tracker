@@ -18,8 +18,8 @@
  */
 import { Platform } from "../platform.js";
 import { site } from "./site.js";
-import { CodeChefSources } from "./sources.js";
-import { ACCEPTED, parseDifficulty, cleanTags, practiceFlag } from "./payloads.js";
+import { CodeChefApi, ACCEPTED, parseDifficulty, cleanTags, practiceFlag } from "./api.js";
+import { CodeChefScraper } from "./scraper.js";
 import {
   notEndedYet,
   notPublishedYet,
@@ -39,7 +39,8 @@ const SUBTYPES = [
 
 export class CodeChef extends Platform {
   static site = site;
-  static Sources = CodeChefSources;
+  static Api = CodeChefApi;
+  static Scraper = CodeChefScraper;
 
   id = "codechef";
 
@@ -124,12 +125,14 @@ export class CodeChef extends Platform {
    * as. Both, because they can differ — and that difference is the point.
    */
   async buildSession(values) {
-    const sources = CodeChefSources.fromSettings(values);
-    const page = await sources.dashboard();
+    const api = CodeChefApi.fromSettings(values);
+    const scraper = CodeChefScraper.fromSettings(values);
+    const page = await scraper.dashboard();
 
     return {
       handle: values[this.handleSlug],
-      sources,
+      api,
+      scraper,
       signedInAs: page?.username ?? null,
       rating: page?.rating ?? null,
       signedIn: Boolean(page?.username),
@@ -199,7 +202,7 @@ export class CodeChef extends Platform {
     for (const [index, problem] of problems.entries()) {
       onProgress(`Reading problem ${index + 1} of ${problems.length}…`);
       try {
-        built.push(await buildProblem(session.sources, payload.code, problem, solved));
+        built.push(await buildProblem(session.api, payload.code, problem, solved));
       } catch (error) {
         if (!error?.isSourceUnreachable) throw error;
         // Fail fast: the remaining requests would be spent on an add that is
@@ -237,7 +240,7 @@ export class CodeChef extends Platform {
     // object the add already built is all it reads.
     await this.verifyIdentity(session);
 
-    const rows = await session.sources.attemptedProblems(onProgress);
+    const rows = await session.api.attemptedProblems(onProgress);
     const accepted = [];
 
     for (const row of rows) {
@@ -283,7 +286,7 @@ function subtypeFor(contestId) {
  * own rating picks the one they competed in.
  */
 async function resolveDivision(contestId, session, onProgress) {
-  const contest = await session.sources.contest(contestId);
+  const contest = await session.api.contest(contestId);
   if (!contest.is_a_parent_contest) return { code: contestId, contest };
 
   const children = Object.values(contest.child_contests ?? {});
@@ -314,7 +317,7 @@ async function resolveDivision(contestId, session, onProgress) {
   }
 
   onProgress(`Using ${match.contest_code} (${match.div?.name ?? "your division"})…`);
-  return { code: match.contest_code, contest: await session.sources.contest(match.contest_code) };
+  return { code: match.contest_code, contest: await session.api.contest(match.contest_code) };
 }
 
 /**
@@ -326,7 +329,7 @@ function solvedCodes(contest) {
   return new Set(Object.keys(contest?.problemsstats?.solved ?? {}));
 }
 
-async function buildProblem(sources, contestCode, problem, solved) {
+async function buildProblem(api, contestCode, problem, solved) {
   const code = problem.code;
 
   // Only the request is guarded, and it is re-thrown flagged rather than
@@ -334,7 +337,7 @@ async function buildProblem(sources, contestCode, problem, solved) {
   // a null here is indistinguishable from CodeChef answering "-1".
   let detail;
   try {
-    detail = await sources.problem(contestCode, code);
+    detail = await api.problem(contestCode, code);
   } catch (error) {
     throw Object.assign(error, { isSourceUnreachable: true });
   }
@@ -378,7 +381,7 @@ async function buildProblem(sources, contestCode, problem, solved) {
  * still carries a flagged problem, so a fully-mirrored queue — which is the
  * normal case — costs nothing at all. Reading the **contest** payload rather
  * than the per-problem endpoint is what makes even the flagged case cheap: one
- * request per affected contest, against one per affected *problem*. `sources.contest`
+ * request per affected contest, against one per affected *problem*. `api.contest`
  * is memoised for a minute on top of that.
  *
  * Note this deliberately never re-checks a contest with nothing flagged. The
@@ -396,7 +399,7 @@ async function refreshPracticeFlags(session, contests, onProgress = () => {}) {
 
   for (const contest of pending) {
     try {
-      const payload = await session.sources.contest(contest.id);
+      const payload = await session.api.contest(contest.id);
       const problems = payload?.problems ?? {};
 
       for (const problem of contest.problems) {
@@ -462,7 +465,7 @@ async function syncPublishedDifficulty(session, contests, onProgress = () => {})
 
       onProgress(`Re-checking ${problem.index}…`);
       try {
-        const detail = await session.sources.problem(contest.id, problem.index);
+        const detail = await session.api.problem(contest.id, problem.index);
         const rating = parseDifficulty(detail?.difficulty_rating);
         if (rating === null) continue;
 

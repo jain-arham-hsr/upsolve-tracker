@@ -128,3 +128,27 @@ test("a custom issuer replaces fetch entirely, rather than wrapping it", async (
   await viaPage.get("https://example.com/x");
   assert.equal(fetched, false, "the direct path must not also run");
 });
+
+test("two clients of one site queue as one", async () => {
+  // A site's `api.js` and `scraper.js` each build a client. Without a shared
+  // budget each would honour its own gap and the site would be hit twice as
+  // fast as either intended — invisible in every result, since nothing about
+  // a response says whether a delay was served. So the budget defaults to the
+  // site's id, and this pins it with a gap small enough to observe.
+  const at = [];
+  const stub = async (url) => {
+    at.push(Date.now());
+    return { ok: true, status: 200, url, async text() { return ""; } };
+  };
+  const site = { id: `test-site-${Math.random()}`, hostPermissions: [] };
+  const one = createSiteClient({ site, pacer: { gapMs: 60 }, refusal: () => null, fetchImpl: stub });
+  const two = createSiteClient({ site, pacer: { gapMs: 60 }, refusal: () => null, fetchImpl: stub });
+
+  // Interleaved on purpose: alternating clients is what an unshared budget
+  // would let overlap.
+  await Promise.all([one.get("https://x/1"), two.get("https://x/2"), one.get("https://x/3")]);
+
+  for (let i = 1; i < at.length; i++) {
+    assert.ok(at[i] - at[i - 1] >= 50, `request ${i + 1} came ${at[i] - at[i - 1]}ms after the last; the site's budget is not shared`);
+  }
+});

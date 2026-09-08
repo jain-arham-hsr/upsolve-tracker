@@ -18,13 +18,14 @@ import { DOMParser } from "linkedom";
 globalThis.DOMParser = DOMParser;
 
 const { getPlatform } = await import("../../../core/platforms/registry.js");
-const { sources } = await import("../../../core/platforms/atcoder/sources.js");
+const { api } = await import("../../../core/platforms/atcoder/api.js");
+const { scraper } = await import("../../../core/platforms/atcoder/scraper.js");
 const platform = getPlatform("atcoder");
 const fetchContestRecord = (...args) => platform.fetchContestRecord(...args);
 const fetchSolvedKeys = (...args) => platform.fetchSolvedKeys(...args);
 const syncMetadata = (...args) => platform.syncMetadata(...args);
 
-const SESSION = { handle: "tourist", sources };
+const SESSION = { handle: "tourist", api, scraper };
 
 const tasksPage = (rows) => `<html><body>
   <a class="contest-title" href="/contests/abc432">Example Contest 432</a>
@@ -193,7 +194,7 @@ test("signed out fails loudly instead of reporting nothing solved", async () => 
 });
 
 test("no handle means no request and no keys", async () => {
-  const keys = await fetchSolvedKeys({ handle: null, sources }, [{ id: "abc432" }]);
+  const keys = await fetchSolvedKeys({ handle: null, api, scraper }, [{ id: "abc432" }]);
   assert.equal(keys.size, 0);
   assert.deepEqual(requested, []);
 });

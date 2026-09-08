@@ -1,6 +1,6 @@
 /**
  * The Platform base: what the registry refuses when it checks an instance,
- * what the account defaults do through the site's source, and what the base
+ * what the account defaults do through the site's API, and what the base
  * checks at every boundary a subclass's answer crosses.
  *
  * Each case here was confirmed by removing the check it names and watching it
@@ -10,26 +10,27 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { Platform, DESCRIPTOR_MEMBERS } from "../../core/platforms/platform.js";
-import { Source } from "../../core/platforms/source.js";
+import { Api } from "../../core/platforms/api.js";
+import { Scraper } from "../../core/platforms/scraper.js";
 import { getPlatform } from "../../core/platforms/registry.js";
 import { READY, SOURCE_UNREACHABLE, notEndedYet } from "../../core/contest-status.js";
 
-/** A Source that answers the account questions from a table, and never fetches. */
-class FakeSources extends Source {
+/** An Api that answers the account questions from a table, and never fetches. */
+class FakeApi extends Api {
   static known = { me: { username: "me", rating: 1500 } };
   static solved = [{ contest: { id: null }, problem: { index: "A" } }];
   constructor() { super({ client: { reset() {} } }); }
-  static fromSettings() { return new FakeSources(); }
+  static fromSettings() { return new FakeApi(); }
   static reset() {}
-  async identity(handle) { return FakeSources.known[handle] ?? null; }
-  async accepted() { return FakeSources.solved; }
+  async identity(handle) { return FakeApi.known[handle] ?? null; }
+  async accepted() { return FakeApi.solved; }
 }
 
 /** The smallest complete subclass, over CodeChef's site and settings. */
-function complete({ site = getPlatform("codechef").constructor.site, Sources = FakeSources } = {}) {
+function complete({ site = getPlatform("codechef").constructor.site, Api: api = FakeApi } = {}) {
   return class Fake extends Platform {
     static site = site;
-    static Sources = Sources;
+    static Api = api;
     id = "codechef";
     label = "Fake";
     shortLabel = "FK";
@@ -59,11 +60,14 @@ function complete({ site = getPlatform("codechef").constructor.site, Sources = F
 
 const build = (Fake) => Platform.check(new Fake());
 
-test("a class declaring no site or no Sources cannot even be constructed", () => {
+test("a class declaring no site or no Api cannot even be constructed", () => {
   const NoSite = complete(); NoSite.site = null;
   assert.throws(() => new NoSite(), /declares no site/);
-  const NoSources = complete(); NoSources.Sources = null;
-  assert.throws(() => new NoSources(), /declares no Sources class/);
+  const NoApi = complete(); NoApi.Api = null;
+  assert.throws(() => new NoApi(), /declares no Api class/);
+  // A scraper is optional, but what is declared has to be a class.
+  const BadScraper = complete(); BadScraper.Scraper = {};
+  assert.throws(() => new BadScraper(), /Scraper that is not a class/);
 });
 
 test("the site's object is taken on: origin, host permission, mark, settings section", () => {
@@ -88,9 +92,9 @@ test("a class without fetchContest, or without any way to read accepted submissi
   const NoFetch = complete(); delete NoFetch.prototype.fetchContest;
   assert.throws(() => build(NoFetch), /must implement fetchContest\(\)/);
 
-  class Mute extends FakeSources {}
+  class Mute extends FakeApi {}
   Mute.prototype.accepted = undefined;
-  assert.throws(() => build(complete({ Sources: Mute })), /fetchAccepted\(\), or its source accepted\(\)/);
+  assert.throws(() => build(complete({ Api: Mute })), /fetchAccepted\(\), or its API accepted\(\)/);
 });
 
 test("canEstimate, readField() and estimate() are one fact, refused in every direction", () => {
@@ -124,55 +128,64 @@ test("the slugs and the handle slug come from the schema section, declared once"
 test("the default session is the handle from settings and the source built from them", async () => {
   const session = await build(complete()).createSessionFrom({ "upsolve_tracker.codechef_handle": "me" });
   assert.equal(session.handle, "me");
-  assert.ok(session.sources instanceof FakeSources);
+  assert.ok(session.api instanceof FakeApi);
 });
 
-test("a session with no handle field, or no Source, is refused at the boundary", async () => {
+test("a session with no handle field, or no Api, is refused at the boundary", async () => {
   const NoHandle = complete();
-  NoHandle.prototype.buildSession = () => ({ signedIn: true, sources: new FakeSources() });
+  NoHandle.prototype.buildSession = () => ({ signedIn: true, api: new FakeApi() });
   await assert.rejects(() => build(NoHandle).createSessionFrom({}), /codechef built a session with no handle/);
 
   // A plain object with the right methods is not enough: the seam every
   // platform shares is a Source, and a session that carries something else
   // has reached the site some other way.
-  const NoSource = complete();
-  NoSource.prototype.buildSession = () => ({ handle: "me", sources: { document() {} } });
-  await assert.rejects(() => build(NoSource).createSessionFrom({}), /carries no Source/);
+  const NoApi = complete();
+  NoApi.prototype.buildSession = () => ({ handle: "me", api: { json() {} } });
+  await assert.rejects(() => build(NoApi).createSessionFrom({}), /carries no Api/);
+
+  // And a scraper, where one is carried, has to be a Scraper — a plain object
+  // with a `document` method would work until the first page it read.
+  const BadScraper = complete();
+  BadScraper.prototype.buildSession = () => ({ handle: "me", api: new FakeApi(), scraper: { document() {} } });
+  await assert.rejects(() => build(BadScraper).createSessionFrom({}), /scraper is not a Scraper/);
+  const NoScraper = complete();
+  NoScraper.prototype.buildSession = () => ({ handle: "me", api: new FakeApi(), scraper: null });
+  assert.equal((await build(NoScraper).createSessionFrom({})).scraper, null);
 });
 
 test("the default identify asks the source about the handle, and refuses a blank or unknown one", async () => {
   const platform = build(complete());
-  const sources = new FakeSources();
-  assert.deepEqual(await platform.verifyIdentity({ handle: "me", sources }), { username: "me", rating: 1500 });
-  await assert.rejects(() => platform.verifyIdentity({ handle: "", sources }), /No CodeChef handle set/);
-  await assert.rejects(() => platform.verifyIdentity({ handle: "nobody", sources }), /doesn't recognise the handle "nobody"/);
+  const api = new FakeApi();
+  assert.deepEqual(await platform.verifyIdentity({ handle: "me", api }), { username: "me", rating: 1500 });
+  await assert.rejects(() => platform.verifyIdentity({ handle: "", api }), /No CodeChef handle set/);
+  await assert.rejects(() => platform.verifyIdentity({ handle: "nobody", api }), /doesn't recognise the handle "nobody"/);
 });
 
 test("an identity with no username or a non-numeric rating is refused", async () => {
-  class Blank extends FakeSources { async identity() { return { username: "", rating: 1 }; } }
-  await assert.rejects(() => build(complete({ Sources: Blank })).verifyIdentity({ handle: "x", sources: new Blank() }), /no username/);
-  class Weird extends FakeSources { async identity() { return { username: "me", rating: "1500" }; } }
-  await assert.rejects(() => build(complete({ Sources: Weird })).verifyIdentity({ handle: "x", sources: new Weird() }), /neither a number nor null/);
+  class Blank extends FakeApi { async identity() { return { username: "", rating: 1 }; } }
+  await assert.rejects(() => build(complete({ Api: Blank })).verifyIdentity({ handle: "x", api: new Blank() }), /no username/);
+  class Weird extends FakeApi { async identity() { return { username: "me", rating: "1500" }; } }
+  await assert.rejects(() => build(complete({ Api: Weird })).verifyIdentity({ handle: "x", api: new Weird() }), /neither a number nor null/);
 });
 
 test("the default fetchAccepted maps the source's accepted pairs through solvedKey", async () => {
-  const keys = await build(complete()).fetchSolvedKeys({ handle: "me", sources: new FakeSources() }, []);
+  const keys = await build(complete()).fetchSolvedKeys({ handle: "me", api: new FakeApi() }, []);
   assert.deepEqual([...keys], ["codechef:A"]);
 });
 
 test("an accepted pair with a bare null contest is refused", async () => {
-  class Bare extends FakeSources { async accepted() { return [{ contest: null, problem: { index: "A" } }]; } }
-  await assert.rejects(() => build(complete({ Sources: Bare })).fetchSolvedKeys({ handle: "me", sources: new Bare() }, []), /without a contest object/);
+  class Bare extends FakeApi { async accepted() { return [{ contest: null, problem: { index: "A" } }]; } }
+  await assert.rejects(() => build(complete({ Api: Bare })).fetchSolvedKeys({ handle: "me", api: new Bare() }, []), /without a contest object/);
 });
 
 test("the default syncStartTimes dates from the source's contest list, and does nothing without one", async () => {
   const platform = build(complete());
   const undated = { id: "7", startTimeSeconds: null };
-  assert.equal(await platform.syncStartTimes({ sources: new FakeSources() }, [undated]), 0);
+  assert.equal(await platform.syncStartTimes({ api: new FakeApi() }, [undated]), 0);
   assert.equal(undated.startTimeSeconds, null);
 
-  class Listing extends FakeSources { async contestList() { return [{ id: 7, startTimeSeconds: 1234 }]; } }
-  assert.equal(await build(complete({ Sources: Listing })).syncStartTimes({ sources: new Listing() }, [undated]), 1);
+  class Listing extends FakeApi { async contestList() { return [{ id: 7, startTimeSeconds: 1234 }]; } }
+  assert.equal(await build(complete({ Api: Listing })).syncStartTimes({ api: new Listing() }, [undated]), 1);
   assert.equal(undated.startTimeSeconds, 1234);
 });
 

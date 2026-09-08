@@ -14,13 +14,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseHTML } from "linkedom";
 
-import { TasksPage } from "../../../../core/platforms/atcoder/scrapers/tasks.js";
+import { parseTasks } from "../../../core/platforms/atcoder/scraper.js";
 
 // One parse per page now, so these read the fields off it. `parse` returns
 // null exactly when the task table is missing, which is what `findTasks`
 // used to signal on its own.
-const findTasks = (doc) => TasksPage.scrape(doc)?.problems ?? null;
-const findContestName = (doc) => TasksPage.scrape(doc)?.name ?? null;
+const findTasks = (doc) => parseTasks(doc)?.problems ?? null;
+const findContestName = (doc) => parseTasks(doc)?.name ?? null;
 
 /**
  * A page with a valid task table but nothing else, so the *field*-level nulls
@@ -34,7 +34,7 @@ const tasksOnly = (extra = "") =>
       `</tr></tbody></table></body></html>`,
   ).document;
 
-const html = readFileSync(new URL("../../../fixtures/atcoder-tasks.html", import.meta.url), "utf8");
+const html = readFileSync(new URL("../../fixtures/atcoder-tasks.html", import.meta.url), "utf8");
 const doc = () => parseHTML(html).document;
 const empty = (body) => parseHTML(`<html><body>${body}</body></html>`).document;
 
@@ -45,7 +45,7 @@ test("reads the contest name from the sidebar link, not the title suffix", () =>
 });
 
 test("reads start and end as epoch seconds, honouring the +0900 offset", () => {
-  const { startTimeSeconds, endTimeSeconds } = TasksPage.scrape(doc());
+  const { startTimeSeconds, endTimeSeconds } = parseTasks(doc());
   // 2025-11-15 21:00:00+0900
   assert.equal(startTimeSeconds, 1763208000);
   assert.equal(endTimeSeconds, 1763214000);
@@ -95,7 +95,7 @@ test("a missing name or missing times answer null rather than a default", () => 
   // with no task table is a different statement — the next test — and the two
   // must not be conflated: one says "we could not read the page", the other
   // says "the page rendered and this value is not on it".
-  const page = TasksPage.scrape(tasksOnly());
+  const page = parseTasks(tasksOnly());
 
   assert.equal(page.name, null);
   assert.equal(page.startTimeSeconds, null);
@@ -105,5 +105,5 @@ test("a missing name or missing times answer null rather than a default", () => 
 
 test("no task table means the page did not parse at all", () => {
   // The distinction the line above rests on, asserted directly.
-  assert.equal(TasksPage.scrape(empty("<p>nothing</p>")), null);
+  assert.equal(parseTasks(empty("<p>nothing</p>")), null);
 });

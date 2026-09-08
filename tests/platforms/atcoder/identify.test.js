@@ -22,7 +22,8 @@ globalThis.DOMParser = DOMParser;
 
 const { getPlatform } = await import("../../../core/platforms/registry.js");
 const verifyIdentity = (session) => getPlatform("atcoder").verifyIdentity(session);
-const { sources } = await import("../../../core/platforms/atcoder/sources.js");
+const { api } = await import("../../../core/platforms/atcoder/api.js");
+const { scraper } = await import("../../../core/platforms/atcoder/scraper.js");
 
 const profile = (signedInAs, rating = 1600) => `<html><head>
   <script>var userScreenName = ${signedInAs === null ? "undefined" : `"${signedInAs}"`};</script>
@@ -49,7 +50,7 @@ beforeEach(() => {
 
 test("a handle that is not the signed-in account is refused", async () => {
   served.body = profile("someone_else");
-  const error = await verifyIdentity({ handle: "jain_arham_hsr", sources }).then(() => null, (e) => e);
+  const error = await verifyIdentity({ handle: "jain_arham_hsr", api, scraper }).then(() => null, (e) => e);
 
   assert.ok(error, "a contradicted handle must not pass");
   assert.equal(error.isIdentityMismatch, true, "callers branch on the flag, not the sentence");
@@ -61,7 +62,7 @@ test("a matching account confirms, and AtCoder's casing wins", async () => {
   // So "Tourist" and "tourist" do not read as two different accounts on the
   // next comparison and needlessly clear the platform's solved flags.
   served.body = profile("Tourist");
-  const identity = await verifyIdentity({ handle: "tourist", sources });
+  const identity = await verifyIdentity({ handle: "tourist", api, scraper });
   assert.equal(identity.username, "Tourist");
   assert.equal(identity.rating, 1600);
 });
@@ -70,7 +71,7 @@ test("signed out still verifies the handle, exactly as before", async () => {
   // Adding a contest has to keep working without a session — difficulty falls
   // back to "???" rather than failing — so an empty marker cannot be fatal.
   served.body = profile("");
-  const identity = await verifyIdentity({ handle: "anybody", sources });
+  const identity = await verifyIdentity({ handle: "anybody", api, scraper });
   assert.equal(identity.username, "anybody");
   assert.equal(identity.rating, 1600);
 });
@@ -80,19 +81,19 @@ test("a missing marker is not treated as signed out", async () => {
   // make the extension unusable for a reason it cannot state — and a page-shape
   // change is exactly when that would happen.
   served.body = noMarker;
-  const identity = await verifyIdentity({ handle: "anybody", sources });
+  const identity = await verifyIdentity({ handle: "anybody", api, scraper });
   assert.equal(identity.username, "anybody");
 });
 
 test("an unknown handle says so, rather than reporting an HTTP code", async () => {
   served = { status: 404, body: "" };
-  await assert.rejects(() => verifyIdentity({ handle: "nope", sources }), /AtCoder has no user "nope"/);
+  await assert.rejects(() => verifyIdentity({ handle: "nope", api, scraper }), /AtCoder has no user "nope"/);
 });
 
 test("no handle is its own message, and costs no request", async () => {
   let called = false;
   globalThis.fetch = async () => { called = true; };
-  await assert.rejects(() => verifyIdentity({ handle: null, sources }), /No AtCoder handle set/);
+  await assert.rejects(() => verifyIdentity({ handle: null, api, scraper }), /No AtCoder handle set/);
   assert.equal(called, false);
 });
 
@@ -100,5 +101,5 @@ test("a mismatch outranks the rating — it must not be reported as connected", 
   // The failure mode this prevents: surfacing "Connected as …" with somebody
   // else's rating, which would then order the whole AtCoder block of the queue.
   served.body = profile("someone_else", 2400);
-  await assert.rejects(() => verifyIdentity({ handle: "me", sources }), (e) => e.isIdentityMismatch);
+  await assert.rejects(() => verifyIdentity({ handle: "me", api, scraper }), (e) => e.isIdentityMismatch);
 });
