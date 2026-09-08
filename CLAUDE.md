@@ -629,7 +629,7 @@ Three consequences worth knowing before changing anything here:
 hid: it answers `FAILED` to `contest.standings`, and the problems page is the only page such
 a contest renders. It is the definitive problem list — a problem nobody attempted appears in
 no submission, so a list rebuilt from `contest.status` would come out silently short.
-`GymSources#page` is how that page is read, through the HTML client with the session
+`CodeforcesSources#page` is how that page is read, through the HTML client with the session
 cookie and throttling tuned against the live site; `module-boundaries.test.js` pins that
 `codeforces/sources.js` makes exactly one page read and that it is not a standings page. So **an
 add needs no codeforces.com tab** unless the gym's standings are hidden. Three scrapes went
@@ -1039,7 +1039,7 @@ time, leaving the field empty. It now fetches unsigned and hands the payload ove
 
 The tag source differs by contest type:
 
-- **Official** — the same `contest.standings` response the roster comes from, so tags and ratings arrive together and the add pays for one call rather than two. `problemset.problems` is still fetched, but only as the readiness gate (`sources.js#isInProblemset`), where one ~2 MB request memoised for 60 s answers "has Codeforces published this contest at all" for every contest at once.
+- **Official** — the same `contest.standings` response the roster comes from, so tags and ratings arrive together and the add pays for one call rather than two. `problemset.problems` is still fetched, but only as the readiness gate (`official/platform.js`'s `inProblemset`), where one ~2 MB request memoised for 60 s answers "has Codeforces published this contest at all" for every contest at once.
 - **Gym** — absent from the problemset entirely. Tags *and the published rating* are lifted from the `problems` array of the standings response that adding a gym already fetches (`payloads.js#applyStandingsProblemData`). Tags are usually empty, since gyms sit outside CF's taxonomy — but **about a third of gym problems carry a `rating`**, and taking it is not optional decoration.
 
   Those are problems the setter picked from the CF archive rather than preparing in Polygon, so CF still recognises them and serves its own number; problems written for the contest have none and are estimated as before. Measured over the 62 stored gym problems CF also rates, the estimate was a mean **211** off with 14 out by 400+, so ignoring the published value — which this code did until it was noticed — actively mis-sorted the queue. A one-time correction of the affected install was applied through Import rather than left as a normaliser, per the no-back-compat rule at the top of this file.
