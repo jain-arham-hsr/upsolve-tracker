@@ -65,7 +65,7 @@ export const clearDirHandle = () => remove(KEYS.DIR_HANDLE);
 // `core/settings/schema.js`; nothing about IndexedDB is platform-specific, and
 // only what happened to be stored in it ever was. This file used to export
 // saveCredentials/loadCredentials — Codeforces' key pair, under Codeforces'
-// names, in the shared storage layer — and then briefly read a descriptor's
+// names, in the shared storage layer — and then briefly read a platform's
 // `settingsFields` instead, which moved the coupling without removing it.
 //
 // Exported, unlike the previous private pair, because the guarantee has moved

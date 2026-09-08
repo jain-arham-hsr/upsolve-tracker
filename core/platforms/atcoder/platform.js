@@ -104,13 +104,6 @@ export class AtCoder extends Platform {
     return this.solvedKey(contest, problem);
   }
 
-  /* Chart slot — blue. AtCoder brands achromatically, so the slot is free.
-     A validated categorical set checked together against the dark surface;
-     changing one means re-validating all of them. No rank colours: AtCoder
-     has its own scheme, and borrowing Codeforces' would attach its meaning to
-     an AtCoder number. Ratings render neutral. */
-  chartColor = "#3987e5";
-
   capabilities = {
     // AtCoder publishes no problem tags at all — not "none yet", none ever —
     // so the stats panel drops its tag section rather than heading an empty one.

@@ -2,7 +2,7 @@
  * The overview ring: where the backlog sits, by platform.
  *
  * A composition chart, so colour encodes **identity** — each platform's slot is
- * fixed on its descriptor, never assigned by size. Filtering to two platforms
+ * fixed on its site, never assigned by size. Filtering to two platforms
  * must not repaint the survivors.
  *
  * Deliberately not a progress ring. `updateSolvedStatus` deletes a contest once
@@ -11,7 +11,6 @@
  * by an unknowable amount and would *fall* as you cleared contests.
  */
 import { escapeHtml } from "./escape-html.js";
-import { platformIcon } from "./platform-icons.js";
 
 const SIZE = 100;
 const RADIUS = 42;
@@ -27,6 +26,7 @@ const GAP = 2;
  * @param {{platform: object, count: number}[]} slices
  * @returns {string} markup, or "" when there is nothing to draw.
  */
+/** @param {Array<{site: object, count: number}>} slices - one per site with pending problems */
 export function renderPlatformRing(slices) {
   const present = (slices ?? []).filter((slice) => slice.count > 0);
   const total = present.reduce((sum, slice) => sum + slice.count, 0);
@@ -37,17 +37,17 @@ export function renderPlatformRing(slices) {
 
   let offset = 0;
   const arcs = present
-    .map(({ platform, count }) => {
+    .map(({ site, count }) => {
       const length = (count / total) * CIRCUMFERENCE;
       // Never let a tiny slice vanish entirely; 1px still reads as present.
       const drawn = Math.max(length - gap, 1);
       const arc = `
         <circle
           class="ring-arc" cx="${SIZE / 2}" cy="${SIZE / 2}" r="${RADIUS}"
-          fill="none" stroke="${platform.chartColor}" stroke-width="${STROKE}"
+          fill="none" stroke="${site.chartColor}" stroke-width="${STROKE}"
           stroke-dasharray="${drawn.toFixed(2)} ${(CIRCUMFERENCE - drawn).toFixed(2)}"
           stroke-dashoffset="${(-offset).toFixed(2)}"
-        ><title>${escapeHtml(platform.label)}: ${count}</title></circle>`;
+        ><title>${escapeHtml(site.label)}: ${count}</title></circle>`;
       offset += length;
       return arc;
     })
@@ -61,12 +61,12 @@ export function renderPlatformRing(slices) {
   // of view.
   const legend = present
     .map(
-      ({ platform, count }) => `
+      ({ site, count }) => `
       <li>
-        <button type="button" class="ring-legend-row" data-scope="${escapeHtml(platform.id)}">
-          <span class="ring-swatch" style="background-color: ${platform.chartColor}"></span>
-          ${platformIcon(platform.id, platform.shortLabel)}
-          <span class="ring-legend-name">${escapeHtml(platform.label)}</span>
+        <button type="button" class="ring-legend-row" data-scope="${escapeHtml(site.id)}">
+          <span class="ring-swatch" style="background-color: ${site.chartColor}"></span>
+          ${site.icon}
+          <span class="ring-legend-name">${escapeHtml(site.label)}</span>
           <span class="ring-legend-count">${count}</span>
           <span class="ring-legend-chev" aria-hidden="true">\u203a</span>
         </button>

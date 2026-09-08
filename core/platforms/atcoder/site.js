@@ -6,7 +6,12 @@
  * carry: ratings render neutral.
  */
 export const site = {
+  id: "atcoder",
   label: "AtCoder",
+  /* Chart slot — blue. AtCoder brands achromatically, so the slot is free. A
+     validated categorical set checked together against the dark surface;
+     changing one means re-validating all of them. */
+  chartColor: "#3987e5",
   settingsSection: "atcoder",
   origin: "https://atcoder.jp",
   hostPermissions: ["*://*.atcoder.jp/*"],

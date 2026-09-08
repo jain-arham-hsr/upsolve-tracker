@@ -14,7 +14,23 @@ import {
   makeContestKey,
   findTrackedContest,
   listPlatforms,
+  listSites,
+  siteOf,
 } from "../core/platforms/registry.js";
+
+test("sites group platforms: Codeforces is one site with two, and colours are distinct per site", () => {
+  const sites = listSites();
+  assert.deepEqual(sites.map((site) => site.id), ["codeforces", "atcoder", "codechef"]);
+  assert.deepEqual(sites[0].platforms.map((p) => p.id), ["codeforces-official", "codeforces-gyms"]);
+  assert.equal(new Set(sites.map((site) => site.chartColor)).size, 3, "each site has its own identity colour");
+  for (const site of sites) {
+    for (const platform of site.platforms) {
+      assert.equal(platform.chartColor, site.chartColor, `${platform.id} does not carry its site's colour`);
+      assert.equal(platform.site.id, site.id);
+    }
+  }
+  assert.equal(siteOf({ id: "1", platform: "codeforces-gyms" }).id, "codeforces");
+});
 
 test("Codeforces contest and gym URLs are recognised", () => {
   // The path segment is the whole difference between the two Codeforces
@@ -74,7 +90,7 @@ test("contest ids do not collide across platforms", () => {
   );
 });
 
-test("every registered platform implements the descriptor contract", () => {
+test("every registered platform implements the describing contract", () => {
   for (const platform of listPlatforms()) {
     for (const method of [
       "matchUrl", "contestUrl", "problemUrl", "sourceLabel", "solvedKey", "problemKey",
@@ -171,7 +187,7 @@ test("only Codeforces hashes its contest id", () => {
   assert.equal(label("codechef", { id: "LTIME108" }), "LTIME108");
 });
 
-test("no descriptor decides whether a contest may wait", () => {
+test("no platform decides whether a contest may wait", () => {
   // `mayBeUnpublished(subtype)` used to answer this, false for gyms so a
   // private one could never wait forever. It is gone: the distinction it drew
   // is now carried by the fact an adapter reports. A gym still running is

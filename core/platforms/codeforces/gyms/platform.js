@@ -59,13 +59,6 @@ export class CodeforcesGyms extends Platform {
     return "Gym contest";
   }
 
-  /* TODO: awaiting a validated fourth hue. Sharing official's yellow for now,
-     which is legible but ambiguous — two adjacent arcs of one colour, told
-     apart only by the legend. The replacement has to clear the chroma floor as
-     a fill on #1e1e1e and hold CVD separation from all three existing colours,
-     re-checked as a set of four rather than on its own. */
-  chartColor = "#c98500";
-
   capabilities = {
     // Gyms sit outside CF's taxonomy and their tags are usually bare, but the
     // vocabulary exists — they come off the standings response.

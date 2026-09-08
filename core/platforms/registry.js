@@ -31,8 +31,29 @@ export function listPlatforms() {
 }
 
 /**
+ * Every site once, in platform order, with the platforms it registers.
+ *
+ * The stats view keys on sites: one account, one rating scale, one tag
+ * vocabulary, one identity colour. Codeforces' two platforms are one site.
+ */
+export function listSites() {
+  const sites = new Map();
+  for (const platform of PLATFORMS) {
+    const site = platform.site;
+    if (!sites.has(site.id)) sites.set(site.id, { ...site, platforms: [] });
+    sites.get(site.id).platforms.push(platform);
+  }
+  return [...sites.values()];
+}
+
+/** The site a stored contest record belongs to. */
+export function siteOf(contest) {
+  return platformOf(contest).site;
+}
+
+/**
  * @param {string} [id]
- * @returns {object} The descriptor. Throws for a missing id as well as an
+ * @returns {object} The platform. Throws for a missing id as well as an
  *   unknown one — see above for why neither may be defaulted.
  */
 export function getPlatform(id) {

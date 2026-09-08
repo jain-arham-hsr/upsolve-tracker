@@ -85,7 +85,7 @@ test("the outcome of a status does not depend on the platform", () => {
   assert.equal(outcomes.size, 4);
 });
 
-test("no descriptor decides waiting or partial ratings for itself", () => {
+test("no platform decides waiting or partial ratings for itself", () => {
   for (const { id } of listPlatforms()) {
     const platform = getPlatform(id);
     assert.equal(platform.mayBeUnpublished, undefined, `${id} declares a waiting policy`);
@@ -108,7 +108,7 @@ test("canEstimate is read in exactly one place", () => {
 });
 
 test("the retired names survive nowhere", () => {
-  // A rename that lives on in one file is worse than none: a descriptor keeps
+  // A rename that lives on in one file is worse than none: a platform keeps
   // declaring a key nothing reads, and that platform silently gets the default.
   for (const name of [
     "mayBeUnpublished",

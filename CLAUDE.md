@@ -903,7 +903,7 @@ with no visible field. Verified on gym 712373.
 `codeforces/sources.js` derives it — `GymSources.summariseSubmissions` is pure over the submission array so it tests
 without a network stack. Against 712373's real 103 rows it reproduces the contest page exactly —
 A x12, B x12, C x12, D x4, E x6, F x1 — which is the fixture `tests/fixtures/gym-standings-hidden.json`
-and the thing `tests/platforms/codeforces/sources.gyms.test.js` pins.
+and the thing `tests/platforms/codeforces/sources.html.test.js` pins.
 
 Five things there are easy to get wrong:
 
@@ -916,7 +916,7 @@ Five things there are easy to get wrong:
   the same idiom as `isNotPublishedYet` and `isIdentityMismatch`. And the gate is three conditions:
   gym **and** flagged **and** the problems page parses. An *official* contest with no standings
   table deliberately still throws: that is far more likely a Codeforces layout change, which
-  CLAUDE.md's rules say must fail loudly rather than be routed around. `tests/platforms/codeforces/platform.hidden-standings.test.js`
+  CLAUDE.md's rules say must fail loudly rather than be routed around. `tests/platforms/codeforces/gyms/platform.test.js`
   is mostly about what the branch must *not* touch; it stubs the service to throw if a healthy gym
   ever reaches `contestStatus`.
 - **Practice submissions are excluded, and that is what makes the counts right.** A gym closes when
@@ -967,7 +967,7 @@ from the captured sidebar markup.
 
 **This file used to claim the extension "only gets through because it runs inside a browser with a real session." That was wrong**, and measurement showed it: the panel's requests were never authenticated at all. They worked only because Codeforces was not challenging anonymous traffic, and began failing the moment that changed — no code change was involved, and `git log` confirms it, the last commit touching that path predating the last successful add by four days. See **Requests go through a page, not from the panel** for the measurement and what it forced.
 
-The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/platforms/codeforces/platform.hidden-standings.test.js`, `tests/platforms/codeforces/scrapers/problems-page.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live standings page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: an understated page count either takes the walk-every-page branch or trips the `hasPageLink` guard (slow but correct), a missing contest name falls back to `Contest <id>`, and an unreadable totals row refuses loudly. The residual risk is a slow add, not a wrong rating. Adding a just-finished contest in the real extension is the only way to confirm it.
+The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/platforms/codeforces/gyms/platform.test.js`, `tests/platforms/codeforces/scrapers/problems-page.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live standings page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: an understated page count either takes the walk-every-page branch or trips the `hasPageLink` guard (slow but correct), a missing contest name falls back to `Contest <id>`, and an unreadable totals row refuses loudly. The residual risk is a slow add, not a wrong rating. Adding a just-finished contest in the real extension is the only way to confirm it.
 
 ### Scraped markup is quarantined in `codeforces/scrapers/`
 
@@ -1049,7 +1049,7 @@ The tag source differs by contest type:
 
 #### The re-check stops after six weeks
 
-`syncPublishedData` in `codeforces/platform.js` re-asks `contest.standings` for a contest that still has a
+`syncPublishedData` in `codeforces/official/platform.js` re-asks `contest.standings` for a contest that still has a
 problem without an official rating or without tags — at most weekly, and **only
 until six weeks after the round ran**.
 
@@ -1073,7 +1073,7 @@ Three details are deliberate:
   milliseconds.** Comparing them directly is off by a factor of 1000 and dates
   every contest to 1970, which silently puts the whole queue past the cutoff and
   disables the re-check entirely — a failure with no symptom except ratings that
-  quietly stop converging. `tests/platforms/codeforces/platform.sync.test.js` pins it.
+  quietly stop converging. `tests/platforms/codeforces/official/platform.test.js` pins it.
 - **There is no per-refresh cap**, unlike AtCoder's `syncMetadata`, and that is a
   decision rather than an omission. A cap interacts badly with the cutoff: with
   several stale contests and an infrequent refresher, a capped rotation gives
@@ -1185,22 +1185,22 @@ Collapsing those would hide a missing *user* rating — which mis-sorts a whole 
 
 `services/user-ratings.js` holds your rating per platform, and is deliberately conservative because **one rating moves an entire platform's block**: a failed lookup keeps the previous value rather than clearing it, and nothing is ever defaulted. Ratings arrive from `verifyIdentity` (above), so a rating always comes attached to a confirmed account rather than floating free. There is no manual override — all three platforms fetch automatically.
 
-### Stats: an overview, plus one panel per platform
+### Stats: an overview, plus one panel per site
 
-**A platform panel is a child of the overview, not a peer of it**, so it is reached by drilling in rather than by a fourth chip beside "Overview": the two have different structure, and four equal chips both said otherwise and wrapped to two rows at panel width. The ring's legend rows *are* the navigation — each is a button — and a panel opens with a `‹ Overview` back link above a header naming the platform. Both directions share one delegated `[data-scope]` handler. The header carries no count, because once scoped the summary line directly above already reads "240 pending · median 1600 · 3 unrated".
+**A site panel is a child of the overview, not a peer of it**, so it is reached by drilling in rather than by a fourth chip beside "Overview": the two have different structure, and four equal chips both said otherwise and wrapped to two rows at panel width. The ring's legend rows *are* the navigation — each is a button — and a panel opens with a `‹ Overview` back link above a header naming the platform. Both directions share one delegated `[data-scope]` handler. The header carries no count, because once scoped the summary line directly above already reads "240 pending · median 1600 · 3 unrated".
 
 **Panels never mix platforms** — no chart bins numbers from different sites on one axis.
 
-- **Per-platform panels** show a native rating histogram in that platform's own units, plus tags and the rating-range control. Only the Codeforces panel colours its bars by rank; the others use a single neutral fill, since the bar length already carries the magnitude and the colours would only import a foreign meaning.
-- **The overview** carries only what is genuinely comparable across sites: the platform ring, and the solve-chance histogram.
+- **Per-site panels** show a native rating histogram in that site's own units, plus tags and the rating-range control. Only the Codeforces panel colours its bars by rank; the others use a single neutral fill, since the bar length already carries the magnitude and the colours would only import a foreign meaning.
+- **The overview** carries only what is genuinely comparable across sites: the site ring, and the solve-chance histogram.
 
 **There is no tag chart on the overview.** Vocabularies do not match — Codeforces' `dfs and similar` versus CodeChef's `graphs`, and AtCoder publishes none at all — so pooling them produces an authoritative-looking chart built from incompatible lists. The per-platform panels state tag coverage outright ("tags cover 47% of these problems"), because an empty "graphs" bar otherwise reads as "I have no graph problems" rather than "half of this is untagged".
 
-**A platform that publishes no tags gets no tag section at all** — heading, coverage line and rating-range control included. Drawing the frame and then explaining it is empty reads as a load that failed. That is `capabilities.publishesTags` on the descriptor, asked of the registry rather than checked against an id, so a new platform declares it instead of the view guessing. AtCoder sets it false.
+**A site none of whose platforms publishes tags gets no tag section at all** — heading, coverage line and rating-range control included. Drawing the frame and then explaining it is empty reads as a load that failed. That is `capabilities.publishesTags` on each platform, asked of the registry rather than checked against an id, so a new platform declares it instead of the view guessing. AtCoder sets it false.
 
 The rating range is a **dual-thumb slider**: two stacked native `<input type="range">`, not a bespoke widget, so arrow keys still step exactly one bucket — which is what the pair of selects it replaced was good at and a slider is bad at, since ~28 buckets across a panel is about 12px each. The inputs take no pointer events and only their thumbs do, so the lower stays grabbable through the upper. Thumbs **clamp rather than cross**; swapping them mid-drag makes the thumb under the pointer jump sides. When both sit at the top end the min thumb is raised above the max, or it could never be dragged back.
 
-**The ring** (`ui/platform-ring.js`) shows pending problems per platform, from the same `collectPendingProblems()` the queue uses, so the two cannot disagree. Colour encodes **identity**, so each platform's `chartColor` is fixed on its descriptor and never assigned by size — filtering must not repaint the survivors. Those hues come from a validated categorical theme rather than the brand colours, which fail the chroma floor as fills (AtCoder brands achromatically, CodeChef's brown reads gray); the icons keep carrying brand identity in the legend. The three are **checked together, not individually** — changing one means re-checking all three together against the dark surface — with the dataviz skill's validator, which is **not a script in this repo**, so the numbers recorded here are the durable artifact rather than something a reader can regenerate from the tree. Codeforces yellow `#c98500`, AtCoder blue `#3987e5`, CodeChef red `#e34948`; that last pair sits at CVD deutan ΔE 6.2, inside the 6–8 band, which is legal only because every swatch carries an icon, a full name and a count beside it. `#c0392b` is the zero-warning fallback if the legend ever loses its labels.
+**The ring** (`ui/platform-ring.js`) shows pending problems **per site**, from the same `collectPendingProblems()` the queue uses, so the two cannot disagree. Codeforces' official rounds and gyms are one slice and one panel: a site is one account, one rating scale, one tag vocabulary — and one identity colour, which is why the ring keyed on platforms once showed two adjacent arcs of the same yellow and needed a fourth validated hue that never came. Colour encodes **identity**, so each site's `chartColor` is fixed in its `site.js` and never assigned by size — filtering must not repaint the survivors. Those hues come from a validated categorical theme rather than the brand colours, which fail the chroma floor as fills (AtCoder brands achromatically, CodeChef's brown reads gray); the icons keep carrying brand identity in the legend. The three are **checked together, not individually** — changing one means re-checking all three together against the dark surface — with the dataviz skill's validator, which is **not a script in this repo**, so the numbers recorded here are the durable artifact rather than something a reader can regenerate from the tree. Codeforces yellow `#c98500`, AtCoder blue `#3987e5`, CodeChef red `#e34948`; that last pair sits at CVD deutan ΔE 6.2, inside the 6–8 band, which is legal only because every swatch carries an icon, a full name and a count beside it. `#c0392b` is the zero-warning fallback if the legend ever loses its labels.
 
 Note the ring is capped at 220px and centred rather than filling the panel, and its total and caption are **HTML centred over the SVG, not `<text>`** — SVG text scales with the viewBox, so at full width they rendered at ~60px and ~28px, larger than any label in the app. Because they no longer scale, the ring's size and stroke can be tuned freely.
 
@@ -1402,7 +1402,7 @@ The row carries a **⋮ menu** holding *Open contest* and *Remove from queue*; t
 
 ### Platform marks
 
-Each mark lives on its **site**, beside the platform's `chartColor` — a platform's own appearance is its own to declare. `core/ui/platform-icons.js` keeps only the fallback and the design rules that apply to all of them, and asks the registry. It uses `listPlatforms().find(...)` rather than `getPlatform()`, which **throws** on an id it does not know: the text-chip fallback is the whole point of the function, so a platform without a mark yet must show something rather than take the panel down.
+Each mark lives on its **site**, beside its `chartColor` — a platform's own appearance is its own to declare. `core/ui/platform-icons.js` keeps only the fallback and the design rules that apply to all of them, and asks the registry. It uses `listPlatforms().find(...)` rather than `getPlatform()`, which **throws** on an id it does not know: the text-chip fallback is the whole point of the function, so a platform without a mark yet must show something rather than take the panel down.
 
 AtCoder's is deliberately light-on-dark, inverting its black-on-white branding, because a `#222` square on the `#1e1e1e` panel is close to invisible.
 

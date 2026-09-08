@@ -151,6 +151,11 @@ export class Platform {
 
   // ── public ────────────────────────────────────────────────────────────
 
+  /** The site this platform belongs to; two platforms may share one. */
+  get site() {
+    return this.constructor.site;
+  }
+
   /** The slugs this platform reads, from its site's settings section — declared once. */
   get settingSlugs() {
     return this.#section.fields.map((field) => field.slug);

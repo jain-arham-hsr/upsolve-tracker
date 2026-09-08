@@ -2,11 +2,10 @@ import templateHtml from "./stats-view.html?raw";
 import { LocalDB } from "../../services/storage.js";
 import { countPendingTags } from "../../tag-service.js";
 import { escapeHtml } from "../escape-html.js";
-import { listPlatforms, platformOf, getPlatform } from "../../platforms/registry.js";
+import { listSites, siteOf } from "../../platforms/registry.js";
 import { getEffectiveRatings } from "../../services/user-ratings.js";
 import { solveProbability } from "../../queue-order.js";
 import { renderPlatformRing } from "../platform-ring.js";
-import { platformIcon } from "../platform-icons.js";
 import { collectPendingProblems } from "../../pending-problems.js";
 
 const BUCKET_SIZE = 100;
@@ -96,10 +95,15 @@ export class StatsView extends HTMLElement {
    */
   /**
    * The Overview carries no navigation of its own — its ring legend is the
-   * navigation. A platform panel gets a back link and a header naming what you
+   * navigation. A site panel gets a back link and a header naming what you
    * drilled into, which is what a chip row could never say: that this page is
    * one level down rather than one of four siblings.
    */
+  /** The site the view is scoped to. */
+  site() {
+    return listSites().find((site) => site.id === this.scope);
+  }
+
   renderNav() {
     if (!this.scope) {
       this.nav.innerHTML = "";
@@ -109,12 +113,12 @@ export class StatsView extends HTMLElement {
     // No count here: the summary line directly above already reads
     // "240 pending · median 1600 · 3 unrated" once scoped. This header's job is
     // to name what you drilled into.
-    const platform = getPlatform(this.scope);
+    const site = this.site();
     this.nav.innerHTML = `
       <button type="button" class="stats-back" data-scope="">\u2039 Overview</button>
       <div class="stats-scope-head">
-        ${platformIcon(platform.id, platform.shortLabel)}
-        <span class="stats-scope-name">${escapeHtml(platform.label)}</span>
+        ${site.icon}
+        <span class="stats-scope-name">${escapeHtml(site.label)}</span>
       </div>`;
   }
 
@@ -125,16 +129,19 @@ export class StatsView extends HTMLElement {
     ]);
     this.userRatings = userRatings;
 
-    const platformIds = new Set(allContests.map((c) => platformOf(c).id));
-    this.presentPlatforms = listPlatforms().filter((p) => platformIds.has(p.id));
+    // Sites, not platforms: one account, one rating scale, one tag vocabulary.
+    // Codeforces' official rounds and gyms are one site here.
+    const siteIds = new Set(allContests.map((c) => siteOf(c).id));
+    this.presentSites = listSites().filter((site) => siteIds.has(site.id));
 
-    // A scope whose contests have all been solved away falls back to Overview
-    // rather than showing an empty panel with no explanation.
-    if (this.scope && !platformIds.has(this.scope)) this.scope = "";
+    // A scope whose contests have all been solved away — or one stored under a
+    // name this build no longer scopes by — falls back to Overview rather than
+    // showing an empty panel with no explanation.
+    if (this.scope && !siteIds.has(this.scope)) this.scope = "";
     this.renderNav();
 
     this.contests = this.scope
-      ? allContests.filter((contest) => platformOf(contest).id === this.scope)
+      ? allContests.filter((contest) => siteOf(contest).id === this.scope)
       : allContests;
 
     const stored = await chrome.storage.local.get({ [rangeKeyFor(this.scope)]: null });
@@ -154,13 +161,13 @@ export class StatsView extends HTMLElement {
     // coverage line and rating range included. Rendering the frame and then
     // explaining it is empty is worse than not raising the subject: it looks
     // like a load that failed. Asked of the registry, not of the platform id.
-    const hasTags = scoped && getPlatform(this.scope).capabilities.publishesTags !== false;
+    const hasTags = scoped && this.site().platforms.some((p) => p.capabilities.publishesTags !== false);
     this.tagsSection.classList.toggle("hidden", !hasTags);
     this.ringSection.classList.toggle("hidden", scoped);
 
     if (scoped) {
       this.spreadTitle.textContent = "RATING SPREAD";
-      this.renderHistogram(ratings, getPlatform(this.scope));
+      this.renderHistogram(ratings, this.site());
       if (hasTags) {
         this.renderCoverage();
         this.syncRangeControls(ratings);
@@ -168,9 +175,9 @@ export class StatsView extends HTMLElement {
       }
     } else {
       this.ring.innerHTML = renderPlatformRing(
-        this.presentPlatforms.map((platform) => ({
-          platform,
-          count: this.pending.filter((entry) => entry.platform.id === platform.id).length,
+        this.presentSites.map((site) => ({
+          site,
+          count: this.pending.filter((entry) => entry.platform.site.id === site.id).length,
         })),
       );
       this.spreadTitle.textContent = "SOLVE CHANCE";
@@ -193,10 +200,10 @@ export class StatsView extends HTMLElement {
     const totals = new Map();
 
     scoped.forEach(({ platform, problem }) => {
-      const entry = totals.get(platform.id) ?? { tagged: 0, total: 0 };
+      const entry = totals.get(platform.site.id) ?? { tagged: 0, total: 0, label: platform.site.label };
       entry.total++;
       if (problem.tags?.length) entry.tagged++;
-      totals.set(platform.id, entry);
+      totals.set(platform.site.id, entry);
     });
 
     const total = [...totals.values()].reduce((sum, e) => sum + e.total, 0);
@@ -209,7 +216,7 @@ export class StatsView extends HTMLElement {
 
     const overall = Math.round((tagged / total) * 100);
     const breakdown = [...totals.entries()]
-      .map(([id, e]) => `${getPlatform(id).shortLabel} ${Math.round((e.tagged / e.total) * 100)}%`)
+      .map(([, e]) => `${e.label} ${Math.round((e.tagged / e.total) * 100)}%`)
       .join(", ");
 
     this.coverage.textContent =
@@ -258,7 +265,7 @@ export class StatsView extends HTMLElement {
     this.histogram.innerHTML = rows.join("");
   }
 
-  renderHistogram(ratings, platform) {
+  renderHistogram(ratings, site) {
     if (ratings.length === 0) {
       this.histogram.innerHTML = `<div class="stats-empty">No rated problems pending.</div>`;
       return;
@@ -285,7 +292,7 @@ export class StatsView extends HTMLElement {
         <div class="hist-row">
           <span class="hist-label">${bucket}</span>
           <div class="hist-track">
-            ${count > 0 ? `<div class="hist-bar ${platform.ratingBandClass?.(bucket) ?? "band-neutral"}" style="width: ${width}%"></div>` : ""}
+            ${count > 0 ? `<div class="hist-bar ${site.ratingBandClass?.(bucket) ?? "band-neutral"}" style="width: ${width}%"></div>` : ""}
           </div>
           <span class="hist-count ${count > 0 ? "" : "is-zero"}">${count}</span>
         </div>`);

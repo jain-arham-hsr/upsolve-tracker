@@ -24,7 +24,7 @@
  *
  * `verify.adapter` has to name one, and `tests/module-boundaries.test.js`
  * allows it here for the same reason it allows `registry.js` and
- * `platforms.js`: a hand-authored page is declarative data, not a branch. The
+ * `registry.js`: a hand-authored page is declarative data, not a branch. The
  * exception is scoped to this file — `store.js` and the options page itself
  * stay agnostic, and the test still fails if either names a platform.
  *

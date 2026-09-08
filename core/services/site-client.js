@@ -31,13 +31,13 @@
  * must not be implemented three times.
  *
  * **A caller names its `site` and the routing follows**, rather than assembling
- * `createPageFetch({ matchPatterns: descriptor.hostPermissions })` itself. Three
+ * `createPageFetch({ matchPatterns: site.hostPermissions })` itself. Three
  * platforms wrote that line identically, and the mistake it invites is quiet:
- * hand it the *wrong* descriptor and every request still succeeds, because a
+ * hand it the *wrong* site and every request still succeeds, because a
  * site with no matching tab falls back to a direct fetch. It just stops carrying
  * the session, so only the session-gated routes fail — and they fail the same
  * way they do when the user simply has no tab open, which is a supported state
- * that reports itself politely. Deriving it from the one descriptor the client
+ * that reports itself politely. Deriving it from the one site the client
  * already belongs to removes the chance.
  */
 import { createPacer } from "./request-pacer.js";
@@ -45,7 +45,7 @@ import { createPageFetch } from "./page-transport.js";
 
 /**
  * @param {object} options
- * @param {{hostPermissions: string[]}} [options.site] - the platform descriptor
+ * @param {{hostPermissions: string[]}} [options.site] - the site object
  *   this client speaks to. Its `hostPermissions` are already match patterns, so
  *   they are what routes a request through a tab on that site.
  * @param {object} options.pacer - passed straight to `createPacer`. Defaults

@@ -7,7 +7,12 @@
  * this and adds what tells the two apart.
  */
 export const site = {
+  id: "codeforces",
   label: "Codeforces",
+  /* Chart slot — yellow. Not CF's brand blue: these are a validated categorical
+     set checked together against the dark surface, and blue is AtCoder's slot.
+     Changing one means re-validating all of them. */
+  chartColor: "#c98500",
   settingsSection: "codeforces",
 
   origin: "https://codeforces.com",

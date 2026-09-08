@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 
 import { buildContestRecord, normalizeProblem } from "../core/platforms/platform.js";
 
-const descriptor = { id: "codeforces-official" };
+const platform = { id: "codeforces-official" };
 const base = {
   id: "2197",
   name: "Round 1079",
@@ -31,7 +31,7 @@ const base = {
 test("every field the rest of the codebase reads off a contest is present", () => {
   // Derived from grepping `contest.<field>` across core/. If a reader is added
   // for a field the trunk does not emit, this is where it should fail.
-  const contest = buildContestRecord(descriptor, base);
+  const contest = buildContestRecord(platform, base);
   for (const field of [
     "id", "platform", "name", "type", "problems",
     "publishedDataCheckedAt", "startTimeSeconds", "addedAt",
@@ -40,15 +40,15 @@ test("every field the rest of the codebase reads off a contest is present", () =
   }
 });
 
-test("platform comes from the descriptor, never a literal", () => {
+test("platform comes from the instance, never a literal", () => {
   // `codeforces/adapter.js` used to write `platform: "codeforces-official"` by hand,
-  // beside a descriptor that already knew its own id.
+  // beside a class that already knew its own id.
   assert.equal(buildContestRecord({ id: "codechef" }, base).platform, "codechef");
 });
 
 test("type is carried through, because two syncs gate on it", () => {
-  assert.equal(buildContestRecord(descriptor, base).type, "OFFICIAL");
-  assert.equal(buildContestRecord(descriptor, { ...base, type: "GYM" }).type, "GYM");
+  assert.equal(buildContestRecord(platform, base).type, "OFFICIAL");
+  assert.equal(buildContestRecord(platform, { ...base, type: "GYM" }).type, "GYM");
 });
 
 test("sourceId appears only when it differs from the stored id", () => {
@@ -56,22 +56,22 @@ test("sourceId appears only when it differs from the stored id", () => {
   // the id the user navigated from — and the add banner needs theirs to see
   // that /START252 is already tracked as START252D. Recording it when the two
   // match would put a redundant key on every other contest.
-  const same = buildContestRecord(descriptor, { ...base, sourceId: "2197" });
+  const same = buildContestRecord(platform, { ...base, sourceId: "2197" });
   assert.equal("sourceId" in same, false);
 
-  const differs = buildContestRecord(descriptor, { ...base, id: "START252D", sourceId: "START252" });
+  const differs = buildContestRecord(platform, { ...base, id: "START252D", sourceId: "START252" });
   assert.equal(differs.sourceId, "START252");
 });
 
 test("a missing start time stores null rather than undefined", () => {
   // The contest list sorts unknown start times last; `undefined` and `null`
   // survive a JSON round-trip differently, and the backup is JSON.
-  const contest = buildContestRecord(descriptor, { ...base, startTimeSeconds: undefined });
+  const contest = buildContestRecord(platform, { ...base, startTimeSeconds: undefined });
   assert.equal(contest.startTimeSeconds, null);
 });
 
 test("problem defaults are filled without overwriting real values", () => {
-  const [bare] = buildContestRecord(descriptor, base).problems;
+  const [bare] = buildContestRecord(platform, base).problems;
   assert.deepEqual(
     { rating: bare.rating, ratingSource: bare.ratingSource, ratingConfidence: bare.ratingConfidence,
       officialSolves: bare.officialSolves, solved: bare.solved, tags: bare.tags },

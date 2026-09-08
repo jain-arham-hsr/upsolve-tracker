@@ -16,10 +16,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { CodeforcesSources as CodeforcesService } from "../../../core/platforms/codeforces/sources.js";
-import { CodeforcesSources as GymService } from "../../../core/platforms/codeforces/sources.js";
+import { CodeforcesSources } from "../../../core/platforms/codeforces/sources.js";
 
-const resetApiState = (ms) => CodeforcesService.reset(ms);
+const reset = (ms) => CodeforcesSources.reset(ms);
+const GymService = CodeforcesSources;
 const resetGymApiState = (ms) => GymService.reset(ms);
 
 /**
@@ -41,9 +41,9 @@ function stubFetch(result = []) {
 
 test("consecutive API calls are paced", async () => {
   // A pinned, small gap: the real one is 2s, which is not worth spending here.
-  resetApiState(60);
+  reset(60);
   const stub = stubFetch();
-  const service = new CodeforcesService("key", "secret");
+  const service = new CodeforcesSources("key", "secret");
 
   try {
     await service.usersInfo(["tourist"]);
@@ -53,7 +53,7 @@ test("consecutive API calls are paced", async () => {
     assert.ok(gap >= 50, `the second call was not paced — fired ${gap}ms after the first`);
   } finally {
     stub.restore();
-    resetApiState();
+    reset();
   }
 });
 
@@ -61,27 +61,27 @@ test("every service instance shares one budget", async () => {
   // Settings builds a second instance through createSessionFrom to check
   // credentials you have typed but not saved. A per-instance pacer would hand
   // it a fresh allowance and let the two burst against each other.
-  resetApiState(60);
+  reset(60);
   const stub = stubFetch();
 
   try {
-    await new CodeforcesService("a", "b").contestList();
-    await new CodeforcesService("c", "d").contestList();
+    await new CodeforcesSources("a", "b").contestList();
+    await new CodeforcesSources("c", "d").contestList();
 
     const gap = stub.calls[1].at - stub.calls[0].at;
     assert.ok(gap >= 50, `a second instance skipped the queue — fired ${gap}ms later`);
   } finally {
     stub.restore();
-    resetApiState();
+    reset();
   }
 });
 
 test("a request is signed, and the secret never appears in the URL", async () => {
-  resetApiState();
+  reset();
   const stub = stubFetch();
 
   try {
-    await new CodeforcesService("thekey", "thesecret").usersInfo(["tourist"]);
+    await new CodeforcesSources("thekey", "thesecret").usersInfo(["tourist"]);
     const { url } = stub.calls[0];
 
     assert.match(url, /apiKey=thekey/);
@@ -94,7 +94,7 @@ test("a request is signed, and the secret never appears in the URL", async () =>
 });
 
 test("a FAILED response becomes the comment Codeforces gave", async () => {
-  resetApiState();
+  reset();
   const original = globalThis.fetch;
   const failure = JSON.stringify({
     status: "FAILED",
@@ -125,7 +125,7 @@ test("a FAILED response becomes the comment Codeforces gave", async () => {
  * FAILED — and a subclass could still override its way out.
  */
 test("both Codeforces clients sign a request identically", async () => {
-  resetApiState(0);
+  reset(0);
   resetGymApiState(0);
 
   const seen = [];
@@ -139,7 +139,7 @@ test("both Codeforces clients sign a request identically", async () => {
   };
 
   try {
-    await new CodeforcesService("thekey", "thesecret").usersInfo(["tourist"]);
+    await new CodeforcesSources("thekey", "thesecret").usersInfo(["tourist"]);
     await new GymService("thekey", "thesecret").usersInfo(["tourist"]);
   } finally {
     globalThis.fetch = original;
@@ -163,7 +163,7 @@ test("both clients agree on which parameters they append", async () => {
   // The signature covers the sorted parameter list, so a client that appended a
   // different set would sign a different string and be refused — silently, as a
   // FAILED response indistinguishable from a bad key.
-  resetApiState(0);
+  reset(0);
   resetGymApiState(0);
 
   const seen = [];
@@ -174,7 +174,7 @@ test("both clients agree on which parameters they append", async () => {
   };
 
   try {
-    await new CodeforcesService("k", "s").contestList();
+    await new CodeforcesSources("k", "s").contestList();
     await new GymService("k", "s").contestList({ gym: true });
   } finally {
     globalThis.fetch = original;
@@ -214,12 +214,12 @@ test("both clients hash the same string, not merely the same shape", async () =>
   Math.random = () => 0.5;
   Date.now = () => 1_700_000_000_000;
 
-  resetApiState(0);
+  reset(0);
   resetGymApiState(0);
   const stub = stubFetch();
 
   try {
-    await new CodeforcesService("thekey", "thesecret").usersInfo(["tourist"]);
+    await new CodeforcesSources("thekey", "thesecret").usersInfo(["tourist"]);
     await new GymService("thekey", "thesecret").usersInfo(["tourist"]);
 
     assert.equal(hashed.length, 2, "both clients should have signed once");
@@ -244,7 +244,7 @@ test("both clients hash the same string, not merely the same shape", async () =>
     Math.random = realRandom;
     Date.now = realNow;
     stub.restore();
-    resetApiState();
+    reset();
     resetGymApiState();
   }
 });
@@ -254,11 +254,11 @@ test("the unsigned standings call goes through the same paced client, unsigned",
   // only to an anonymous request with no extra parameters. It is also the one
   // method no adapter test reaches, since they all stub the service — which is
   // how it once shipped calling a pacer that no longer existed.
-  resetApiState(0);
+  reset(0);
   const stub = stubFetch({ contest: { name: "Round" }, problems: [], rows: [] });
 
   try {
-    const result = await new CodeforcesService("k", "s").publicContestStandings(2197);
+    const result = await new CodeforcesSources("k", "s").publicContestStandings(2197);
     assert.equal(stub.calls.length, 1);
     const url = new URL(stub.calls[0].url);
     assert.equal(url.pathname, "/api/contest.standings");
@@ -266,6 +266,6 @@ test("the unsigned standings call goes through the same paced client, unsigned",
     assert.equal(result.contest.name, "Round");
   } finally {
     stub.restore();
-    resetApiState();
+    reset();
   }
 });

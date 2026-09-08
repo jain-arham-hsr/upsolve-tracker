@@ -169,12 +169,12 @@ test("every platform expresses an accepted submission the same way", () => {
   // The same class as the `type` bug above, caught before it costs anything.
   //
   // `fetchAccepted` returns `{contest, problem}` pairs and `platform.js` hands
-  // both to `descriptor.solvedKey`. The three platforms had three encodings for
+  // both to `solvedKey`. The three platforms had three encodings for
   // "this problem needs no contest": `{id: contestId}`, `{id: null}`, and a bare
   // `null`. That was harmless only by accident — neither AtCoder's `solvedKey`
   // nor CodeChef's reads `contest`, so nothing dereferenced the null.
   //
-  // The day a descriptor starts reading `contest.id` — to disambiguate a rerun,
+  // The day a platform starts reading `contest.id` — to disambiguate a rerun,
   // say — it works on AtCoder and throws on CodeChef, from a line that mentions
   // neither. So: always an object, never a bare null.
   const offenders = [];

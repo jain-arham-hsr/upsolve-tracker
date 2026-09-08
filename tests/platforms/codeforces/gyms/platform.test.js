@@ -22,8 +22,8 @@ const { getPlatform } = await import("../../../../core/platforms/registry.js");
  * — as HTML — and parsed by the source's own `getDocument`, so each stub stays
  * a readable page. `tests/codeforces-http.test.js` covers the real one.
  */
-const CodeforcesHttp = { get: async () => { throw new Error("no page served"); } };
-const parsed = async (url) => new DOMParser().parseFromString(await CodeforcesHttp.get(url), "text/html");
+const pages = { get: async () => { throw new Error("no page served"); } };
+const parsed = async (url) => new DOMParser().parseFromString(await pages.get(url), "text/html");
 
 /**
  * Drives the platform's `fetchContest` over a real source with the fake API
@@ -41,8 +41,8 @@ async function acquire(platformId, Sources, contestId, fake) {
   if (acquired.status) throw new Error(`${acquired.status}: ${acquired.reason}`);
   return { contestName: acquired.name, ...acquired, ...acquired.context };
 }
-const readSolveStats = (contestId, fake) => acquire("codeforces-gyms", CodeforcesSources, contestId, fake);
-const readOfficialStats = (contestId, fake) => acquire("codeforces-official", CodeforcesSources, contestId, fake);
+const acquireGym = (contestId, fake) => acquire("codeforces-gyms", CodeforcesSources, contestId, fake);
+const acquireOfficial = (contestId, fake) => acquire("codeforces-official", CodeforcesSources, contestId, fake);
 
 const PROBLEMS = [
   ["A", "Everything Everywhere All But One"],
@@ -101,7 +101,7 @@ const NO_TABLE = `<html><body><div class="caption">Hidden</div>
  */
 function serve({ standings, problems }) {
   const seen = [];
-  CodeforcesHttp.get = async (url) => {
+  pages.get = async (url) => {
     seen.push(url);
     const body = url.includes("/standings") ? standings : problems;
     if (body instanceof Error) throw body;
@@ -169,7 +169,7 @@ test("the official reader is a different module, and it reaches no page at all",
   // something it could reach even by mistake. The guard became the directory.
   const seen = serve({ standings: NO_TABLE, problems: problemsPage(1) });
 
-  const stats = await readOfficialStats("2193", forbiddenService({
+  const stats = await acquireOfficial("2193", forbiddenService({
     // The publication gate runs first; this round is in the problemset.
     problemsetProblems: async () => ({ problems: [{ contestId: 2193, index: "A" }] }),
     publicContestStandings: async () => ({
@@ -191,7 +191,7 @@ test("a visible gym is read from the API alone — no page, no contest.status", 
   // was made anyway for everything else. `seen` staying empty is the point.
   const seen = serve({ standings: standingsPage(702859), problems: problemsPage(702859) });
 
-  const stats = await readSolveStats(
+  const stats = await acquireGym(
     "702859",
     forbiddenService({
       contestStandings: async () => ({
@@ -247,7 +247,7 @@ test("a gym failing for any other reason rethrows rather than falling back", asy
 
   await assert.rejects(
     () =>
-      readSolveStats("712373", {
+      acquireGym("712373", {
         contestStandings: async () => {
           throw new Error("Codeforces API Error");
         },
@@ -262,7 +262,7 @@ test("a gym failing for any other reason rethrows rather than falling back", asy
 test("a gym with hidden standings is rebuilt from contest.status", async () => {
   const seen = serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
-  const stats = await readSolveStats(
+  const stats = await acquireGym(
     "712373", {
     contestStandings: async () => {
       throw standingsHidden();
@@ -294,7 +294,7 @@ test("a problem nobody submitted to still reaches the queue", async () => {
   // submissions: C had no attempts, and would otherwise silently vanish.
   serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
-  const stats = await readSolveStats(
+  const stats = await acquireGym(
     "712373",
     hiddenService({ contestStatus: async () => [submission("A", 1)] }),
   );
@@ -310,7 +310,7 @@ test("refuses loudly when the problems page can't be read either", async () => {
   serve({ standings: NO_TABLE, problems: "<html><body>nothing here</body></html>" });
 
   await assert.rejects(
-    () => readSolveStats("712373", hiddenService()),
+    () => acquireGym("712373", hiddenService()),
     /standings hidden.*problems page couldn't be read/s,
   );
 });
@@ -318,7 +318,7 @@ test("refuses loudly when the problems page can't be read either", async () => {
 test("no official submissions means the solve counts are unusable, not zero", async () => {
   serve({ standings: NO_TABLE, problems: problemsPage(712373) });
 
-  const stats = await readSolveStats(
+  const stats = await acquireGym(
     "712373",
     hiddenService({
       contestStatus: async () => [
@@ -355,13 +355,13 @@ test("gym 712373 end to end, against its real submissions", () => {
         <td><div><a href="/gym/712373/problem/${index}">${name}</a></div></td>
       </tr>`,
   ).join("");
-  CodeforcesHttp.get = async (url) =>
+  pages.get = async (url) =>
     url.includes("/standings")
       ? NO_TABLE
       : `<html><body>${sidebar(712373)}
          <table class="problems"><tr><th>#</th></tr>${rows}</table></body></html>`;
 
-  return readSolveStats(
+  return acquireGym(
     "712373",
     hiddenService({ contestStatus: async () => structuredClone(fixture.submissions) }),
   ).then((stats) => {

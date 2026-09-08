@@ -2,7 +2,7 @@
  * Everything outside `core/platforms/` is platform-agnostic, and this is what
  * says so.
  *
- * `registry.js` and `platforms.js` are the only two modules allowed to know
+ * `registry.js` is the only module allowed to know
  * which platforms exist. Everything else asks them. That was aspiration rather
  * than fact until recently — five wholly-Codeforces modules sat in shared
  * space (the signed API client, the scrape, its HTML parser, its HTTP client
@@ -340,7 +340,7 @@ test("every settings section is complete, and can be verified", () => {
     }
 
     // The one platform id on this page. A typo here is silent in a way the
-    // others are not: getAdapter returns null and the button throws on click.
+    // others are not: getPlatform throws and the button reports it on click.
     assert.ok(
       ids.includes(section.verify.adapter),
       `${section.slug} verifies through "${section.verify.adapter}", which is not a registered platform`,
@@ -479,7 +479,7 @@ test("only the hidden-standings path reads HTML on Codeforces", () => {
 
 });
 
-test("a platform has estimator.js iff its descriptor claims canEstimate", () => {
+test("a site has estimator.js iff its platforms claim canEstimate", () => {
   // Two declarations of one fact, in two places, and nothing but this makes
   // them agree. `contest-manager.js` reads `canEstimate` in exactly one place
   // to decide what a *gap* means: true, and a problem left unrated after the

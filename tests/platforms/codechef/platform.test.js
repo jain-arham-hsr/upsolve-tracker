@@ -17,7 +17,7 @@ const extractSession = (html) =>
 import { sources } from "../../../core/platforms/codechef/sources.js";
 import { getPlatform } from "../../../core/platforms/registry.js";
 
-// The platform is instantiated in platforms.js, so this exercises the real
+// The platform is instantiated in registry.js, so this exercises the real
 // assembled object rather than a module's raw exports.
 const platform = getPlatform("codechef");
 const fetchContestRecord = (...args) => platform.fetchContestRecord(...args);

@@ -5,7 +5,14 @@
  * stars, so there are no rank colours to carry: ratings render neutral.
  */
 export const site = {
+  id: "codechef",
   label: "CodeChef",
+  /* Chart slot — red, the nearest working hue to CodeChef's maroon, which
+     fails the chroma floor as a fill. This pair sits at CVD deutan delta-E 6.2
+     against the yellow: inside the 6-8 band, legal only because every swatch
+     carries an icon, a full name and a count. Drop to #c0392b if that stops
+     being true. */
+  chartColor: "#e34948",
   settingsSection: "codechef",
   origin: "https://www.codechef.com",
   hostPermissions: ["*://*.codechef.com/*"],

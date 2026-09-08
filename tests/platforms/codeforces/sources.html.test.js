@@ -199,8 +199,8 @@ import { DOMParser } from "linkedom";
 globalThis.DOMParser = DOMParser;
 
 
-const CodeforcesHttp = new CodeforcesSources("k", "s");
-const resetHttpState = (ms) => CodeforcesSources.reset(ms);
+const client = new CodeforcesSources("k", "s");
+const reset = (ms) => CodeforcesSources.reset(ms);
 
 function stubFetch(handler) {
   const calls = [];
@@ -215,11 +215,11 @@ function stubFetch(handler) {
 const ok = (body) => ({ status: 200, async text() { return body; } });
 
 test("a 403 becomes a sentence about visiting codeforces.com", async () => {
-  resetHttpState();
+  reset();
   const stub = stubFetch(async () => ({ status: 403, async text() { return ""; } }));
   try {
     await assert.rejects(
-      () => CodeforcesHttp.page("https://codeforces.com/contest/1/standings"),
+      () => client.page("https://codeforces.com/contest/1/standings"),
       /blocking requests.*visit codeforces\.com/s,
     );
   } finally {
@@ -231,11 +231,11 @@ test("a 200 carrying Cloudflare's interstitial is caught too", async () => {
   // The nastier of the two: the status says success, so nothing downstream
   // would notice — the standings parser would just find no table and blame the
   // markup.
-  resetHttpState();
+  reset();
   const stub = stubFetch(async () => ok("<html><body>Just a moment...</body></html>"));
   try {
     await assert.rejects(
-      () => CodeforcesHttp.page("https://codeforces.com/contest/1/standings"),
+      () => client.page("https://codeforces.com/contest/1/standings"),
       /blocking requests/,
     );
   } finally {
@@ -244,10 +244,10 @@ test("a 200 carrying Cloudflare's interstitial is caught too", async () => {
 });
 
 test("an ordinary page comes back parsed, ready for the scrapers", async () => {
-  resetHttpState();
+  reset();
   const stub = stubFetch(async () => ok("<html><table class='problems'></table></html>"));
   try {
-    const doc = await CodeforcesHttp.page("https://codeforces.com/gym/1");
+    const doc = await client.page("https://codeforces.com/gym/1");
     // A Document rather than the string: everything in `scrapers/` takes one,
     // and the parse happening in the client is what keeps `DOMParser` out of
     // platform code entirely.
@@ -258,10 +258,10 @@ test("an ordinary page comes back parsed, ready for the scrapers", async () => {
 });
 
 test("the session cookie is sent, which is what makes a private gym readable", async () => {
-  resetHttpState();
+  reset();
   const stub = stubFetch(async () => ok("<html></html>"));
   try {
-    await CodeforcesHttp.page("https://codeforces.com/gym/712373/standings");
+    await client.page("https://codeforces.com/gym/712373/standings");
     assert.equal(
       stub.calls[0].init.credentials,
       "include",
@@ -276,17 +276,17 @@ test("requests actually go through the pacer", async () => {
   // The scrape's throttling is what keeps the extension from being blocked, and
   // it is invisible: nothing about a response says whether a delay was served.
   // A pinned, small gap is observable where the real 1–2.5s one is not.
-  resetHttpState(60);
+  reset(60);
   const stub = stubFetch(async () => ok("<html></html>"));
   try {
-    await CodeforcesHttp.page("https://codeforces.com/contest/1/standings");
-    await CodeforcesHttp.page("https://codeforces.com/contest/2/standings");
+    await client.page("https://codeforces.com/contest/1/standings");
+    await client.page("https://codeforces.com/contest/2/standings");
 
     const gap = stub.calls[1].at - stub.calls[0].at;
     assert.ok(gap >= 50, `the second request was not paced — fired ${gap}ms after the first`);
   } finally {
     stub.restore();
-    resetHttpState();
+    reset();
   }
 });
 
@@ -304,10 +304,10 @@ test("a block is flagged, so it can wait instead of failing the add", async () =
     { status: 403, async text() { return ""; } },
     { status: 200, async text() { return "<html>Just a moment</html>"; } },
   ]) {
-    resetHttpState();
+    reset();
     globalThis.fetch = async () => response;
 
-    const error = await CodeforcesHttp.page("https://codeforces.com/contest/1/standings").then(
+    const error = await client.page("https://codeforces.com/contest/1/standings").then(
       () => null,
       (e) => e,
     );
@@ -319,8 +319,8 @@ test("a block is flagged, so it can wait instead of failing the add", async () =
 test("an ordinary failure is not flagged, so it still fails loudly", async () => {
   // Only the challenge waits. A layout change or a genuine fault must not be
   // quietly retried forever under the same flag.
-  resetHttpState();
+  reset();
   globalThis.fetch = async () => ({ status: 200, async text() { return "<html><p>fine</p></html>"; } });
-  const doc = await CodeforcesHttp.page("https://codeforces.com/x");
+  const doc = await client.page("https://codeforces.com/x");
   assert.match(doc.querySelector("p").textContent, /fine/);
 });

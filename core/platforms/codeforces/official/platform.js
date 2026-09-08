@@ -71,11 +71,6 @@ export class CodeforcesOfficial extends Platform {
     return "Official contest";
   }
 
-  /* Chart slot — yellow. Not CF's brand blue: these are a validated categorical
-     set checked together against the dark surface, and blue is AtCoder's slot.
-     Changing one means re-validating all of them. */
-  chartColor = "#c98500";
-
   capabilities = {
     // problemset.problems carries tags, and covers every official problem.
     publishesTags: true,

@@ -107,13 +107,6 @@ export class CodeChef extends Platform {
     return this.solvedKey(contest, problem);
   }
 
-  /* Chart slot — red, the nearest working hue to CodeChef's maroon, which
-     fails the chroma floor as a fill. This pair sits at CVD deutan delta-E 6.2
-     against the yellow: inside the 6-8 band, legal only because every swatch
-     carries an icon, a full name and a count. Drop to #c0392b if that stops
-     being true. No rank colours: CodeChef grades in stars. */
-  chartColor = "#e34948";
-
   capabilities = {
     // Tags come back with each problem, mixed with the setter's handle and
     // the contest code; `cleanTags` strips those.
