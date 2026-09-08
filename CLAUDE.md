@@ -692,10 +692,13 @@ user has no tab open, which is a supported state that reports itself politely.
 Confirmed by pointing AtCoder's client at Codeforces and watching all 420 tests
 stay green.
 
-`site-client` answers three ways, and between them they cover what the consumers
-want: `get` a string, `getJson` an object, **`getDocument` a `Document`** —
-which is what every `parse*` function in a `scraper.js` takes. That last one is why
-`DOMParser` no longer appears in platform code at all.
+`site-client` answers two ways, and between them they cover what the consumers
+want: `getJson` an object, for every route in an `api.js`, and **`getDocument` a
+`Document`**, which is what every `parse*` function in a `scraper.js` takes. That
+second one is why `DOMParser` no longer appears in platform code at all. A raw-string
+`get` existed too and lost its last caller in the `Api`/`Scraper` split; a rule in
+`module-boundaries.test.js` now fails on any export of a shared module that nothing in
+production reads, short of a named test seam, so the next split cannot leave one behind.
 
 Four things about it are load-bearing:
 

@@ -91,20 +91,16 @@ export function createSiteClient({ site = null, pacer, refusal, fetchImpl = null
   }
 
   return {
-    /** @returns {Promise<string>} the response body. */
-    async get(url, init = {}) {
-      return (await read(url, init)).body;
-    },
-
     /**
      * @returns {Promise<Document>} the body, parsed.
      *
-     * The third return type, beside `get` and `getJson`, and between them they
-     * cover what the consumers want: a `Document` for everything in a platform's
-     * `scrapers/`, an object for JSON, a raw string for whatever wants neither.
-     * Having it here is what keeps `DOMParser` out of platform code, where it was
-     * once spelled out beside each fetch — `module-boundaries.test.js` asserts it
-     * is constructed in this file and nowhere else.
+     * One of the two return types, and between them they cover what the
+     * consumers want: a `Document` for every `parse*` in a site's `scraper.js`,
+     * an object for every route in its `api.js`. A raw-string reader existed
+     * too and lost its last caller in that split. Having the parse here is
+     * what keeps `DOMParser` out of platform code, where it was once spelled
+     * out beside each fetch — `module-boundaries.test.js` asserts it is
+     * constructed in this file and nowhere else.
      */
     async getDocument(url, init = {}) {
       const { body } = await read(url, init);
@@ -126,10 +122,7 @@ export function createSiteClient({ site = null, pacer, refusal, fetchImpl = null
       }
     },
 
-    /** Test seam. Production always uses the configured spacing. */
-    setSpacing: (ms) => send.setSpacing(ms),
-
-    /** Test seam: resets pacing between cases. */
+    /** Test seam: resets pacing between cases, pinning a spacing when given one. */
     reset(ms) {
       send.reset();
       if (ms !== undefined) send.setSpacing(ms);

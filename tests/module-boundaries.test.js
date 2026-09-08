@@ -386,6 +386,50 @@ test("rating-models/ holds only the statistical models", () => {
   );
 });
 
+/**
+ * Exports that exist for the tests alone, each a seam rather than dead code:
+ * a pure step CLAUDE.md documents as tested directly because it fails quietly,
+ * or the storage key a test seeds. Anything else exported from a shared module
+ * and unread by production is a leftover — `site-client.js#get()` survived the
+ * `Api`/`Scraper` split that way, with nothing to notice it had lost its last
+ * caller.
+ */
+const TEST_SEAMS = new Set([
+  "progress-manager.js#applySolvedStatus",
+  "services/platform-identity.js#classifyIdentity",
+  "services/platform-identity.js#getStoredIdentity",
+  "services/platform-identity.js#IDENTITY_STORAGE_KEY",
+  "services/user-ratings.js#RATING_KEYS",
+]);
+
+test("every export of a shared module is read by production, or is a named test seam", () => {
+  const shared = [...sourceFiles(CORE, [".js"])]
+    .filter((file) => [CORE, path.join(CORE, "services")].includes(path.dirname(file)));
+  const production = sourceFiles(CORE, [".js", ".html"])
+    .concat(sourceFiles(path.join(ROOT, "targets"), [".js"]))
+    .map((file) => [file, stripComments(readFileSync(file, "utf8"))]);
+  const offenders = [];
+
+  for (const file of shared) {
+    const relative = path.relative(CORE, file);
+    const code = stripComments(readFileSync(file, "utf8"));
+    const names = [
+      ...[...code.matchAll(/^export\s+(?:async\s+)?(?:function|const|let|class)\s+(\w+)/gm)].map((m) => m[1]),
+      ...[...code.matchAll(/^export\s*\{([^}]*)\}/gm)].flatMap((m) =>
+        m[1].split(",").map((n) => n.trim().split(/\s+as\s+/).pop()).filter(Boolean),
+      ),
+    ];
+
+    for (const name of names) {
+      if (TEST_SEAMS.has(`${relative}#${name}`)) continue;
+      const read = production.some(([other, text]) => other !== file && new RegExp(`\\b${name}\\b`).test(text));
+      if (!read) offenders.push(`${relative} exports ${name}, which nothing in production reads`);
+    }
+  }
+
+  assert.deepEqual(offenders, [], "an export nobody reads is a leftover, or a seam that should be named above");
+});
+
 test("the retired names survive nowhere", () => {
   const retired = [
     "saveCredentials",

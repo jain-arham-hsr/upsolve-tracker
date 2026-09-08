@@ -5,9 +5,7 @@
 import { contestKey, makeContestKey } from "../platforms/registry.js";
 
 export class LocalDB {
-  // ==========================================
-  // 1. TRACKED CONTESTS (The Static Data)
-  // ==========================================
+  // ── tracked contests ─────────────────────────────────────────────────
 
   /**
    * Retrieves the array of all saved contests.

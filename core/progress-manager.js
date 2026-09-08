@@ -130,7 +130,7 @@ async function syncPlatforms(trackedContests, onProgress) {
 
       // Fill in metadata for contests still missing it. Handed only this
       // platform's contests, since these match on bare contest ids.
-      await platform.syncMetadata?.(session, mine, onProgress);
+      await platform.syncMetadata(session, mine, onProgress);
 
       anySucceeded = true;
     } catch (error) {

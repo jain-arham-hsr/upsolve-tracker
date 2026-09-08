@@ -31,7 +31,7 @@ export async function loadWaiting() {
   return Array.isArray(entries) ? entries : [];
 }
 
-export async function saveWaiting(entries) {
+async function saveWaiting(entries) {
   await chrome.storage.local.set({ [WAITING_KEY]: entries });
 }
 

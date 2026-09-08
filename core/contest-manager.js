@@ -2,7 +2,7 @@
  * Orchestrates adding a contest, and nothing else.
  *
  * Everything site-specific — auth, fetching, rating, solved history — lives
- * behind the platform platform. This file only decides *which* platform, and
+ * behind the platform. This file only decides *which* platform, and
  * what to do with what comes back.
  */
 import { LocalDB } from "./services/storage.js";
@@ -78,7 +78,7 @@ export async function processNewContest(url, onProgress = () => {}) {
       throw error;
     }
 
-    // Rule 2. There is deliberately no default rating: a fabricated number
+    // The gap policy. There is deliberately no default rating: a fabricated number
     // would sort like a real one and quietly corrupt the queue's whole point.
     //
     // What a gap means follows from one fact — can this platform estimate?

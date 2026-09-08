@@ -13,6 +13,10 @@
  * containing a sign-in form. Both look like "no data" if you only read
  * `response.ok`, and both are silent in the worst way — an empty result is
  * indistinguishable from having nothing to report, and `solved` is sticky.
+ *
+ * Driven through `getJson`, one of the client's two readers; the other,
+ * `getDocument`, differs only in the parse at the end and is covered where a
+ * scraper reads a real page.
  */
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -30,7 +34,7 @@ const never = () => null;
 
 let served;
 beforeEach(() => {
-  served = respond("hello");
+  served = respond('"hello"');
   globalThis.fetch = async () => served;
 });
 
@@ -40,7 +44,7 @@ const client = (refusal = never) =>
   createSiteClient({ pacer: { gapMs: 0 }, refusal, fetchImpl: (...args) => fetch(...args) });
 
 test("a body the site actually answered comes back untouched", async () => {
-  assert.equal(await client().get("https://example.com/x"), "hello");
+  assert.equal(await client().getJson("https://example.com/x"), "hello");
 });
 
 test("what the site calls a refusal is thrown, not returned as emptiness", async () => {
@@ -51,7 +55,7 @@ test("what the site calls a refusal is thrown, not returned as emptiness", async
   );
 
   served = respond("<html>Just a moment</html>", { status: 200 });
-  const error = await flagged.get("https://example.com/x").then(() => null, (e) => e);
+  const error = await flagged.getJson("https://example.com/x").then(() => null, (e) => e);
 
   assert.ok(error, "a 200 carrying an interstitial must not read as success");
   assert.equal(error.isSourceUnreachable, true);
@@ -60,7 +64,7 @@ test("what the site calls a refusal is thrown, not returned as emptiness", async
 test("a refusal can be decided from the status alone", async () => {
   const on403 = client(({ response }) => (response.status === 403 ? new Error("nope") : null));
   served = respond("", { status: 403 });
-  await assert.rejects(() => on403.get("https://example.com/x"), /nope/);
+  await assert.rejects(() => on403.getJson("https://example.com/x"), /nope/);
 });
 
 test("a refusal can be decided from where the request landed", async () => {
@@ -70,7 +74,7 @@ test("a refusal can be decided from where the request landed", async () => {
     new URL(response.url).pathname === "/login" ? new Error("signed out") : null,
   );
   served = respond("<form>sign in</form>", { url: "https://example.com/login" });
-  await assert.rejects(() => onLogin.get("https://example.com/x"), /signed out/);
+  await assert.rejects(() => onLogin.getJson("https://example.com/x"), /signed out/);
 });
 
 test("JSON is parsed, and the refusal hook still runs first", async () => {
@@ -93,8 +97,8 @@ test("a JSON route answering HTML names the site, not the parser", async () => {
 
 test("the caller's init reaches fetch, so headers and method survive", async () => {
   let seen = null;
-  globalThis.fetch = async (_url, init) => { seen = init; return respond("ok"); };
-  await client().get("https://example.com/x", { headers: { Accept: "application/json" } });
+  globalThis.fetch = async (_url, init) => { seen = init; return respond('"ok"'); };
+  await client().getJson("https://example.com/x", { headers: { Accept: "application/json" } });
   assert.equal(seen.headers.Accept, "application/json");
 });
 
@@ -108,24 +112,24 @@ test("the issuer is a seam, so how a request is made can be swapped", async () =
   const viaPage = createSiteClient({
     pacer: { gapMs: 0 },
     refusal: never,
-    fetchImpl: async (url) => { calls.push(url); return respond("from the page"); },
+    fetchImpl: async (url) => { calls.push(url); return respond('"from the page"'); },
   });
 
-  assert.equal(await viaPage.get("https://example.com/x"), "from the page");
+  assert.equal(await viaPage.getJson("https://example.com/x"), "from the page");
   assert.deepEqual(calls, ["https://example.com/x"]);
 });
 
 test("a custom issuer replaces fetch entirely, rather than wrapping it", async () => {
   let fetched = false;
-  globalThis.fetch = async () => { fetched = true; return respond("direct"); };
+  globalThis.fetch = async () => { fetched = true; return respond('"direct"'); };
 
   const viaPage = createSiteClient({
     pacer: { gapMs: 0 },
     refusal: never,
-    fetchImpl: async () => respond("routed"),
+    fetchImpl: async () => respond('"routed"'),
   });
 
-  await viaPage.get("https://example.com/x");
+  await viaPage.getJson("https://example.com/x");
   assert.equal(fetched, false, "the direct path must not also run");
 });
 
@@ -138,7 +142,7 @@ test("two clients of one site queue as one", async () => {
   const at = [];
   const stub = async (url) => {
     at.push(Date.now());
-    return { ok: true, status: 200, url, async text() { return ""; } };
+    return { ok: true, status: 200, url, async text() { return "{}"; } };
   };
   const site = { id: `test-site-${Math.random()}`, hostPermissions: [] };
   const one = createSiteClient({ site, pacer: { gapMs: 60 }, refusal: () => null, fetchImpl: stub });
@@ -146,7 +150,7 @@ test("two clients of one site queue as one", async () => {
 
   // Interleaved on purpose: alternating clients is what an unshared budget
   // would let overlap.
-  await Promise.all([one.get("https://x/1"), two.get("https://x/2"), one.get("https://x/3")]);
+  await Promise.all([one.getJson("https://x/1"), two.getJson("https://x/2"), one.getJson("https://x/3")]);
 
   for (let i = 1; i < at.length; i++) {
     assert.ok(at[i] - at[i - 1] >= 50, `request ${i + 1} came ${at[i] - at[i - 1]}ms after the last; the site's budget is not shared`);
