@@ -806,9 +806,9 @@ with one of the five statuses above. Given a `/contest/<id>` or `/gym/<id>` URL:
    **strata**: `{ strata: [{ ratings, scale }] }`, where `scale` is how many real competitors one
    read competitor stands for. Official: `contest.ratingChanges` `oldRating`s at scale 1; if empty,
    fall back to sampling the standings (below). Gym/ICPC: build from `contest.standings`, collapsing
-   each team into one effective rating via `computeTeamRating` (binary search for R where the
+   each team into one effective rating via `api.js#teamRating` (binary search for R where the
    product of per-member loss probabilities is 0.5). Hidden-standings gyms recover the same field
-   from who submitted, via `getGymRatingDistFromParties`.
+   from who submitted, via `api.js#partyField`.
 5. `codeforces/estimator.js` over `rating-models/rasch.js` — binary-search the rating R whose Elo-expected solve count, summed over
    the strata and weighted by each one's scale, matches actual solves; round to the nearest 100,
    floor 800. Zero solves targets 0.5 expected solves rather than 0 — which drives the estimate to
@@ -842,16 +842,18 @@ exactly one importer while naming no platform, so `module-boundaries.test.js` co
 not see it: the same shape as the old `start-time-service.js`, except that one at
 least had a genuinely shared export.
 
-`rating-distribution.js` holds the *shape* a fitted field arrives in — the
-`RatingDistribution` typedef, `fullField`, `distributionSize` — for the same
-reason `team-rating.js` is here: Codeforces' two platforms build their fields
-with separate code in folders that deliberately do not import each other, so a
-definition either one owned is a definition the other must copy. It was copied,
-byte for byte, until this file existed. AtCoder does not import it: its
-estimator fits abilities directly and has no strata, because a field that is
-always read whole has nothing to scale up from.
-
-`team-rating.js` is the least model-like thing here: it collapses an ICPC team into the single rating a lone competitor would need to be as likely to fail as the team is — `∏ 1/(1 + 10^((rᵢ − R)/400)) = 0.5`, by binary search. It is pure maths over ratings, which is why it sits here, but it also *has* to be in one place: Codeforces' two platforms build their fields with separate code — a gym's from `contest.standings` or from who submitted, an official round's from sampled standings rows — and team collapsing is the one step they genuinely share. Two copies of that search are two things free to disagree about what a team is worth. Note it lands **above** the strongest member, which is the point; `mean` and `max` were both tried and measured worse.
+**The folder holds the two models and nothing else**, and `module-boundaries.test.js` lists
+its contents to keep it so. Two Codeforces files sat here for a while — the strata shape a
+field arrives in (`fullField`, `distributionSize`) and the collapse of an ICPC team into the
+single rating a lone competitor would need to be as likely to fail as the team is,
+`∏ 1/(1 + 10^((rᵢ − R)/400)) = 0.5` by binary search — on the argument that Codeforces' two
+platforms built their fields in folders that may not import each other, so a definition either
+owned would be one the other copied. That argument ended when one `codeforces/api.js` began
+reading every Codeforces field, and both moved there as `fullField`, `distributionSize` and
+`teamRating`. AtCoder never imported either, which is the tell that they were never shared
+maths: its estimator fits abilities directly and has no strata, because a field that is always
+read whole has nothing to scale up from. Note `teamRating` lands **above** the strongest
+member, which is the point; `mean` and `max` were both tried and measured worse.
 
 `rasch-upper-asymptote.js` is the second model, `P = (1 − r) · σ(a(θ − b))`, used
 only for AGC's first problem where non-attempts are otherwise read as failures.
@@ -954,9 +956,9 @@ Five things there are easy to get wrong:
   indistinguishable from "nobody solved anything", and handing those to the estimator floors every
   problem at 800 (`codeforces/estimator.js`, the floor and zero-solve target) rather than refusing.
 
-The field is recovered from who submitted, through `getGymRatingDistFromParties`. Everything below
-the handles — `user.info` chunking, `computeTeamRating`, the strata shape — is shared with the
-standings path via `ratePartyList` so the two cannot drift. Note this field is **narrower** than a
+The field is recovered from who submitted, through `api.js#partyField`. Everything below
+the handles — `user.info` chunking, `teamRating`, the strata shape — is shared with the
+standings path via `partyRatings` so the two cannot drift. Note this field is **narrower** than a
 standings one: it sees only parties that submitted at least once. A party that entered and
 submitted nothing solved nothing either, so the counts stay consistent with it, but the field skews
 strong.

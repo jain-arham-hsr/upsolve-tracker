@@ -363,7 +363,6 @@ test("the shared modules that need no imports still need none", () => {
   // rasch.js, which is a dependency on maths rather than on anything platform-shaped.
   for (const name of [
     "rating-models/rasch.js",
-    "rating-models/team-rating.js",
     "queue-order.js",
     "contest-status.js",
   ]) {
@@ -373,6 +372,18 @@ test("the shared modules that need no imports still need none", () => {
       `${name} should stay dependency-free`,
     );
   }
+});
+
+test("rating-models/ holds only the statistical models", () => {
+  // The owner's rule for the folder: the two models and nothing else. The
+  // team collapse and the strata shape lived here once, on the argument that
+  // Codeforces' two platforms could not share a file — and drifted back into
+  // `codeforces/api.js` the moment one file read every Codeforces field. A
+  // helper that lands here again is Codeforces' maths wearing a shared name.
+  assert.deepEqual(
+    readdirSync(path.join(CORE, "rating-models")).sort(),
+    ["rasch-upper-asymptote.js", "rasch.js"],
+  );
 });
 
 test("the retired names survive nowhere", () => {

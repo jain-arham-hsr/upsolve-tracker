@@ -14,10 +14,9 @@
  */
 import { Platform } from "../../platform.js";
 import { site } from "../site.js";
-import { CodeforcesApi, problemsFrom, applyStandingsProblemData } from "../api.js";
+import { CodeforcesApi, problemsFrom, applyStandingsProblemData, distributionSize } from "../api.js";
 import { estimate } from "../estimator.js";
 import { notPublishedYet } from "../../../contest-status.js";
-import { distributionSize } from "../../../rating-models/rating-distribution.js";
 
 const URL_PATTERN = /^https?:\/\/(?:www\.)?codeforces\.com\/contest\/(\d+)/i;
 

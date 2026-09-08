@@ -12,12 +12,16 @@
  * from settings, and Settings builds a second to check credentials you have
  * typed but not saved. Both share the signed client, so neither gets a fresh
  * allowance.
+ *
+ * The field both platforms' estimates fit against is read here too — its shape,
+ * the three ways of reading it, and the team collapse every reading ends in —
+ * because one file reading every Codeforces field is what stops the two
+ * platforms from each keeping a copy. `rating-models/` holds only the
+ * statistical models; what a Codeforces field *is* belongs to Codeforces.
  */
 import { Api } from "../api.js";
 import { withTtlCache } from "../../services/ttl-cache.js";
 import { createSiteClient } from "../../services/site-client.js";
-import { computeTeamRating } from "../../rating-models/team-rating.js";
-import { fullField } from "../../rating-models/rating-distribution.js";
 
 const ORIGIN = "https://codeforces.com";
 
@@ -195,6 +199,8 @@ export class CodeforcesApi extends Api {
     return data.result;
   }
 
+  // ── the field ─────────────────────────────────────────────────────────
+
   /**
    * The official field: pre-contest ratings for everyone who entered.
    * `contest.ratingChanges` carries the whole field's `oldRating` in one
@@ -365,7 +371,7 @@ export class CodeforcesApi extends Api {
    * Handles to one effective rating per party — what every Codeforces field
    * ends in. Each field decides *which* parties; everything below the handles
    * is one path, so they cannot drift: the same `user.info` chunking, the
-   * same team collapsing.
+   * same team collapsing in `teamRating`.
    *
    * @param {string[][]} parties - member handles, one array per party
    * @returns {Promise<number[]>} one rating per party, in order
@@ -393,9 +399,79 @@ export class CodeforcesApi extends Api {
     // the whole field down with it.
     return parties.map((members) => {
       const ratings = members.map((handle) => handleToRating[handle] ?? 800);
-      return computeTeamRating(ratings.length > 0 ? ratings : [800]);
+      return teamRating(ratings.length > 0 ? ratings : [800]);
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// The field: its shape, and the team collapse every reading of it ends in.
+// ---------------------------------------------------------------------------
+
+/**
+ * A rating distribution the estimator can work from, as one or more strata.
+ *
+ * Each stratum's `scale` is how many real competitors one of its members
+ * stands for: 1 where the whole group was read, higher where it was sampled.
+ * Expected solve counts are weighted by it, so a partially-read field answers
+ * as if it had been read whole. `rating-models/rasch.js` consumes the strata
+ * flattened to weighted abilities; this says what they are. AtCoder has no
+ * strata — a field that is always read whole has nothing to scale up from.
+ *
+ * @typedef {{ strata: Array<{ratings: number[], scale: number}> }} RatingDistribution
+ */
+
+/** Every competitor read, at scale 1 — nothing was sampled. */
+export const fullField = (ratings) => ({ strata: [{ ratings, scale: 1 }] });
+
+/** Total competitors represented, sampled or not. */
+export function distributionSize(distribution) {
+  return (distribution?.strata ?? []).reduce((sum, { ratings }) => sum + ratings.length, 0);
+}
+
+/**
+ * Collapsing a team into the one rating that behaves like it.
+ *
+ * An ICPC-style gym is entered by teams, but the model is written in terms of
+ * *a* competitor's ability. So a team of three needs a single number standing
+ * in for it, and the honest choice is the rating at which a lone competitor
+ * would be as likely to fail a problem as the team is:
+ *
+ *   ∏ 1 / (1 + 10^((rᵢ − R) / 400)) = 0.5
+ *
+ * Each factor is one member's probability of *not* solving against ability R,
+ * under the same logistic the Rasch fit uses; their product is the team's. The
+ * left side falls monotonically in R, so a binary search converges. Note this
+ * lands **above** the strongest member, which is the point: three 1500s solve
+ * more than one 1500 does.
+ *
+ * `mean` and `max` were both tried as cheaper substitutes and measured worse;
+ * `tests/platforms/codeforces/estimator-accuracy.test.js` records the numbers
+ * so neither is retried.
+ *
+ * @param {number[]} memberRatings
+ * @returns {number} the effective team rating, rounded.
+ */
+export function teamRating(memberRatings) {
+  if (memberRatings.length === 1) return memberRatings[0];
+
+  let low = -1000;
+  let high = 4000;
+
+  for (let i = 0; i < 30; i++) {
+    const mid = (low + high) / 2;
+    const teamLossProbability = memberRatings.reduce(
+      (product, rating) => product * (1 / (1 + Math.pow(10, (rating - mid) / 400))),
+      1,
+    );
+    if (teamLossProbability > 0.5) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+
+  return Math.round(high);
 }
 
 // ---------------------------------------------------------------------------

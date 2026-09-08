@@ -10,11 +10,10 @@
  */
 import { Platform } from "../../platform.js";
 import { site } from "../site.js";
-import { CodeforcesApi, problemsFrom, summariseSubmissions } from "../api.js";
+import { CodeforcesApi, problemsFrom, summariseSubmissions, distributionSize } from "../api.js";
 import { CodeforcesScraper } from "../scraper.js";
 import { estimate } from "../estimator.js";
 import { notEndedYet, unavailable } from "../../../contest-status.js";
-import { distributionSize } from "../../../rating-models/rating-distribution.js";
 
 const URL_PATTERN = /^https?:\/\/(?:www\.)?codeforces\.com\/gym\/(\d+)/i;
 
