@@ -505,31 +505,37 @@ test("a site has estimator.js iff its platforms claim canEstimate", () => {
   assert.deepEqual(offenders, [], "the capability and the file are one fact");
 });
 
-test("an estimator is pure", async () => {
-  // The split that makes every fit testable without a network stack: the
-  // platform's `readField` reads the site and answers a status when it
-  // cannot; estimator.js takes what it read and fits. An estimator that
-  // imported a source, a client or its platform would be I/O and maths in one
-  // function again, testable only by stubbing fetch.
+test("a parser is pure: estimator.js and payloads.js read what a source fetched, and never fetch", async () => {
+  // The split that makes every fit and every payload reading testable without
+  // a network stack: the platform's `readField` and the source's routes do the
+  // I/O; `estimator.js` fits and `payloads.js` parses what came back. A parser
+  // that imported a client, a source or its platform would be I/O and maths
+  // in one function again, testable only by stubbing fetch. `scrapers/` is the
+  // same rule for pages.
   const offenders = [];
   let estimators = 0;
+  let parsers = 0;
 
   for (const file of sourceFiles(PLATFORMS, [".js"])) {
-    if (path.basename(file) !== "estimator.js") continue;
+    const name = path.basename(file);
+    if (name !== "estimator.js" && name !== "payloads.js") continue;
     const relative = path.relative(ROOT, file);
     const code = stripComments(readFileSync(file, "utf8"));
-    estimators++;
-
-    if (!Object.keys(await import(file)).includes("estimate")) offenders.push(`${relative} does not export estimate()`);
+    if (name === "estimator.js") {
+      estimators++;
+      if (!Object.keys(await import(file)).includes("estimate")) offenders.push(`${relative} does not export estimate()`);
+    } else {
+      parsers++;
+    }
     for (const spec of importsOf(code)) {
-      if (/(sources|site-client|platform)\.js$/.test(spec)) offenders.push(`${relative} imports ${spec}`);
+      if (/(client|sources|site-client|platform)\.js$/.test(spec)) offenders.push(`${relative} imports ${spec}`);
     }
     if (/\bfetch\s*\(/.test(code)) offenders.push(`${relative} calls fetch()`);
   }
 
   assert.deepEqual(offenders, []);
-  // Codeforces' base plus AtCoder's; the Codeforces pair share one fit.
   assert.equal(estimators, 2, `expected two estimators, found ${estimators}`);
+  assert.equal(parsers, 2, `expected two payload parsers, found ${parsers}`);
 });
 
 test("nothing in a scrapers/ folder fetches", () => {
@@ -579,21 +585,21 @@ test("nothing in a scrapers/ folder fetches", () => {
   assert.equal(scrapers.length, 6, `expected six scrapers, found ${scrapers.join(", ")}`);
 });
 
-test("a site client routes through its own site", () => {
+test("a site client is built in client.js, and routes through its own site", () => {
   // `createSiteClient({ site })` derives the tab-routing match patterns from the
   // site's `hostPermissions`. Naming the *wrong* site is the failure worth
   // pinning, because nothing else notices it: there is no matching tab, so
   // every request falls back to a direct fetch and still succeeds — it just
   // stops carrying the session, and only the session-gated routes break, the
   // same way they do when the user has no tab open. So the only `site` a
-  // sources.js may hand the client is the one it imports from its own
-  // `site.js`.
+  // client may be handed is the one `client.js` imports from its own `site.js`.
   //
-  // A client with no `site` is deliberate in exactly one place: Codeforces'
-  // signed API passes a direct `fetchImpl` instead, because it works
-  // anonymously and routing it through a tab would add a dependency it does
-  // not need. Anywhere else, a missing `site` is a direct fetch that quietly
-  // stops carrying the session — which `createSiteClient` itself refuses.
+  // And the client is built in `client.js` alone: transport is its own layer,
+  // and a `sources.js` that configured pacing or a refusal would be the old
+  // conflated file back. A client with no `site` is deliberate in exactly one
+  // place — Codeforces' signed API passes a direct `fetchImpl`, because it
+  // works anonymously and routing it through a tab would add a dependency it
+  // does not need.
   const offenders = [];
   const clients = [];
 
@@ -601,6 +607,10 @@ test("a site client routes through its own site", () => {
     const code = stripComments(readFileSync(file, "utf8"));
     if (!code.includes("createSiteClient(")) continue;
     const relative = path.relative(ROOT, file);
+    if (path.basename(file) !== "client.js") {
+      offenders.push(`${relative} builds a client — transport belongs in client.js`);
+      continue;
+    }
     clients.push(relative);
 
     const importsOwnSite = /import\s*\{\s*site\s*\}\s*from\s*"\.\/site\.js"/.test(code);
@@ -614,22 +624,20 @@ test("a site client routes through its own site", () => {
   }
 
   assert.deepEqual(offenders, [], "a client must speak to the site it belongs to");
-  // Three files: AtCoder, CodeChef, and Codeforces, whose one sources.js builds
-  // both the signed API client and the HTML client a hidden gym needs.
-  assert.equal(clients.length, 3, `expected three site clients, found ${clients.join(", ")}`);
+  assert.equal(clients.length, 3, `expected three client.js files, found ${clients.join(", ")}`);
 });
 
-test("Codeforces signs in exactly one place", () => {
+test("Codeforces signs in exactly one place, and it is transport", () => {
   // The duplication with a real failure mode used to be two copies of the
-  // signing routine, pinned against each other. A wrong `apiSig` comes back as
-  // an ordinary FAILED, so nothing else would notice a fix landing in one copy.
-  // Now there is one, in the base, and this is what keeps a second from
-  // growing back in a subclass.
+  // signing routine. A wrong `apiSig` comes back as an ordinary FAILED, so
+  // nothing else would notice a fix landing in one copy. Now there is one, in
+  // `codeforces/client.js` beside the client it signs for — and the hash is
+  // constructed nowhere else under core/platforms/.
   const signers = sourceFiles(PLATFORMS, [".js"])
-    .filter((file) => /\b(_callMethod|_sha512)\s*\([^)]*\)\s*\{/.test(stripComments(readFileSync(file, "utf8"))))
+    .filter((file) => stripComments(readFileSync(file, "utf8")).includes("crypto.subtle"))
     .map((file) => path.relative(ROOT, file));
 
-  assert.deepEqual(signers, ["core/platforms/codeforces/sources.js"]);
+  assert.deepEqual(signers, ["core/platforms/codeforces/client.js"]);
 });
 
 /**
@@ -659,7 +667,14 @@ const PLATFORM_ROOT_FILES = new Set([
   "estimator.js",
 ]);
 
-const SITE_FILES = new Set(["site.js", "sources.js", "platform.js", "estimator.js"]);
+/**
+ * Three layers for talking to a site, each its own file, plus the pure fit and
+ * the site's data. `client.js` is transport, `sources.js` the API surface,
+ * `payloads.js` the parsers of what came back — the same layer `scrapers/` is
+ * for pages.
+ */
+const SITE_FILES = new Set(["site.js", "client.js", "sources.js", "payloads.js", "platform.js", "estimator.js"]);
+const SITE_REQUIRED = ["site.js", "client.js", "sources.js"];
 const CHILD_FILES = new Set(["platform.js"]);
 
 test("a site's root holds only contract names, and a child platform's only its class", () => {
@@ -668,7 +683,9 @@ test("a site's root holds only contract names, and a child platform's only its c
 
   for (const folder of FOLDERS.sites) {
     const entries = readdirSync(path.join(ROOT, folder), { withFileTypes: true });
-    if (!entries.some((e) => e.name === "sources.js")) offenders.push(`${folder} has no sources.js`);
+    for (const required of SITE_REQUIRED) {
+      if (!entries.some((e) => e.name === required)) offenders.push(`${folder} has no ${required}`);
+    }
     for (const entry of entries) {
       if (entry.isDirectory()) {
         if (!PLATFORM_FOLDERS.has(entry.name) && !children.has(`${folder}/${entry.name}`)) {

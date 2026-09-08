@@ -15,6 +15,7 @@
 import { Platform } from "../../platform.js";
 import { site } from "../site.js";
 import { CodeforcesSources } from "../sources.js";
+import { problemsFrom, applyStandingsProblemData } from "../payloads.js";
 import { estimate, stratifyRows } from "../estimator.js";
 import { notPublishedYet } from "../../../contest-status.js";
 import { fullField, distributionSize } from "../../../rating-models/rating-distribution.js";
@@ -109,7 +110,7 @@ export class CodeforcesOfficial extends Platform {
     // of the roster, and it is flagged so the add waits rather than refuses.
     onProgress("Reading the standings…");
     const standings = await sources.publicContestStandings(contestId);
-    const problems = CodeforcesSources.problemsFrom(contestId, standings);
+    const problems = problemsFrom(contestId, standings);
 
     // A running round cannot reach here — it would not be in the problemset —
     // so unlike a gym this needs no phase check of its own.
@@ -375,7 +376,7 @@ export async function syncPublishedData(session, contests, onProgress = () => {}
       const standings = await session.sources.publicContestStandings(contest.id);
       // The same applier the add path uses, so the two cannot disagree about
       // what "published" means or which fields it sets.
-      CodeforcesSources.applyStandingsProblemData(standings, contest.problems);
+      applyStandingsProblemData(standings, contest.problems);
       contest.publishedDataCheckedAt = now;
       updated++;
     } catch (error) {

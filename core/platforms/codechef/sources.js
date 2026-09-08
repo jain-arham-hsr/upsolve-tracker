@@ -20,19 +20,12 @@
  * Cookies are sent because `problemsstats` is per-user; everything else the
  * endpoints return is public.
  *
- * `Source` supplies the plumbing — path joining, `json`/`document`, the memo and
- * the reset seam. What is left here is which endpoints exist and what each one
- * refuses to do.
+ * How a request gets there is `client.js`; what a payload means is
+ * `payloads.js`. What is left here is which routes exist.
  */
 import { Source } from "../source.js";
-import { createSiteClient } from "../../services/site-client.js";
-import { site } from "./site.js";
+import { ORIGIN, client } from "./client.js";
 import { DashboardPage } from "./scrapers/page-globals.js";
-
-const ORIGIN = "https://www.codechef.com";
-
-/** Human-paced. A contest costs 1 + one request per problem. */
-const GAP_MS = 1500;
 
 /** Rows per page of the attempted-problems listing; 100 is honoured. */
 const PAGE_SIZE = 100;
@@ -51,51 +44,9 @@ const MAX_ATTEMPTED = 5000;
 /** Contest payloads are reused within a single add; nothing is kept long. */
 const CONTEST_TTL_MS = 60 * 1000;
 
-/**
- * `difficulty_rating` arrives as a string and uses two out-of-band values:
- * `-1` for "not rated" (74% of the catalogue) and `9999` for a handful more.
- * Both must become null. `9999` is especially dangerous — it is also the
- * queue's own sort-last sentinel, so passing it through would look like a
- * legitimate, very hard problem.
- */
-const NOT_RATED = new Set([-1, 9999]);
-
-/** Setter handles and contest codes get tagged alongside real topics. */
-const TAG_NOISE = /^(?:start|cook|ltime|snck)\d+$|_adm$/i;
-
 export class CodeChefSources extends Source {
   constructor() {
-    super({
-      origin: ORIGIN,
-      client: createSiteClient({
-        // CodeChef answers for whoever holds the session cookie, so routing
-        // through a tab is what makes the signed-in account visible at all.
-        site,
-        pacer: { gapMs: GAP_MS },
-
-        /**
-         * CodeChef's refusal is a 403 — its `/api/` routes are CSRF-gated, and
-         * an unauthenticated or rate-limited caller gets one rather than an
-         * error body.
-         *
-         * Note this is *not* how a signed-out session shows up: that returns a
-         * perfectly good 200 with an empty solved list, which is why
-         * `fetchAccepted` verifies identity rather than trusting the payload.
-         * Two different refusals, and conflating them is how the platform became
-         * untrackable once before.
-         */
-        refusal({ response, url }) {
-          if (response.status === 403) {
-            return new Error(
-              "CodeChef refused the request. Open codechef.com in a tab, make sure you're " +
-                "signed in, and try again.",
-            );
-          }
-          if (response.ok) return null;
-          return new Error(`CodeChef returned ${response.status} for ${new URL(url).pathname}.`);
-        },
-      }),
-    });
+    super({ origin: ORIGIN, client });
 
     /** Memoised: one add reads a contest payload two or three times. */
     this.contest = this.memo(
@@ -195,67 +146,7 @@ export class CodeChefSources extends Source {
     return DashboardPage.scrape(await this.document("/dashboard"));
   }
 
-  /**
-   * Accepted, from the practice bundle's own status map:
-   * `{0: Unattempted, 1: Accepted, 2: Partially Correct, 3: Wrong Answer, …}`.
-   *
-   * Match this value explicitly rather than "anything but 0" — `solved` is sticky
-   * and never cleared, so a false positive hides a problem permanently while a
-   * false negative costs one refresh. `2` is Partially Correct and is excluded for
-   * the same reason `partially_solved` always was.
-   *
-   * On the source because both halves of the platform need it: `fetchContest`
-   * reads it off the contest payload and `fetchAccepted` off the practice
-   * listing. Duplicating a magic number across the two is how they drift.
-   */
-  static ACCEPTED = 1;
-
-  static parseDifficulty(raw) {
-    const value = Number.parseInt(raw, 10);
-    if (!Number.isFinite(value) || NOT_RATED.has(value)) return null;
-    return value;
-  }
-
-  static cleanTags(detail, contestCode) {
-    const raw = [...(detail?.user_tags ?? []), ...(detail?.computed_tags ?? [])];
-    const seen = new Set();
-
-    return raw.filter((tag) => {
-      if (typeof tag !== "string") return false;
-      const trimmed = tag.trim();
-      if (!trimmed) return false;
-      if (trimmed.toLowerCase() === contestCode.toLowerCase()) return false;
-      if (TAG_NOISE.test(trimmed)) return false;
-      const key = trimmed.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }
-
-  /**
-   * Some old problems were never mirrored into CodeChef's practice archive.
-   * `START32C/problems/MAXTHEMIN` still shows its statement inside the contest,
-   * but `/problems/MAXTHEMIN` 404s — and a contest stops accepting submissions
-   * when it ends, so there is nowhere left to submit it. It is dead work, and
-   * because `solved` is only ever set true nothing would ever clear it from the
-   * queue.
-   *
-   * `is_added_to_practice` on the contest payload answers this exactly, and comes
-   * free — `fetchContestRecord` already has that payload in hand. Two nearby
-   * fields do **not** answer it, so don't reach for them again: `problem_url` is
-   * `/problems/MAXTHEMIN` even for the problem that 404s there, and
-   * `is_direct_submittable` is false for everything when signed out, since it
-   * tracks login state rather than mirroring.
-   *
-   * The key is written only when the answer is no. Absent means upsolvable, which
-   * is every problem on Codeforces and AtCoder — both serve their whole history
-   * from a stable per-contest route.
-   */
-  static practiceFlag(problem) {
-    return problem?.is_added_to_practice === false ? { upsolvable: false } : {};
-  }
-}
+    }
 
 /**
  * CodeChef needs no credentials of its own — the browser's session *is* the

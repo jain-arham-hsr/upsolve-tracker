@@ -11,6 +11,7 @@
 import { Platform } from "../../platform.js";
 import { site } from "../site.js";
 import { CodeforcesSources } from "../sources.js";
+import { problemsFrom, summariseSubmissions } from "../payloads.js";
 import { estimate } from "../estimator.js";
 import { notEndedYet, unavailable } from "../../../contest-status.js";
 import { fullField, distributionSize } from "../../../rating-models/rating-distribution.js";
@@ -128,7 +129,7 @@ export class CodeforcesGyms extends Platform {
   fromStandings(contestId, standings) {
     return {
       contestName: standings?.contest?.name ?? `Gym ${contestId}`,
-      problems: CodeforcesSources.problemsFrom(contestId, standings),
+      problems: problemsFrom(contestId, standings),
       // The same response is the only source gyms have for tags and for the
       // difficulty Codeforces publishes.
       tagsSynced: (standings?.problems ?? []).length > 0,
@@ -273,7 +274,7 @@ async function fromContestStatus(contestId, sources, standingsError) {
     );
   }
 
-  const derived = CodeforcesSources.summariseSubmissions(await sources.contestSubmissions(contestId));
+  const derived = summariseSubmissions(await sources.contestSubmissions(contestId));
 
   const problems = page.problems.map((problem) => {
     const meta = derived.problemMeta.get(problem.index);

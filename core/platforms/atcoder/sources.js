@@ -4,9 +4,9 @@
  * Scraping is what `scrapers/` does: turning markup into facts. This half
  * fetches, and one of the three routes below is JSON.
  *
- * `Source` supplies the client plumbing — path joining, `text`/`json`/`document`,
- * the memo and the reset seam. What each route owns is its URL, how many requests
- * it takes, what an unusable answer means for it, and what the caller gets back.
+ * How a request gets there is `client.js`. What each route owns is its URL, how
+ * many requests it takes, what an unusable answer means for it, and what the
+ * caller gets back.
  * Those differ per route even on one site: `contestTasks` returns null so the
  * contest waits, while `acceptedTaskIds` throws, because `solved` is sticky and a
  * silent empty would strand the queue permanently.
@@ -27,66 +27,18 @@
  * fallback here; it is the only interface.
  */
 import { Source } from "../source.js";
-import { createSiteClient } from "../../services/site-client.js";
-import { site } from "./site.js";
+import { ORIGIN, client } from "./client.js";
 import { TasksPage } from "./scrapers/tasks.js";
 import { SubmissionsPage } from "./scrapers/submissions.js";
 import { ProfilePage } from "./scrapers/profile.js";
 import { PageGlobals } from "./scrapers/page-globals.js";
 
-const ORIGIN = "https://atcoder.jp";
-const GAP_MS = 1500;
-
 /** Guards a runaway loop if pagination is ever misread. */
 const MAX_SUBMISSION_PAGES = 20;
 
-/** Thrown rather than returned, so no caller can mistake it for "nothing found". */
-class NotSignedInError extends Error {
-  constructor(url) {
-    super(
-      "AtCoder is not signed in, so your submissions can't be read. " +
-        "Open atcoder.jp, sign in, and refresh.",
-    );
-    this.name = "NotSignedInError";
-    this.isNotSignedIn = true;
-    this.url = url;
-  }
-}
-
 export class AtCoderSources extends Source {
   constructor() {
-    super({
-      origin: ORIGIN,
-      client: createSiteClient({
-        // Both the submissions list and standings/json are login-gated, and a
-        // cross-site request carries no cookies — so without a tab open on
-        // atcoder.jp those two answer with a sign-in form, and `refusal` says so.
-        site,
-        pacer: { gapMs: GAP_MS },
-
-        /**
-         * **AtCoder refuses by succeeding.** `fetch` follows the 302
-         * transparently, so a signed-out request arrives as a healthy 200 whose
-         * body is the sign-in form. Scraping that yields no submissions —
-         * indistinguishable from having solved nothing — and `solved` is sticky,
-         * so a swallowed refusal would look like a healthy sync while quietly
-         * stranding the queue. Caught by checking where we actually landed
-         * rather than what the status says.
-         */
-        refusal({ response, url }) {
-          if (new URL(response.url).pathname === "/login") return new NotSignedInError(url);
-          if (response.ok) return null;
-
-          // The status rides along so a caller can say something better than
-          // this: `identify` turns a 404 into "AtCoder has no user X", which
-          // is the difference between a typo and an outage.
-          return Object.assign(
-            new Error(`AtCoder returned ${response.status} for ${new URL(url).pathname}.`),
-            { status: response.status },
-          );
-        },
-      }),
-    });
+    super({ origin: ORIGIN, client });
   }
 
   /** AtCoder needs no credentials: one instance serves every session. */

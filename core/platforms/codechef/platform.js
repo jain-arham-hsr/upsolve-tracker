@@ -19,6 +19,7 @@
 import { Platform } from "../platform.js";
 import { site } from "./site.js";
 import { CodeChefSources } from "./sources.js";
+import { ACCEPTED, parseDifficulty, cleanTags, practiceFlag } from "./payloads.js";
 import {
   notEndedYet,
   notPublishedYet,
@@ -240,7 +241,7 @@ export class CodeChef extends Platform {
     const accepted = [];
 
     for (const row of rows) {
-      if (Number(row?.status) !== CodeChefSources.ACCEPTED) continue;
+      if (Number(row?.status) !== ACCEPTED) continue;
       if (!row?.code) continue;
       accepted.push({ contest: { id: null }, problem: { index: row.code } });
     }
@@ -338,7 +339,7 @@ async function buildProblem(sources, contestCode, problem, solved) {
     throw Object.assign(error, { isSourceUnreachable: true });
   }
 
-  const rating = CodeChefSources.parseDifficulty(detail?.difficulty_rating);
+  const rating = parseDifficulty(detail?.difficulty_rating);
 
   return {
     index: code,
@@ -348,8 +349,8 @@ async function buildProblem(sources, contestCode, problem, solved) {
     ratingConfidence: null,
     officialSolves: Number.parseInt(problem.successful_submissions, 10) || 0,
     solved: solved.has(code),
-    tags: CodeChefSources.cleanTags(detail, contestCode),
-    ...CodeChefSources.practiceFlag(problem),
+    tags: cleanTags(detail, contestCode),
+    ...practiceFlag(problem),
   };
 }
 
@@ -462,12 +463,12 @@ async function syncPublishedDifficulty(session, contests, onProgress = () => {})
       onProgress(`Re-checking ${problem.index}…`);
       try {
         const detail = await session.sources.problem(contest.id, problem.index);
-        const rating = CodeChefSources.parseDifficulty(detail?.difficulty_rating);
+        const rating = parseDifficulty(detail?.difficulty_rating);
         if (rating === null) continue;
 
         problem.rating = rating;
         problem.ratingSource = "official";
-        problem.tags = CodeChefSources.cleanTags(detail, contest.id);
+        problem.tags = cleanTags(detail, contest.id);
         updated++;
       } catch (error) {
         console.warn(`[CodeChef] re-check of ${problem.index} failed:`, error.message);
