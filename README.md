@@ -143,7 +143,7 @@ Requires Node 20.19+ or 22.12+.
 ```bash
 npm install
 npm run build:chrome    # -> dist/chrome
-npm test                # rating maths, adapters, request pacing, queue ordering
+npm test                # rating maths, platforms, request pacing, queue ordering
 npm run smoke           # loads the built panel and settings page in headless Chrome
 ```
 
