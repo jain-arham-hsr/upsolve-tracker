@@ -221,6 +221,66 @@ test("the default syncStartTimes dates from the source's contest list, and does 
   assert.equal(undated.startTimeSeconds, 1234);
 });
 
+test("a start time the site does not have is answered once, not re-asked every refresh", async () => {
+  // Codeforces omits the key entirely on a contest nobody scheduled — never a
+  // null, never a 0 — so the site is answering, not withholding. Recording the
+  // answer is what stops `syncStartTimes` asking again for the life of the queue.
+  let calls = 0;
+  class Listing extends FakeApi {
+    async contestList() { calls++; return [{ id: 7, name: "Unscheduled" }, { id: 8, startTimeSeconds: 99 }]; }
+  }
+  const platform = build(complete({ Api: Listing }));
+  const session = { api: new Listing() };
+
+  const listed = { id: "7", startTimeSeconds: null };
+  const dated = { id: "8", startTimeSeconds: null };
+  assert.equal(await platform.syncStartTimes(session, [listed, dated]), 1);
+  assert.equal(listed.startTimeSeconds, null);
+  assert.equal(listed.startTimeUnavailable, true);
+  assert.equal(dated.startTimeSeconds, 99);
+  assert.ok(!dated.startTimeUnavailable, "a contest that was dated is not also marked unavailable");
+  assert.equal(calls, 1);
+
+  // The whole point: nothing is pending, so the list is not fetched at all.
+  assert.equal(await platform.syncStartTimes(session, [listed, dated]), 0);
+  assert.equal(calls, 1);
+});
+
+test("a contest the list never mentions is not an answer, and is asked again", async () => {
+  // Private gyms and mashups are absent from the bulk list whether or not they
+  // were scheduled, so absence says nothing about the start time. Reading the
+  // evidence off the field rather than off the entry marks these permanently
+  // and loses the one retry that recovers a failed fetch.
+  let calls = 0;
+  class Listing extends FakeApi {
+    async contestList() { calls++; return [{ id: 8, startTimeSeconds: 99 }]; }
+  }
+  const platform = build(complete({ Api: Listing }));
+  const session = { api: new Listing() };
+
+  const absent = { id: "715029", startTimeSeconds: null };
+  assert.equal(await platform.syncStartTimes(session, [absent]), 0);
+  assert.equal(absent.startTimeSeconds, null);
+  assert.ok(!absent.startTimeUnavailable);
+
+  assert.equal(await platform.syncStartTimes(session, [absent]), 0);
+  assert.equal(calls, 2, "still pending, so still asked");
+});
+
+test("a failed list is not an answer either", async () => {
+  class Broken extends FakeApi {
+    async contestList() { throw new Error("Call limit exceeded"); }
+  }
+  const platform = build(complete({ Api: Broken }));
+  const undated = { id: "7", startTimeSeconds: null };
+
+  assert.equal(await platform.syncStartTimes({ api: new Broken() }, [undated]), 0);
+  assert.ok(
+    !undated.startTimeUnavailable,
+    "marking on a throw would record a blip as the site's final answer",
+  );
+});
+
 test("estimateMissing reads the field once, fits in place, and passes a status through", async () => {
   const Fake = complete();
   const reads = [];

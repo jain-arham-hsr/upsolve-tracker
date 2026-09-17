@@ -87,7 +87,8 @@ export class CodeforcesGyms extends Platform {
       if (!error.isStandingsHidden) throw error;
       read = await fromContestStatus(contestId, session, error);
     }
-    const { contestName, problems, tagsSynced, startTimeSeconds, solveCountsRead, partyHandles, finished, standings } = read;
+    const { contestName, problems, tagsSynced, startTimeSeconds, startTimeUnavailable,
+      solveCountsRead, partyHandles, finished, standings } = read;
 
     // A running gym has visible standings carrying partial solve counts, so
     // the estimator would fit them and store inflated difficulties — and a gym
@@ -104,6 +105,7 @@ export class CodeforcesGyms extends Platform {
       problems,
       publishedDataCheckedAt: tagsSynced ? Date.now() : null,
       startTimeSeconds,
+      startTimeUnavailable,
     };
 
     // No problemset sync: gyms are absent from problemset.problems entirely.
@@ -134,6 +136,13 @@ export class CodeforcesGyms extends Platform {
       // The only place private gyms and mashups get a start time: those never
       // appear in contest.list.
       startTimeSeconds: standings?.contest?.startTimeSeconds ?? null,
+      // And the only place they get an *answer* about it. Codeforces omits the
+      // key entirely on a contest nobody scheduled — never a null, never a 0 —
+      // so a `contest` object without one is the site saying there is none,
+      // which `syncStartTimes` would otherwise re-ask forever. Gated on the
+      // object rather than the field: a response carrying no `contest` at all
+      // is not an answer, and `?.` alone would read it as one.
+      startTimeUnavailable: standings?.contest ? standings.contest.startTimeSeconds == null : false,
       // Unconditionally true, and deliberate: counts come from the API rather
       // than a parsed totals row. Empty rows also mean an empty field, and the
       // estimator then refuses with the better sentence — "participants aren't
@@ -207,12 +216,16 @@ export class CodeforcesGyms extends Platform {
    * already in hand, and this covers the rest.
    */
   async syncStartTimes(session, contests, onProgress = () => {}) {
-    const pending = contests.filter((contest) => !contest.startTimeSeconds);
+    const undated = (contest) => !contest.startTimeSeconds && !contest.startTimeUnavailable;
+    const pending = contests.filter(undated);
     if (pending.length === 0) return 0;
 
     let resolved = await super.syncStartTimes(session, contests, onProgress);
 
-    const gyms = pending.filter((contest) => !contest.startTimeSeconds);
+    // Near-vestigial: an add reads the answer straight off the standings it
+    // already fetched. What still arrives here is a hidden-standings gym,
+    // whose time is derived from submissions rather than declared.
+    const gyms = pending.filter(undated);
     for (const [index, contest] of gyms.entries()) {
       // Deliberately slow — the API pacer spaces these — so it counts itself off.
       onProgress(`Dating gym ${index + 1} of ${gyms.length}…`);
@@ -222,8 +235,12 @@ export class CodeforcesGyms extends Platform {
         if (startTime) {
           contest.startTimeSeconds = startTime;
           resolved++;
+        } else if (standings?.contest) {
+          // Answered: the object that would carry the time does not.
+          contest.startTimeUnavailable = true;
         }
       } catch (error) {
+        // Not an answer. Left pending so a blip is retried rather than recorded.
         console.warn(`[Codeforces] Gym ${contest.id} standings failed:`, error.message);
       }
     }

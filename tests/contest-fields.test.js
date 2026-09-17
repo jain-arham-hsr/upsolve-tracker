@@ -26,6 +26,10 @@ const STORED = [
   "type",
   "problems",
   "startTimeSeconds",
+  // Whether the site was asked for that start time and had none, as against
+  // not asked yet — a null `startTimeSeconds` cannot say which, and read as
+  // the latter it re-asks an answered question on every refresh forever.
+  "startTimeUnavailable",
   "publishedDataCheckedAt",
   // Written by the trunk since the beginning and unread until recently, which
   // is why it was missing here. `published-sync.js` uses it to date a contest

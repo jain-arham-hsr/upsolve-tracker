@@ -185,6 +185,58 @@ test("the official reader is a different module, and it reaches no page at all",
   assert.equal(stats.problems[0].ratingSource, "official");
 });
 
+/**
+ * A mashup — problems assembled from the archive, never run as a timed event —
+ * has no start time on Codeforces at all: the API omits the key rather than
+ * sending a null or a 0. That is an answer, and the response the add already
+ * holds is where it arrives, so nothing further should ever be fetched for it.
+ */
+test("a gym the site never scheduled is answered from the standings already in hand", async () => {
+  let listCalls = 0;
+  let standingsCalls = 0;
+
+  const acquired = await acquireGym(
+    "715029",
+    {
+      contestList: async () => { listCalls++; return []; },
+      contestStandings: async () => {
+        standingsCalls++;
+        return {
+          // No `startTimeSeconds`: the real shape of an unscheduled contest.
+          contest: { name: "Intermediate Math I" },
+          problems: [{ index: "A", name: "Alpha", rating: 1600, tags: [] }],
+          rows: [],
+        };
+      },
+    },
+  );
+
+  assert.equal(acquired.startTimeSeconds, null);
+  assert.equal(acquired.startTimeUnavailable, true, "the site answered, and the answer is stored");
+  assert.equal(standingsCalls, 1, "the response in hand answers it — no second fetch");
+  assert.equal(listCalls, 0, "and no 1 MB gym list, which never lists a mashup anyway");
+});
+
+test("standings that carry no contest object at all are not an answer", async () => {
+  // `fromStandings` already tolerates this, falling back to `Gym <id>` for the
+  // name. Reading the evidence off the field through `?.` instead of off the
+  // object silently files it as "the site says there is none", which would
+  // permanently silence a contest that was never actually asked about.
+  const acquired = await acquireGym(
+    "715029",
+    {
+      contestStandings: async () => ({
+        problems: [{ index: "A", name: "Alpha", rating: 1600, tags: [] }],
+        rows: [],
+      }),
+    },
+  );
+
+  assert.equal(acquired.contestName, "Gym 715029");
+  assert.equal(acquired.startTimeSeconds, null);
+  assert.equal(acquired.startTimeUnavailable, false, "nothing answered, so it stays askable");
+});
+
 test("a visible gym is read from the API alone — no page, no contest.status", async () => {
   // The roster used to be scraped off /gym/<id>/standings while this same call
   // was made anyway for everything else. `seen` staying empty is the point.

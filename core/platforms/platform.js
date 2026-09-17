@@ -340,10 +340,18 @@ export class Platform {
    * field is missing. Ordering is cosmetic, so a failed list never breaks a
    * sync or an add.
    *
+   * A site never publishes a start time *late* — it is set when a contest is
+   * scheduled, or the contest was never scheduled and there will never be one.
+   * So a contest is pending only while nobody has answered: once a source that
+   * would have carried the time is read and has none, `startTimeUnavailable`
+   * records that and this stops asking.
+   *
    * @returns {Promise<number>} contests dated
    */
   async syncStartTimes(session, contests, onProgress = () => {}) {
-    const pending = contests.filter((contest) => !contest.startTimeSeconds);
+    const pending = contests.filter(
+      (contest) => !contest.startTimeSeconds && !contest.startTimeUnavailable,
+    );
     if (pending.length === 0) return 0;
 
     let list;
@@ -356,17 +364,24 @@ export class Platform {
     }
     if (!list) return 0;
 
-    const startTimes = new Map();
-    for (const contest of list) {
-      if (contest.startTimeSeconds) startTimes.set(String(contest.id), contest.startTimeSeconds);
-    }
+    // Presence and value are separate facts, so the map holds every listed
+    // contest rather than only the dated ones: a contest listed with no time
+    // is the site saying it has none, while one absent from the list is no
+    // answer at all — private gyms and mashups never appear here.
+    const listed = new Map();
+    for (const contest of list) listed.set(String(contest.id), contest.startTimeSeconds ?? null);
 
     let resolved = 0;
     for (const contest of pending) {
-      const startTime = startTimes.get(String(contest.id));
+      const key = String(contest.id);
+      if (!listed.has(key)) continue;
+
+      const startTime = listed.get(key);
       if (startTime) {
         contest.startTimeSeconds = startTime;
         resolved++;
+      } else {
+        contest.startTimeUnavailable = true;
       }
     }
 
@@ -412,6 +427,7 @@ export function normalizeProblem(problem) {
  */
 export function buildContestRecord(platform, {
   id, sourceId, name, type, problems, publishedDataCheckedAt, startTimeSeconds,
+  startTimeUnavailable,
 }) {
   return {
     id,
@@ -424,6 +440,12 @@ export function buildContestRecord(platform, {
     problems: problems.map(normalizeProblem),
     publishedDataCheckedAt,
     startTimeSeconds: startTimeSeconds ?? null,
+    // The site was asked and has no start time for this contest — `unavailable`
+    // in the sense `contest-status.js` gives it: the data will never exist, as
+    // against `notPublishedYet`. A null `startTimeSeconds` alone cannot tell
+    // those apart, and read as "not asked yet" it re-asks an answered question
+    // on every refresh forever.
+    startTimeUnavailable: startTimeUnavailable ?? false,
     addedAt: Date.now(),
   };
 }
