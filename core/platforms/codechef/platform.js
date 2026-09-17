@@ -116,6 +116,12 @@ export class CodeChef extends Platform {
     // No estimator: /api/rankings/ answers 403, so there is no field to fit
     // against. A -1 or 9999 sentinel stores as null and renders "???".
     canEstimate: false,
+    // How long CodeChef is given to publish `difficulty_rating` before a
+    // missing one is taken at face value rather than waited on. Starters 252
+    // was fully rated within two days of running, so a week is margin rather
+    // than a guess. Read only because `canEstimate` is false: where a platform
+    // estimates, a gap is a fault and there is nothing to wait for.
+    ratingGraceMs: 7 * 24 * 60 * 60 * 1000,
   };
 
   // ── the work ──────────────────────────────────────────────────────────

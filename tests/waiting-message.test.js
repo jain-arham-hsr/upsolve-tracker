@@ -42,6 +42,23 @@ test("an unreachable source repeats the adapter's own sentence", () => {
   assert.doesNotMatch(shown, /isn't published yet/, "the old copy lied about a published contest");
 });
 
+test("a contest waiting on its ratings says so, rather than claiming it is unpublished", () => {
+  // The same lie in a new place: this contest *is* published — its problems are
+  // listed and it is only the ratings that have not landed — so the generic
+  // notPublishedYet sentence would be false on its face.
+  const shown = waitingExplanation(
+    {
+      contestStatus: NOT_PUBLISHED_YET,
+      isAwaitingRatings: true,
+      message: "CodeChef hasn't rated 1 of 8 problems in START252D yet (MODSUB).",
+    },
+    "START252D",
+  );
+
+  assert.match(shown, /hasn't rated 1 of 8 problems/);
+  assert.doesNotMatch(shown, /isn't published yet/, "the contest is published; its ratings are not");
+});
+
 test("every waiting status gets a sentence, and none inherits another's", () => {
   // The regression guard: a status added later must not silently fall into
   // whichever branch happens to be first.

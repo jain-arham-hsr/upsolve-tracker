@@ -61,6 +61,15 @@ test("partial ratings are allowed — there is no estimator fallback here", () =
   assert.equal(codechef.capabilities.canEstimate, false);
 });
 
+test("CodeChef is given a week to publish a rating before one is read as absent", () => {
+  // Pinned rather than behavioural: the declared window currently equals the
+  // manager's fallback, so removing the declaration changes nothing a test
+  // could observe. What this catches is the value being *changed* — and a
+  // window shorter than CodeChef's publication lag silently reintroduces the
+  // "???" this exists to prevent. Starters 252 was fully rated within two days.
+  assert.equal(codechef.capabilities.ratingGraceMs, 7 * 24 * 60 * 60 * 1000);
+});
+
 test("the queue label drops the division — a problem usually spans several", () => {
   // MODSUB ran in all four divisions of Starters 252, so "START252D MODSUB"
   // claims it belongs to Div 4 specifically.

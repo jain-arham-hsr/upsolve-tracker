@@ -7,7 +7,12 @@
  */
 import { LocalDB } from "./services/storage.js";
 import { matchContestUrl } from "./platforms/registry.js";
-import { READY, isKnownStatus, shouldWait } from "./contest-status.js";
+import {
+  READY,
+  NOT_PUBLISHED_YET,
+  isKnownStatus,
+  shouldWait,
+} from "./contest-status.js";
 import { storeFetchedRatings } from "./services/user-ratings.js";
 import {
   settleIdentity,
@@ -89,19 +94,46 @@ export async function processNewContest(url, onProgress = () => {}) {
     // being declared separately and drifting apart.
     const missing = contest.problems.filter((problem) => problem.rating === null);
 
-    if (missing.length > 0 && platform.capabilities.canEstimate) {
-      console.warn("[Contest Manager] Skipping storage. Missing ratings.");
-      // Not a waiting case. Reaching here means the platform can estimate and
-      // still left a gap, which is a fault rather than a delay — an adapter
-      // that knows the data is merely late says so with `notPublishedYet`
-      // before ever getting this far.
-      throw new Error(
-        missing.length === contest.problems.length
-          ? `Couldn't rate this contest: ${platform.label} produced no rating for any problem in ${contestId}.`
-          : `Couldn't rate ${missing.length} of ${contest.problems.length} problems (${missing
-              .map((p) => p.index)
-              .join(", ")}), so the contest wasn't added.`,
-      );
+    if (missing.length > 0) {
+      if (platform.capabilities.canEstimate) {
+        console.warn("[Contest Manager] Skipping storage. Missing ratings.");
+        // Not a waiting case. Reaching here means the platform can estimate and
+        // still left a gap, which is a fault rather than a delay — an adapter
+        // that knows the data is merely late says so with `notPublishedYet`
+        // before ever getting this far.
+        throw new Error(
+          missing.length === contest.problems.length
+            ? `Couldn't rate this contest: ${platform.label} produced no rating for any problem in ${contestId}.`
+            : `Couldn't rate ${missing.length} of ${contest.problems.length} problems (${missing
+                .map((p) => p.index)
+                .join(", ")}), so the contest wasn't added.`,
+        );
+      }
+
+      // Nested rather than `&& !canEstimate`: reaching here is a consequence of
+      // the branch above not throwing, so the capability is read once.
+      //
+      // The site is the only source of a rating here — and a site that rates
+      // promptly has not necessarily rated *yet*. A contest that has just run
+      // is given its window and waits, retried by the same machinery as any
+      // other waiting entry; `???` is reserved for a gap that has had time to
+      // close. Without this, a timing gap is stored wearing the one meaning
+      // `???` is supposed to carry: *the site says unrated*.
+      const grace = platform.capabilities.ratingGraceMs ?? DEFAULT_RATING_GRACE_MS;
+      if (ranWithin(contest, grace)) {
+        const error = new Error(
+          `${platform.label} hasn't rated ${missing.length} of ${contest.problems.length} ` +
+            `problems in ${contestId} yet (${missing.map((p) => p.index).join(", ")}).`,
+        );
+        // The three fields the waiting machinery already reads: log it quietly
+        // and remember it, keep it on retry, and let it word its own sentence.
+        error.isNotPublishedYet = true;
+        error.contestStatus = NOT_PUBLISHED_YET;
+        error.isAwaitingRatings = true;
+        throw error;
+      }
+      // Otherwise fall through and store: the site has had its window, so a
+      // rating still missing is the site saying there isn't one.
     }
 
     onProgress("Saving to your queue…");
@@ -126,6 +158,36 @@ export async function processNewContest(url, onProgress = () => {}) {
     }
     throw error;
   }
+}
+
+/**
+ * What a platform gets when it declares no `capabilities.ratingGraceMs`.
+ *
+ * The fallback lives here rather than on the `Platform` base for the same
+ * reason the gap policy does: a platform states a fact about its site — how
+ * long that site takes to publish a rating — and this file decides what to do
+ * about it. Two homes for the policy would be free to disagree.
+ */
+const DEFAULT_RATING_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether the contest ran less than `windowMs` ago.
+ *
+ * `startTimeSeconds` is epoch *seconds* while every other stamp on a record is
+ * milliseconds. Comparing them directly dates every contest to 1970, which puts
+ * the whole queue past any window and disables the wait entirely — a failure
+ * with no symptom except ratings that never wait.
+ *
+ * There is deliberately **no `addedAt` fallback**, which is where this differs
+ * from `ranAtMs` in `codeforces/official/platform.js`. That one reads a stored
+ * record whose `addedAt` is fixed; this one reads a record `buildContestRecord`
+ * rebuilds with `addedAt: Date.now()` on every retry, so an undateable contest
+ * would read as permanently young and wait forever. A stamp that moves every
+ * time we look can never bound anything, so undateable means don't wait.
+ */
+function ranWithin(contest, windowMs) {
+  if (contest.startTimeSeconds == null) return false;
+  return Date.now() - contest.startTimeSeconds * 1000 < windowMs;
 }
 
 /**

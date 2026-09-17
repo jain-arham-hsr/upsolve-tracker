@@ -126,6 +126,23 @@ export class Platform {
     if (typeof instance.capabilities?.canEstimate !== "boolean") {
       throw new Error(`${name} must declare capabilities.canEstimate`);
     }
+
+    // Optional, and checked only when declared: how long this site is given to
+    // publish a rating before a missing one is taken at face value. Refused on
+    // a platform that estimates, where `contest-manager.js` never reaches the
+    // branch that reads it — a window declared there is config that looks live
+    // and does nothing.
+    const grace = instance.capabilities.ratingGraceMs;
+    if (grace !== undefined) {
+      if (!Number.isFinite(grace) || grace < 0) {
+        throw new Error(`${name} declares a ratingGraceMs that is not a duration in ms`);
+      }
+      if (instance.capabilities.canEstimate) {
+        throw new Error(
+          `${name} declares ratingGraceMs but canEstimate: true, where it is never read`,
+        );
+      }
+    }
     if (instance.fetchContest === Platform.prototype.fetchContest) {
       throw new Error(`${name} must implement fetchContest()`);
     }

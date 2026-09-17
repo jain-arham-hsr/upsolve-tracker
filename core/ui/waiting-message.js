@@ -21,6 +21,13 @@ import {
 export function waitingExplanation(error, contestId) {
   const tail = "It'll be retried on a refresh — cancel it under Contests.";
 
+  // The contest *is* published — its problems are listed — and only its ratings
+  // are missing, so the generic `notPublishedYet` sentence below would be false
+  // on its face: exactly the kind of lie this file exists to stop. The thrower
+  // is the only thing that knows which problems are unrated, so it words its
+  // own sentence, as `sourceUnreachable` already does.
+  if (error.isAwaitingRatings) return `${error.message} ${tail}`;
+
   switch (error.contestStatus) {
     case NOT_PUBLISHED_YET:
       return `${contestId} isn't published yet. ${tail}`;

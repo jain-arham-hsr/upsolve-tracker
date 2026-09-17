@@ -141,6 +141,7 @@ It also answers everything shared code used to hardcode about a platform, which 
 | `icon` | keeping a three-key map of marks in `ui/platform-icons.js` |
 | `chartColor`, `ratingBandClass` | assigning colours or rank tints by id |
 | `hostPermissions` | hand-listing origins in `targets/chrome/manifest.json` |
+| `ratingGraceMs` | hardcoding how long *this* site takes to publish a rating |
 
 `registry.js` is the **only** module allowed to enumerate platforms. Nothing else — not a view, not a service, not the build — should branch on one, and `tests/module-boundaries.test.js` fails if it does.
 
@@ -177,7 +178,28 @@ cannot rate is a fault rather than a fact about the problem. CodeChef cannot est
 gap is simply a problem the site hasn't rated — it stores `rating: null` and renders "???". This replaced `allowsPartialRatings`, which was never independent: it was the exact
 inverse of this on all three platforms, two declarations that had to agree with nothing checking
 they did. `???` therefore means exactly one thing — *the site says unrated* — never "we couldn't
-find out", which is why a failed request waits rather than producing one. **It is now a CodeChef
+find out", which is why a failed request waits rather than producing one.
+
+**And never "not rated *yet*", which is the third case that used to be folded in.** CodeChef
+publishes `difficulty_rating` promptly but not instantly — Starters 252 was fully rated within two
+days of running — so a contest added the evening it ended stored `???` for problems the site was
+about to rate. A timing gap wearing the one meaning `???` is supposed to carry. So a platform that
+cannot estimate also declares **`capabilities.ratingGraceMs`**: while the contest is younger than
+that, a missing rating is `notPublishedYet` and waits through the ordinary machinery, and only
+after it does the site's silence count as an answer. `contest-manager.js` supplies a one-week
+fallback for a platform declaring none, and `Platform.check` **refuses** a window declared
+alongside `canEstimate: true`, where the branch that reads it is unreachable and it would be
+config that looks live.
+
+Two things about it are deliberate. **The window is the platform's and the policy is the
+manager's** — how long a site takes to publish is a fact about the site, while what to do about it
+is the gap policy, which lives in exactly one place for the reason stated above. And **it is
+measured from `contest.startTimeSeconds`, never from the add or the last try**: the record is
+rebuilt on every retry, so its `addedAt` is always "now" and an undateable contest would read as
+permanently young and wait forever. A contest with no start time is therefore stored rather than
+waited on — the safe direction. Note `startTimeSeconds` is epoch *seconds* against `Date.now()`'s
+milliseconds, the same factor-of-1000 trap the six-week Codeforces cutoff carries; `ranWithin`
+exists to hold the conversion in one place, and `tests/contest-gap-policy.test.js` pins it. **It is now a CodeChef
 phenomenon only.** AtCoder used to produce one whenever its standings could not be read — the
 normal outcome when signed out — which was precisely the "we couldn't find out" case wearing the
 other meaning's clothes. That reads `sourceUnreachable` and waits now, and the estimator bounds
@@ -379,6 +401,7 @@ Note every relative import must carry its `.js` extension. Vite resolves extensi
 Four things are easy to get wrong:
 
 - **Which failures may wait is a property of the fact, not of the platform.** `shouldWait()` in `contest-status.js` answers it, identically everywhere: `notEndedYet`, `notPublishedYet` and `sourceUnreachable` wait; `unavailable` refuses, and is the one status that also **drops an existing waiting entry** on retry, since another attempt cannot change the answer.
+- **A contest can also enter this state fully fetched**, which is the one entry point that is not an adapter's verdict. On a platform that cannot estimate, a problem still unrated inside `capabilities.ratingGraceMs` makes `contest-manager.js` throw `notPublishedYet` rather than store a "???" — see the `canEstimate` discussion above. The *window* is a deadline, not a delay: inside it the contest is retried by this same machinery on every refresh, a **full re-add** each time, and resolves the moment the site publishes. Costs about ten requests per CodeChef entry per refresh (one contest plus one per problem) — between AtCoder's one and Codeforces' tens, and unlike the Codeforces case it is bounded, since the contest provably leaves the window. Note the window is wall-clock while the refresh is user-driven (only the ↻ button; there is no alarm, and `targets/chrome/background.js` is four lines), so a queue left untouched for eight days gets its "???" having never retried inside the window at all. No worse than the behaviour this replaced, which stored one immediately — worth stating so it is not later read as a bug.
 - **Entering the state is a flag on the error, never a message match** — `error.isNotPublishedYet`, the same idiom as CodeChef's `isIdentityMismatch`. A copy edit to "doesn't list contest" must not silently turn a contest that would have resolved into one that is never retried. `error.isAlreadySolved` exists for the same reason on the other side.
 - **It must not be logged as a fault.** `console.error` from an extension page is filed under `chrome://extensions` as an extension error, with a stack trace and a red badge — once on the add, then again on *every refresh* for as long as it waits. So `contest-manager.js` logs it at **`info`** when `isNotPublishedYet` is set, and errors as before for everything else. `warn` is not enough — that page collects error *and* warning levels, so downgrading to `console.warn` only changed the icon from a red circle to a yellow triangle, and the test that watched `console.error` alone passed while the entry was still being filed. `tests/waiting-quiet.test.js` drives the real `processNewContest` for both halves of that branch, since the logging is in its catch.
 
@@ -522,7 +545,7 @@ Four traps, all confirmed against the live API:
 - **`problemsstats.solved` changes type.** Signed out it is an empty **array**; signed in it is an **object** keyed by problem code. Array methods silently see nothing on the shape that actually carries data, so read it with `Object.keys`.
 - **Signed out looks identical to "solved nothing."** `fetchSolvedKeys` therefore refuses outright when `signedIn` is false, so `progress-manager` isolates the failure and leaves existing flags alone. This is the case the stickiness invariant exists for.
 - **`problemsstats` cannot see an upsolve, and neither can the per-problem endpoint.** Both report only what happened *during* the contest. A contest closes to submissions when it ends, so upsolving happens in practice — see the section below, which is why solved status is no longer read per contest at all.
-- **Two out-of-band difficulty values**, both arriving as strings: `-1` for unrated (74% of the catalogue) and `9999`. Both become null. `9999` is the dangerous one — it is also the queue's own sort-last sentinel, so passing it through would read as a legitimate, very hard problem.
+- **Two out-of-band difficulty values**, both arriving as strings: `-1` for unrated (74% of the catalogue) and `9999`. Both become null. `9999` is the dangerous one — it is also the queue's own sort-last sentinel, so passing it through would read as a legitimate, very hard problem. **A null does not reach storage on a contest that has just run**, though: CodeChef declares `capabilities.ratingGraceMs` of a week, so for that long an unrated problem makes the whole contest wait and retry instead of storing "???". The adapter's job is unchanged — it still reports `-1` and `9999` as null — and the decision is `contest-manager.js`'s, which is why `tests/platforms/codechef/platform.test.js` still asserts the null at adapter level while `tests/contest-gap-policy.test.js` asserts what becomes of it.
 - **A failed per-problem fetch is not evidence that CodeChef has no rating.** Difficulty
   costs one request per problem, and conflating a failure with an absence stored `???` for
   problems CodeChef *had* rated. The contest waits and retries instead — the general rule at

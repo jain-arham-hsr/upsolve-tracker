@@ -26,10 +26,15 @@
  *
  * 1. The contest isn't ready → wait and retry, except where waiting is futile.
  * 2. The contest is ready but a problem has no rating → "???", and only on a
- *    platform with no estimator. Never "we couldn't find out".
+ *    platform with no estimator, and only once the site has had time to publish
+ *    one. Never "we couldn't find out", and never "not yet".
  *
  * Rule 2 lives in `contest-manager.js` against `capabilities.canEstimate`,
- * because it applies to a contest that was fetched successfully.
+ * because it applies to a contest that was fetched successfully. The "not yet"
+ * half is the same gate: while the contest is younger than the platform's
+ * `capabilities.ratingGraceMs`, a missing rating is `notPublishedYet` and waits
+ * like any other, so a site that rates within days is not read as saying there
+ * is no rating at all.
  */
 
 /** The contest was read; `contest` holds the stored-shape record. */

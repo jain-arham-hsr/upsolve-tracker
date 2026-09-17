@@ -114,6 +114,38 @@ test("canEstimate, readField() and estimate() are one fact, refused in every dir
   assert.throws(() => build(FitsOnly), /estimate\(\) without readField\(\)/);
 });
 
+test("ratingGraceMs is optional, but a declared one must be a usable duration", () => {
+  // Optional is the load-bearing half: every double in this file declares only
+  // publishesTags and canEstimate, and requiring a third key would fail them
+  // all for a reason that has nothing to do with what they are testing.
+  assert.ok(build(complete()), "a platform declaring no window is fine");
+
+  // `capabilities` is a class *field*, so it has to be replaced on the instance
+  // — assigning to the prototype leaves the field shadowing it, and the check
+  // then reads the original and passes for the wrong reason.
+  const declaring = (ratingGraceMs) => {
+    const instance = new (complete())();
+    instance.capabilities = { publishesTags: true, canEstimate: false, ratingGraceMs };
+    return instance;
+  };
+
+  assert.throws(() => Platform.check(declaring(-1)), /not a duration in ms/);
+  assert.throws(() => Platform.check(declaring("a week")), /not a duration in ms/);
+  assert.throws(() => Platform.check(declaring(Infinity)), /not a duration in ms/);
+});
+
+test("a window declared on a platform that estimates is refused as config that does nothing", () => {
+  // `contest-manager.js` reads the window only after the canEstimate branch has
+  // not thrown, so on an estimating platform it is unreachable. Declared there
+  // it would look live, and a reader would reasonably expect it to be honoured.
+  const Estimator = complete();
+  Estimator.prototype.readField = async () => ({});
+  Estimator.prototype.estimate = () => {};
+  const estimator = new Estimator();
+  estimator.capabilities = { publishesTags: true, canEstimate: true, ratingGraceMs: 1000 };
+  assert.throws(() => Platform.check(estimator), /canEstimate: true, where it is never read/);
+});
+
 test("a settings section the schema does not declare is refused", () => {
   const Fake = complete({ site: { ...getPlatform("codechef").constructor.site, settingsSection: "nowhere" } });
   assert.throws(() => build(Fake), /settings section "nowhere"/);
