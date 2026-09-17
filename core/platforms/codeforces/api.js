@@ -145,9 +145,9 @@ export class CodeforcesApi extends Api {
 
   /**
    * Contest metadata in bulk, ~400 KB. Official rounds by default; gyms are a
-   * separate list, and private gyms and mashups (the 6xxxxx ids) are absent
-   * from it entirely — those are dated from `standings.contest.startTimeSeconds`
-   * at add time instead.
+   * separate list, and private gyms and mashups are absent from it entirely —
+   * those are dated from `standings.contest.startTimeSeconds` at add time
+   * instead.
    */
   async contestList({ gym = false } = {}) {
     return this.#call("contest.list", gym ? { gym: true } : {});

@@ -108,10 +108,14 @@ were stored in their place. 358 tests passed the whole time.
 Three things guard it now, and each was confirmed by reintroducing the bug and
 watching it fire:
 
-- **The gates throw rather than answering false.** `needsSync` and `syncStartTimes`
-  refuse a contest with no `type`, the same rule `platformOf()` follows for a record
-  with no `platform`. This is the load-bearing one: it makes the whole class loud at
-  runtime regardless of what any test covers.
+- **The gate is structural, so there is no field left to misread.** `needsSync` used
+  to ask `contest.type !== "OFFICIAL"` of a record whose `type` had not been stamped
+  yet; that question is now answered by the folder — it lives in
+  `codeforces/official/platform.js`, which only official contests reach, so a gym
+  cannot arrive there at all. Where a field genuinely must be read, the rule is to
+  throw rather than answer false: `platformOf()` refuses a record with no `platform`
+  instead of defaulting. This is the load-bearing one: it makes the whole class loud
+  at runtime regardless of what any test covers.
 - **The trunk's field list is derived, not written down.** The contract test scans
   shared code for `contest.<field>` reads and asserts `buildContestRecord` emits every
   one. Platform folders are excluded deliberately — there `contest` just as often
@@ -274,7 +278,7 @@ so a platform overrides them only where its site's account works differently:
 
 | hook | returns | required |
 |---|---|---|
-| `fetchContest({contestId, subtype, session, onProgress})` | a status, or `{ id, name, problems, startTimeSeconds, publishedDataCheckedAt, sourceId?, context? }` | yes |
+| `fetchContest({contestId, subtype, session, onProgress})` | a status, or `{ id, name, problems, startTimeSeconds, publishedDataCheckedAt, sourceId?, startTimeUnavailable?, context? }` | yes |
 | `buildSession(values)` | `{ handle, api, scraper, ... }` — **the site's `Api` and `Scraper` ride on the session**, so every read goes through `session.api` or `session.scraper` and a fake is injected the same way on every platform | default: the handle from the section's local field, `Api.fromSettings(values)`, and `Scraper.fromSettings(values)` or null |
 | `identify(session)` | `{username, rating}` | default: refuse a blank handle, ask `api.identity(handle)`, refuse null |
 | `fetchAccepted(session, contests, onProgress)` | `{contest: {id}, problem}` pairs — never a bare `null` contest | default: `api.accepted(handle)` |
@@ -706,7 +710,7 @@ re-check terminate.
 
 `Platform#syncStartTimes` — the base default from a site's `contestList`, which `CodeforcesGyms` extends — fills `contest.startTimeSeconds`, which orders the contest list. Contest IDs are *not* chronological (2205 ran a day before 2200), so sorting by ID is not a substitute.
 
-- **Official** — `contest.list`, one ~400 KB request. A finished contest's start time never changes, so unlike tags there's no re-check: a contest is asked about once and only if the field is missing.
+- **Official** — `contest.list`, one ~400 KB request. A finished contest's start time never changes, so unlike tags there's no re-check: a contest is asked about only while it is both undated *and* unanswered, which in practice means once.
 - **Gym** — `contest.list?gym=true`, but private gyms and mashups don't appear there at all — of 26 tracked gyms on this install, *none* does, and 25 are dated anyway. Those are covered at add time from `standings.contest.startTimeSeconds`, which `api.js` already has in hand: privacy gates *listing*, not access, so the signed standings call reaches a private gym perfectly well. Anything still unresolved sorts to the bottom rather than being treated as ancient.
 
 **A site never publishes a start time late, and that is what bounds the ask.** It is set when a contest is scheduled, or the contest was never scheduled and there will never be one — all 2,153 contests in `contest.list` carry one, while 1,511 of the 2,633 in `contest.list?gym=true` have none and never will. So unlike tags, unlike CodeChef difficulty, there is no publication lag to wait out. Codeforces expresses "none" by **omitting the key** — never a null, never a 0.

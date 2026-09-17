@@ -63,7 +63,11 @@
  *             `session.scraper`, so a fake is injected the same way on
  *             every platform
  *   Acquired  { id, name, problems: [{index, name, ...}], startTimeSeconds,
- *               publishedDataCheckedAt, sourceId?, context? }
+ *               publishedDataCheckedAt, sourceId?, startTimeUnavailable?,
+ *               context? }
+ *             `startTimeUnavailable` where the platform already knows the site
+ *             has no start time for this contest, so `syncStartTimes` never
+ *             asks again
  *   Accepted  { contest: {id}, problem }     never a bare null contest
  *   Status    from `contest-status.js`
  *

@@ -211,9 +211,10 @@ export class CodeforcesGyms extends Platform {
 
   /**
    * The bulk `contest.list?gym=true` first, then one `contest.standings` each
-   * for whatever it did not cover. Private gyms and mashups (the 6xxxxx ids)
-   * never appear in the list; most are dated at add time from the standings
-   * already in hand, and this covers the rest.
+   * for whatever it did not cover. Private gyms and mashups never appear in
+   * that list — every listed gym is 100001–106712, while those are numbered
+   * from 600000 up — so in practice everything is dated at add time from the
+   * standings already in hand, and this covers what is left.
    */
   async syncStartTimes(session, contests, onProgress = () => {}) {
     const undated = (contest) => !contest.startTimeSeconds && !contest.startTimeUnavailable;
