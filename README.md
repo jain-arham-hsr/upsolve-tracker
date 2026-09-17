@@ -79,7 +79,8 @@ picks the division matching your rating.
 site hasn't published its problems and difficulties, and rather than making you come back
 and try again it's parked in a **Waiting** strip at the top of the Contests tab and retried
 on every refresh. It joins the queue by itself once the data lands, and the row tells you
-what it's waiting on.
+what it's waiting on. A CodeChef contest added the day it ends usually waits briefly for its
+difficulties this way.
 
 Codeforces rounds wait for the site's own ratings rather than being added straight away with
 estimated ones, so a round you add minutes after it ends will sit there briefly. That's
@@ -114,9 +115,11 @@ Settings and it stays current by itself.
 - **It's deliberately unhurried.** Requests are spaced out so the sites don't rate-limit you.
   Adding a contest is not instant, and that's on purpose.
 - **`???` instead of a rating** means the site has published the contest but says that
-  particular problem has no difficulty — not that something failed. It's rare, because in
-  practice difficulties arrive at the same time as the problem list. A contest the extension
-  simply hasn't been able to read yet waits instead, and says so.
+  particular problem has no difficulty — not that something failed. It's rare, and only
+  CodeChef produces one. A missing difficulty is given a week from when the contest ran
+  before it's read that way, since CodeChef usually rates within a day or two; until then
+  the contest waits. A contest the extension simply hasn't been able to read yet waits too,
+  and says so.
 - **No topic tags on AtCoder.** It doesn't publish any. Codeforces gym problems usually have
   none either.
 - **A dotted underline under a difficulty means it's an estimate**, not a number the site
