@@ -56,7 +56,8 @@ Confirmed the usual way: renaming the schema's `api_secret` slug reports *"the s
 
 `tests/platforms/codeforces/estimator-accuracy.test.js` records a **known bias**: estimates run below Codeforces' published ratings, by up to ~300 on the hardest problems.
 
-**Do not confuse two different 14-of-15 figures.** The one in *Sampling the field* is
+**Do not confuse two different 14-of-15 figures.** The one in *Sampling the field*
+(`core/platforms/codeforces/CLAUDE.md`) is
 **sampling fidelity** — the ~1,500-competitor sample reproduces what reading the whole field
 would have produced, for 14 of 15 problems. It says nothing about whether the model agrees
 with Codeforces. Measured directly against the 15 published ratings in
@@ -310,12 +311,19 @@ direct child of it. AtCoder and CodeChef are both at once. Codeforces is a site 
 platforms beneath it:
 
 ```
-atcoder/     site.js  api.js  scraper.js  estimator.js  platform.js
-codechef/    site.js  api.js  scraper.js                platform.js
-codeforces/  site.js  api.js  scraper.js  estimator.js
+atcoder/     site.js  api.js  scraper.js  estimator.js  platform.js  CLAUDE.md
+codechef/    site.js  api.js  scraper.js                platform.js  CLAUDE.md
+codeforces/  site.js  api.js  scraper.js  estimator.js               CLAUDE.md
   official/  platform.js
   gyms/      platform.js
 ```
+
+`CLAUDE.md` is the one non-code name the set allows, and it is that site's own
+notes — the routes, the traps, the dead ends already investigated. It sits here
+rather than in the root because a subdirectory's `CLAUDE.md` is loaded only when
+a file in that directory is read, so a site's findings are in context exactly
+when its code is and cost nothing otherwise. `.js` remains closed against
+invention; `module-boundaries.test.js` records the widening and the reason.
 
 **Data arrives two ways — as JSON from a site's API, or as HTML from a page it scrapes — and
 each way is one file.** `api.js` fetches JSON through its own client and reads what came back;
@@ -429,256 +437,24 @@ In the UI the state is an indicator, not a control: the shell's banner shows a d
 
 Three details there are deliberate. **Its header carries a chevron**, which is the opposite of the contest row's rule above — and for the reason that rule gives: a contest row needs none because the expansion appearing under it *is* the indicator, whereas this header collapses to a bar with nothing beneath it, so there was nothing to see and no reason to guess it opened. It points **down when closed and up when open, never sideways**: a chevron pointing right at a row's far right edge is the drill-in affordance — it is what the Stats legend rows use to open a platform panel — so pointing it that way promised another screen when this expands in place. It rotates rather than swapping glyphs, so the two states cannot drift. **The rows carry no "waiting" pill**, since the heading directly above them already says so — the same reasoning that drops the platform mark from a contest's compact expansion. And the band keeps a `margin-bottom` matching the one `#contest-items` already has: flush against the scrolling list, the first real contest read as another waiting row.
 
-### AtCoder
+### The three sites, each in its own file
 
-`core/platforms/atcoder/`. Everything here is read from **atcoder.jp itself**, and
-difficulty is fitted locally. AtCoder Problems (kenkoooo) was the source for all of
-it — problems, contests, submissions and difficulty — and is now used for none of
-it; `kenkoooo.com` is gone from the composed `host_permissions`, which is the
-mechanical check that the dependency is really absent. AtCoder needs no key or
-secret, only a handle (`upsolve_tracker.atcoder_handle`).
+A site's deep dive — its routes, its traps, and the dead ends already
+investigated so they are not investigated again — lives beside its code:
 
-Three routes, and **none is matched by AtCoder's robots.txt**. Every directive
-there ends in a slash — `/contests/*/standings/`, `/contests/*/submissions/`,
-`/submissions/`, `/users/*/history/` — so a path that stops at `submissions` falls
-outside them, while `/submissions/me` and per-submission pages fall inside and are
-deliberately never requested.
+| site | file |
+|---|---|
+| AtCoder | `core/platforms/atcoder/CLAUDE.md` |
+| CodeChef | `core/platforms/codechef/CLAUDE.md` |
+| Codeforces, both platforms | `core/platforms/codeforces/CLAUDE.md` |
 
-| route | auth | gives |
-|---|---|---|
-| `/contests/<id>/tasks` | public | name, start/end, every problem with its task id |
-| `/contests/<id>/submissions?f.User=&f.Status=AC` | session | what you have solved |
-| `/contests/<id>/standings/json` | session | the field, from which difficulty is fitted |
-
-**Why this is a scrape rather than an API call: there is no API.** Every candidate
-JSON route 404s (`/submissions/json`, `/submissions/me/json`,
-`/users/<handle>/submissions`, `/api/…`). The four that exist — `standings/json`,
-`standings/extended/json`, `standings/virtual/json`, `score/json` — cannot see an
-upsolve, because AtCoder freezes standings when a contest ends and upsolving
-happens after that. `results/json` is public but carries only place, performance
-and rating. Reading the site's own client JS settles it: every `$.ajax`/`$.post` in
-`base.js`, `contest.js` and `utils.js` — five calls — is `clarifications/count`, a
-waiting-judge poller, `/servertime`, and `settings/fav/{add,delete}`. AtCoder ships
-jQuery 1.9.1 and no SPA framework; it is a server-rendered Java application, so
-HTML is the interface, not a fallback from one.
-
-**On the ToS, since this reverses an earlier position.** robots.txt (RFC 9309)
-governs *crawlers*; it is a discovery-and-indexing convention, not access control,
-and says nothing about a user agent acting on explicit instruction over pages the
-user is authenticated for. AtCoder's Terms of Use were read and contain **no clause**
-on automated access, scraping, bulk access, rate limits or data reuse — only a
-general prohibition on damaging the service. CodeChef's caution does **not**
-transfer: that rests on its ToS §14, an explicit contractual ban on crawling, which
-is a materially stronger constraint.
-
-Things that are easy to get wrong:
-
-- **Reading a contest's own tasks page is what retired `contest-problem.json`.**
-  1,906 of 9,383 problems belong to more than one contest, and a global list records
-  only the one a problem debuted in. A contest's own page answers for exactly that
-  contest, so the workaround is not needed rather than reimplemented.
-- **Identity is the task id**, not contest + index — `solvedKey` and `problemKey` are
-  both `atcoder:<task_id>`. In a daily-training rerun `abc432_c` is listed as problem
-  E, so anything keyed on the displayed index silently treats them as different
-  problems. `parseTasks` and `parseSubmissions` in `atcoder/scraper.js` both read the id from
-  the row's link for this reason.
-- **Difficulty is unbounded below.** 931 rated problems are negative; ABC471-A is
-  −817. Nothing here may apply the Codeforces estimator's `Math.max(800, …)` floor
-  or its round-to-100 — which is exactly why the two estimators pass their constants
-  explicitly rather than inheriting defaults.
-- **`canEstimate` is `true`, and the estimator had to earn it.** This read `false`
-  for as long as the reasoning was "flipping it would make an unrated problem a
-  hard error, so a signed-out user could not add a contest at all". That was true
-  of the arrangement, not of AtCoder: the signed-out case is *"we could not
-  read the standings"*, which is a failure to ask, not a statement that the
-  problem has no difficulty. It now answers `sourceUnreachable` and waits, and
-  the add works without a session again — by queueing rather than by storing a
-  contest of "???".
-- **The estimator bounds where the source refuses**, which is what makes the flip
-  safe. AtCoder Problems declines in four situations — nobody solved it, everyone
-  did, fewer than forty usable rows, a fit past the ceiling — and each is a
-  situation `codeforces/estimator.js` answers with a bound instead
-  (`actualSolves === 0 ? 0.5`, the 800 floor, gyms of 5–76 parties). Same maths,
-  opposite policy, so a problem was rateable on one site and not the other for no
-  reason a user could act on. `fitTask` bounds now. **The port guarantee is
-  untouched:** the *model* is pinned against that Python's own numbers by
-  `rating-models.test.js`, which must keep passing unchanged; the refusals were
-  policy wrapped around it. `platforms/atcoder/estimator.test.js` carries the one
-  deliberate divergence by name.
-- **The two failure modes are deliberately asymmetric.** Standings failing is *soft*
-  after the add — an already-stored contest fills in on a later refresh — but on the
-  add itself it waits rather than storing nothing. Submissions failing is *loud* —
-  `fetch` follows the 302, so a signed-out request arrives as a healthy 200 containing the login form,
-  and parsing it yields no submissions, which is indistinguishable from having
-  solved nothing. `solved` is sticky, so that would strand the queue silently. Both
-  clients check `response.url`'s path for `/login`; see the refusal hook in each of
-  `atcoder/api.js` and `atcoder/scraper.js`.
-
-**Two costs of leaving kenkoooo, both known trades rather than bugs:**
-
-- **Solved status is now per contest**, because AtCoder publishes no per-user
-  submission list. That is one request per tracked contest per refresh — roughly 10s
-  at seven contests, ~45s at thirty — where the feed cost one or two regardless of
-  queue size.
-- **A task solved in an untracked contest no longer clears.** The feed was
-  user-wide; per-contest reading cannot see a solve made through a contest you do
-  not track (having solved a problem in its original ABC, then tracking a rerun of
-  it). The failure is a stale queue row, not a wrong one, and nothing AtCoder
-  publishes would answer it.
-
-**The original symptom that started all this was not a bug.** An upsolve appeared to
-be ignored; it had been made ~3 minutes earlier and kenkoooo's crawl runs 2–3
-minutes behind (measured 2026-09-03: frontier lag 2.5 → 2.8 → 3.1 min). **Contest
-age was irrelevant** — of 525 submissions indexed in a two-hour window, 78% were to
-contests older than 30 days, 76% older than 90 and 60% older than a year, including
-one 10.5 years old. The natural "recent contests often, old ones on a slow sweep"
-explanation is false, and worth stating so it is not reached for again.
-
-### CodeChef
-
-`core/platforms/codechef/`. No estimator here either: CodeChef publishes `difficulty_rating` and does so promptly — Starters 252 was fully rated within two days of running. `/api/rankings/` is CSRF-gated and returns 403, but nothing needs it.
-
-CodeChef's public API was retired years ago and the site is an SPA, so the only route to its data is the same `/api/` endpoints the front end calls. **Its ToS §14 forbids crawling**, which is why `codechef/api.js` is written to be strictly user-session shaped: only the contest the user is looking at, its problems, and their own solve history; `/api/` paths only (robots.txt disallows `/problems/*`, `/status/*` and `/recent/user`); and a 403 stops and surfaces an error rather than retrying. What would make it a crawler is **enumeration** — paging the ~21,000-problem catalogue. `/api/list/problems` *is* used, but only ever scoped by `group=attempted` and behind a page cap; see below.
-
-Four traps, all confirmed against the live API:
-
-- **`problemsstats.solved` changes type.** Signed out it is an empty **array**; signed in it is an **object** keyed by problem code. Array methods silently see nothing on the shape that actually carries data, so read it with `Object.keys`.
-- **Signed out looks identical to "solved nothing."** `fetchSolvedKeys` therefore refuses outright when `signedIn` is false, so `progress-manager` isolates the failure and leaves existing flags alone. This is the case the stickiness invariant exists for.
-- **`problemsstats` cannot see an upsolve, and neither can the per-problem endpoint.** Both report only what happened *during* the contest. A contest closes to submissions when it ends, so upsolving happens in practice — see the section below, which is why solved status is no longer read per contest at all.
-- **Two out-of-band difficulty values**, both arriving as strings: `-1` for unrated (74% of the catalogue) and `9999`. Both become null. `9999` is the dangerous one — it is also the queue's own sort-last sentinel, so passing it through would read as a legitimate, very hard problem. **A null does not reach storage on a contest that has just run**, though: CodeChef declares `capabilities.ratingGraceMs` of a week, so for that long an unrated problem makes the whole contest wait and retry instead of storing "???". The adapter's job is unchanged — it still reports `-1` and `9999` as null — and the decision is `contest-manager.js`'s, which is why `tests/platforms/codechef/platform.test.js` still asserts the null at adapter level while `tests/contest-gap-policy.test.js` asserts what becomes of it.
-- **A failed per-problem fetch is not evidence that CodeChef has no rating.** Difficulty
-  costs one request per problem, and conflating a failure with an absence stored `???` for
-  problems CodeChef *had* rated. The contest waits and retries instead — the general rule at
-  the top of this file (`???` means the site says unrated, never "we could not find out"),
-  with the instance that produced it.
-- **Whether a contest is still running is decided by CodeChef's clock, not yours.** The
-  payload lists the problems *during* a contest, so nothing about the problem list says the
-  contest has finished — adding mid-flight would record in-contest results as if they were
-  final. CodeChef reports its own server time beside the contest's end time, and that pair is
-  what the check reads. A local clock that is wrong, or merely in a different timezone, would
-  otherwise decide it.
-- **`/START252` is a parent contest** with an empty problem list and no error. Divisions are rating-banded, so the user's own rating (from `codeChefUserData`) selects the one they competed in; with no known rating it names the divisions rather than guessing.
-
-Costs one request for the contest plus **one per problem** — difficulty and tags appear on no bulk or contest-level response, signed in or not. That is ~9 for a Starters division, still fewer than a Codeforces add. Tags mix real topics with the setter's handle and the contest code (`['combinatorics','raysh07_adm','start252','trees']`), so `cleanTags` strips both.
-
-`codechef/scraper.js#parseDashboard` is the one place CodeChef's markup is read, extracting `window.codeChefUserData` from `/dashboard` by **balanced-brace slicing** — a non-greedy regex stops at the first `};` inside a nested object or a string. It returns `null`, never a default: a guessed handle would look like a signed-in session.
-
-**It reads that global out of a `<script>` element, which is a DOM node like any other.** This file and AtCoder's namesake both used to regex the raw HTML *string* instead, which made them look like an exception to the folder they sit in — an exception this file spent a paragraph excusing. It was expedience, not necessity. Selecting the script is what made every page parser take a `Document`, and it removed the last consequence of the split: AtCoder's `identify` had been fetching its page as a string and hand-building a `Document` from it *because the two parsers disagreed about their input*. One `getDocument` now, and **`new DOMParser` appears in exactly one file in the tree**, `services/site-client.js` — asserted by `module-boundaries.test.js`.
-
-Note `solvedKey` is `codechef:<problem_code>`. The same problem runs in every division of a Starters, so solving it in Div 4 clears it from a tracked Div 3.
-
-#### Solved status is read per user, not per contest
-
-A CodeChef contest stops accepting submissions when it ends, so **upsolving happens in practice mode**. `problemsstats.solved` on the contest payload reflects in-contest submissions only, and so does `problem_status` on the per-problem endpoint — both were tried. Reading either meant a CodeChef problem solved after its contest stayed in the queue forever, which made the whole platform untrackable past contest day.
-
-So `fetchSolvedKeys` is now user-wide, matching Codeforces' `user.status` and AtCoder's submissions feed; its `contests` argument is unused. It reads the practice page's own source, `GET /api/list/problems?group=attempted`, and keeps the rows CodeChef marks Accepted.
-
-Four things that are easy to get wrong:
-
-- **`status === 1` is Accepted**, from the practice bundle's own map: `{0: Unattempted, 1: Accepted, 2: Partially Correct, 3: Wrong Answer, …}`. Match that value explicitly rather than "anything but 0" — `solved` is sticky and never cleared, so a false positive hides a problem permanently while a false negative costs one refresh. `2` is Partially Correct, excluded for the same reason `partially_solved` always was.
-- **`page` is zero-based.** Page 1 silently skips the first hundred rows.
-- **`start_rating` must be `-1`.** A range starting at 0 drops every unrated problem — 5,519 of 21,488 survive that filter.
-- **Only the attempted-problems route needs a session; the rest is public.** Measured
-  anonymously: `/api/contests/START252D` answers `success` with all 8 problems, and
-  `/api/contests/START252D/problems/IOI7` answers with `difficulty_rating` and `user_tags`.
-  So a `🔒` on the whole platform would be wrong. What is *not* public is the one below —
-  and it fails in the dangerous direction, answering `success` while ignoring the filter,
-  where AtCoder's gated routes redirect to `/login` and are caught loudly. Adding a CodeChef
-  contest does still require a session, but that is `establishIdentity`'s doing, not
-  CodeChef's.
-- **The page cap is load-bearing.** Signed out, `group=attempted` is *ignored* and the endpoint answers with the whole catalogue. If that ever happens signed in, paging to `count` would walk 21,000 rows and become exactly the sweep this client forbids — so `attemptedProblems` refuses when `count` exceeds `MAX_ATTEMPTED` rather than continuing.
-
-Dead ends, so they are not re-investigated: the profile page's solved list carries problem **names only**, no codes or links; "Recent Activity" is AJAX from `/recent/user`, which robots.txt disallows; and the listing endpoint has **no** status filter and **no** `contest_code` filter, so "just my solved ones" and "just this contest's" are both unavailable.
-
-#### Some problems were never mirrored to practice, and can never be solved again
-
-A contest closes to submissions when it ends, so upsolving happens at `/problems/<CODE>` — and **some older problems were never added there**. `START32C/problems/MAXTHEMIN` still renders its statement inside the contest, but `codechef.com/problems/MAXTHEMIN` 404s. There is nowhere left to submit it. Since `solved` is only ever set true, such a problem would otherwise sit in the queue forever.
-
-`is_added_to_practice`, on each entry of the **contest** payload's `problems` map, answers this exactly, and costs nothing: `fetchContestRecord` already has that payload in hand. Verified against START32C, where it is false for MAXTHEMIN and true for the other nine, cross-checked against the route it predicts (`/api/contests/PRACTICE/problems/MAXTHEMIN` → 404, `.../VOLCONTROL` → 200).
-
-**How common, so it need not be re-surveyed:** 13 of 327 problems (~4%) across 37 sampled contests, in 10 of them. It is an *older*-contest phenomenon — everything from START95 onwards was clean (95, 100, 105, 110, 120, 150, 180, 210, 240, 252), as were the Cook-Off and Lunchtime rounds sampled. The affected codes skew towards non-standard problems (`LEARNSQL`, `RANKLISTPAGE`, `WATESTCASES`, `ON_OFF`), which suggests SQL and interactive tasks are what the practice archive does not take — a guess from the names, not verified. Note a shared problem is flagged in every division it ran in: MAXTHEMIN is unmirrored in all four of START32 A–D.
-
-Two neighbouring fields do **not** answer it, so they should not be tried again. `problem_url` is `/problems/MAXTHEMIN` even for the problem that 404s there — the URL lies, the boolean does not. And `is_direct_submittable` is false for *everything* when signed out, because it tracks login state rather than mirroring.
-
-Such a problem stores `upsolvable: false`. The key is **written only when it is false**; absent means upsolvable, which is every problem on Codeforces and AtCoder, both of which serve their whole history from a stable per-contest route. This is a data flag rather than a capability, so nothing outside `platforms/codechef/` decides what makes a problem unreachable and no view branches on the platform.
-
-Four things about it are deliberate:
-
-- **It is dropped in `pending-problems.js`, not in each view.** That is the single choke point the queue, the platform ring and both stats histograms all run through, so they cannot disagree about what "pending" counts. `tag-service.js` is the one iterator that bypasses it — `countPendingTags` walks contests directly — so it repeats the guard by hand, or the tag bars would count problems the coverage line directly above them has excluded.
-- **The contest's own expansion opts back in**, via `collectPendingProblems(contests, { includeUnupsolvable: true })`. Hiding the row there would make the contest look shorter than it is and give no clue why. It renders muted with a `⚠` whose title explains it; the wording names no platform, since `problem-row.js` is shared by all three. The mark goes **inside** the name cell — `.contest-problems` declares four columns and each compact row borrows them with `subgrid`, so a fifth child drops onto an implicit row of its own. The `~` rating flag *did* have that bug, latently, until the flag started firing on every estimated Codeforces rating and put a stray `~` on the line below most rows of a gym's expansion; it now lives inside the rating cell. `tests/problem-row.test.js` counts a compact row's children rather than checking where a mark sits, since that is the invariant and it is what catches the next one. And it **leads** the name rather than trailing it: `.compact-name` truncates with an ellipsis, so a trailing mark is clipped away for exactly the long titles that most need explaining. It shipped trailing once and was invisible on screen — "Maximize the Minim…" rendered muted with no mark and no clue why — while the test, which matched the HTML string, passed.
-- **The contest is deliberately not auto-deleted.** `progress-manager.js` is untouched: an unupsolvable problem never gets `solved = true`, so `allSolved` stays false and the contest keeps its place on the Contests tab with the warned row visible. It leaves only when removed by hand. Folding the flag into `allSolved` would delete the contest and the warning with it, which is the opposite of the point.
-- **`refreshPracticeFlags` (in `codechef/platform.js`) runs on every refresh, not on the weekly `publishedDataCheckedAt` stamp that `syncPublishedDifficulty` in `codechef/platform.js` next door uses**, and writes in **both** directions — a problem CodeChef later mirrors has to come back to the queue, so unlike `solved` this is not write-once. It looks **only at contests that still carry a flagged problem**, so the normal fully-mirrored queue costs nothing; reading the *contest* payload rather than the per-problem endpoint is what makes even the flagged case cheap, at one request per affected contest instead of one per affected problem. A contest with nothing flagged is deliberately never re-checked: the only thing that would find is CodeChef *removing* a problem from practice, which does not happen, and paying a request per contest per refresh to look for it would be the sweep this client exists to avoid. A failed re-check leaves the flag alone rather than clearing it — guessing a problem back into the queue on a network blip would undo the point.
-
-**Unconfirmed, and the reason for the fast cadence:** a contest added *hours* after it ends may plausibly report every problem as unmirrored simply because CodeChef has not got to them yet — which would empty the queue for exactly the contest you most want to upsolve. It could not be reproduced: the freshest contests reachable (START252D and DSAMONDAY016, four and six days old) already reported every problem mirrored, so mirroring is evidently prompt. Re-checking every refresh means that case self-corrects on the next one rather than persisting for a week. The first add of a just-finished contest is still the proof.
-
-A `contest.practiceSyncedAt` stamp existed briefly, so a one-time backfill could flag contests stored before this feature without re-running forever. It is gone — the one install was backfilled and its ten CodeChef contests verified against the live API, so per the no-back-compat rule at the top of this file the normaliser came out rather than living in the tree. **Don't reintroduce a stamp to re-check unflagged contests**; that is the sweep the cost argument above rules out. Records written during that window still carry the vestigial key, and nothing reads it.
-
-Note the expansion's opt-in is the one part of this **no unit test reaches** — removing it leaves the whole suite green. `npm run smoke` covers it: the store seeds START252D with an unmirrored problem, and the run fails unless the queue omits it while the contest's expansion lists it with exactly one mark. Confirmed the usual way, by removing each piece and watching the run report the original symptom.
-
-### Codeforces is one site with two platforms
-
-`codeforces/official/` and `codeforces/gyms/` are the two platforms of one site. They were one
-platform with two subtypes, and six modules independently asked which one they had — six
-conditions that had to agree with nothing checking that they did. One had already failed that
-way: `needsSync` read `contest.type !== "OFFICIAL"` on a record built before `type` was stamped on
-it, so every official add silently skipped its published ratings. **The class answers that
-question now**, and every one of those branches is gone.
-
-They are genuinely different pipelines, not two flavours of one:
-
-| | official | gym |
-|---|---|---|
-| roster | `contest.standings` (unsigned) | `contest.standings` (signed), or the problems page when standings are hidden |
-| ratings/tags | `problemset.problems` + standings | standings only |
-| field | `ratingChanges`, else sampled standings rows | standings rows, or `contest.status` parties |
-| API methods | `publicContestStandings`, `contestRatingChanges`, `problemsetProblems` | `contestStandings`, `contestStatus` |
-| HTML | **none at all** | none, unless the standings are hidden |
-
-**What they share is the site, and neither platform holds any of it.** `codeforces/site.js`
-is the origin, mark, host permission, rank colours and keys both classes take on;
-`codeforces/api.js` is the signed client and the signing (SHA-512 over
-`rand/method?sortedParams#secret`), every JSON route either platform reads, the account answers
-— `identity`, `accepted`, `fromSettings` — that the base's defaults work through so neither
-platform overrides an account hook, the three field readers (`officialField`, `gymField`,
-`partyField`, all ending in one `partyRatings`), and the pure readers of what came back: the
-applier that takes a standings response's published ratings and tags, the summariser that
-rebuilds a hidden gym from its submissions, and the sampling that picks which standings rows an
-official field is measured from. `codeforces/scraper.js` is the page client and the one page.
-`codeforces/estimator.js` is the fit both run. Until this shape existed the two folders held
-744 byte-identical lines with a test forbidding them to diverge.
-
-Three consequences worth knowing before changing anything here:
-
-- **The duplicated `user.status` fetch is load-bearing.** `progress-manager.js` loops
-  platforms, so a refresh reads the whole account's submissions twice. The response carries
-  no gym/official marker, so each platform stamps its own `solvedKey` prefix on the same
-  stream and `applySolvedStatus` looks up by the prefix of the platform that *owns* the
-  contest. Skip either fetch and that platform's solves stop clearing.
-- **They share one request budget.** The signed client is one object in `api.js`, named
-  `budget: "codeforces-api"`; without that, two instances each honouring a 2 s gap would serve
-  one request per second to codeforces.com.
-- **The signed API never refuses at the transport** — a bad key is a 200 with
-  `status: "FAILED"` — so it goes through `site-client.js` with a direct `fetchImpl` and a
-  no-op `refusal`, and `tests/platforms/codeforces/api.test.js` pins the string that is hashed, since a
-  wrong `apiSig` is indistinguishable from a bad key. **One method is deliberately unsigned**:
-  `publicContestStandings`, because Codeforces serves a non-gym standings only to an
-  anonymous request with no extra parameters, and signing appends two. That method is also the
-  one no adapter test reaches, since they all stub the service — which is how it once shipped
-  calling a pacer that no longer existed. The API test now drives it through a fetch stub.
-
-**The one page Codeforces still reads** is `/gym/<id>`, for a gym whose standings the setter
-hid: it answers `FAILED` to `contest.standings`, and the problems page is the only page such
-a contest renders. It is the definitive problem list — a problem nobody attempted appears in
-no submission, so a list rebuilt from `contest.status` would come out silently short.
-`CodeforcesScraper#problemsPage` is how that page is read, through the page client with the
-session cookie and throttling tuned against the live site; `module-boundaries.test.js` pins that
-`codeforces/scraper.js` makes exactly one page read and that it is not a standings page. So **an
-add needs no codeforces.com tab** unless the gym's standings are hidden. Three scrapes went
-before that: the official roster and its field sampling (both already in `contest.standings`),
-and the gym roster (the same call was made anyway, and the API's counts overwrote the page's).
-The recorded reason for the gym scrape — "a gym's roster has no API source: its standings
-need signing" — did not survive checking: needing a key is not an obstacle when the key is in
-hand.
+**These are not loaded at session start.** A subdirectory's `CLAUDE.md` is pulled
+in when a file in that directory is read, which is the whole reason the split
+exists: this file had grown past its size limit, and most of what was in it is
+true of exactly one site. So anything that must hold across all three stays
+here; anything true of one site belongs in that site's file. Read a site's file
+before changing that site's code — much of it is measured findings that are
+expensive to rediscover and impossible to guess.
 
 ### Requests go through a page, not from the panel
 
@@ -917,238 +693,14 @@ inside the bracket, so they differ in path, not result. `Math.floor` is kept for
 fidelity to the source and for line-by-line diffability, not for safety — don't
 record it as a trap.
 
-### Sampling the field (`codeforces/estimator.js`)
+### Sampling, published ratings, and the Codeforces HTML
 
-When `contest.ratingChanges` is empty — exactly the freshly-finished contest you most want to upsolve — the participant distribution comes from the standings **rows**, which `fetchContest` already fetched for the roster and passes along in `context`. So the rows are free; what is not free is turning them into ratings, at one throttled `user.info` per 250 handles. A 15,000-entrant Div. 3 is ~60 calls where a sample of ~1,500 is seven. `stratifyRows` takes that sample.
-
-**This used to read ~32 paginated standings pages over the throttled HTML client**, and the strata are unchanged — only the source is. Everything that went with it was a consequence of pagination rather than of sampling: the page-count sanity guard, the partial-last-page measurement, the walk-every-page fallback. A row count is authoritative, so none of them has anything left to guard against. It also removed the last Cloudflare-exposed request on the official path, and a second ~8.5 MB fetch of a response already in memory (`publicContestStandings` is not cached; only the problemset is, for 60 s).
-
-`BLOCK` is still 50 because that is what a standings page held, and the accuracy fixtures were captured against those boundaries.
-
-**Do not "simplify" this to a uniform random sample of pages.** It was tried and measured: standings are rank-ordered, so a page is a narrow band of near-identical ratings rather than a random slice. Sampling pages at random is cluster sampling with near-total intra-cluster correlation — 20 pages of 50 behaves like 20 draws, not 1000 — and estimates land 400–800 points off. Spreading pages evenly fixes the variance but biases estimates *downward*, because a random start offset can skip the very top of the field, and hard problems are decided almost entirely by the strongest few competitors.
-
-What works, and what's implemented, is two strata:
-
-- **Head** — `HEAD_PAGES` (10) read in full at scale 1. Small, but it's what rates the hard problems.
-- **Tail** — `TAIL_PAGES` (20) at even intervals over the remainder, scaled by the competitors each represents.
-
-Verified against **real** rounds captured in `tests/fixtures/real-contest-fields.json` (rank order, pre-contest ratings and in-contest solve counts, all from the API): 14 of 15 problems reproduce the full-field rating exactly, one is 100 off. Real rank/rating correlation is about -0.65, not -1, so blocks cluster less than a synthetic sorted field suggests — don't re-verify this with simulated data. Fields of 30 blocks or fewer are taken whole, since sampling would save nothing worth the precision.
-
-**Gyms never sample, and never need to.** A gym's whole field arrives in one
-`contest.standings` response and is 5–76 parties — small enough to rate outright, and far too
-small to sample from. That size is also why a gym estimate is so much noisier than an official
-one: the model is fitting tens of people where an official round gives it thousands.
-
-**`tests/platforms/codeforces/estimator.sampling.test.js` measures a *model* of the sample, not the code** — `stratifiedSample`, written in that file — because that is what makes the accuracy claim checkable against a captured field. So it also asserts that `stratifyRows` reproduces that model, including *positionally*: a head that sampled the bottom 500 would match on every count and be the exact mistake this design exists to avoid. Without that, the two could drift and every accuracy test would still pass — which is precisely what was possible while production read HTML and the test sliced an array.
-
-#### Gyms whose standings Codeforces has hidden
-
-A gym can be set to **"Standings will not be visible as original contest"**. When it is, both
-halves of the acquisition path die at once: the standings page carries no `table.standings`, and
-`contest.standings` answers `FAILED — "contestId: Standings are not available"`. That was terminal
-— and worse than a wait, since a gym could not wait at all, so the contest never even
-became a waiting entry. It now answers `notEndedYet` while running and `unavailable` when finished
-with no visible field. Verified on gym 712373.
-
-**`contest.status` still answers**, and it carries everything the standings response was mined for.
-`codeforces/api.js#summariseSubmissions` derives it — pure over the submission array, so it tests
-without a network stack. Against 712373's real 103 rows it reproduces the contest page exactly —
-A x12, B x12, C x12, D x4, E x6, F x1 — which is the fixture `tests/fixtures/gym-standings-hidden.json`
-and the thing `tests/platforms/codeforces/api.submissions.test.js` pins.
-
-Five things there are easy to get wrong:
-
-- **The problem list comes from the `/gym/<id>` problems page, not from the submissions.** A
-  problem nobody attempted appears in no submission, so a submission-derived list silently yields a
-  contest one problem short — which reads as a shorter contest, not as a failure. The problems page
-  is the one page that still renders for these contests. If it can't be parsed either, the add
-  refuses loudly rather than falling back to the shorter list.
-- **Entering the fallback is a flag on the error, never a message match** — `error.isStandingsHidden`,
-  the same idiom as `isNotPublishedYet` and `isIdentityMismatch`. And the gate is three conditions:
-  gym **and** flagged **and** the problems page parses. An *official* contest with no standings
-  table deliberately still throws: that is far more likely a Codeforces layout change, which
-  CLAUDE.md's rules say must fail loudly rather than be routed around. `tests/platforms/codeforces/gyms/platform.test.js`
-  is mostly about what the branch must *not* touch; it stubs the service to throw if a healthy gym
-  ever reaches `contestStatus`.
-- **Practice submissions are excluded, and that is what makes the counts right.** A gym closes when
-  it ends, so practice solves say nothing about how hard a problem was during it — and the estimator
-  is fitted to exactly that quantity. Including them breaks 8 of the 12 derivation tests. Ghost
-  parties are excluded too, matching the standings path, and a party is counted once per problem
-  however many times it resubmits.
-- **`participantTypes` matches `contestStandings`' `CONTESTANT,VIRTUAL`** so both gym paths mean
-  the same thing by a "solve". 712373 happens to have no virtual entrants, so that choice is
-  unexercised there.
-- **With no official submissions at all, `solveCountsRead` is false.** All-zero counts are
-  indistinguishable from "nobody solved anything", and handing those to the estimator floors every
-  problem at 800 (`codeforces/estimator.js`, the floor and zero-solve target) rather than refusing.
-
-The field is recovered from who submitted, through `api.js#partyField`. Everything below
-the handles — `user.info` chunking, `teamRating`, the strata shape — is shared with the
-standings path via `partyRatings` so the two cannot drift. Note this field is **narrower** than a
-standings one: it sees only parties that submitted at least once. A party that entered and
-submitted nothing solved nothing either, so the counts stay consistent with it, but the field skews
-strong.
-
-That matters less than it sounds here, because this path **takes the difficulty Codeforces
-publishes on the problem** (`submission.problem.rating`, stored `ratingSource: "official"`) and
-only estimates what is left. For 712373 that is all six problems, so the estimator never runs — which
-is just as well, since at 12 parties it has almost no signal. Note the *visible*-gym path is
-deliberately unchanged and still estimates everything, even though `standings.problems[].rating`
-carries the same number; changing that would alter contests that already add successfully.
-
-**The problems page names the contest somewhere else**, and reusing
-`findContestName` there is wrong: that page has no `.contest-name`, and its first `.caption` is the
-"→ About Contest" sidebox heading — so the first real add filed the contest in the queue under the
-name "→ About Contest". The name is the sidebar contest box's header link
-(`#sidebar .rtable th a`, whose href is the contest root), which is not a `.caption` at all.
-`findContestNameOnProblemsPage` is separate from `findContestName` for that reason, and
-`tests/platforms/codeforces/scraper.problems-page.test.js` keeps the real sidebar markup plus a test asserting that the
-*standings* chain still returns "→ About Contest" on it — which is what makes the split legible.
-Note the name is read once at add time and never re-read, so a contest added under the wrong name
-keeps it until removed and re-added.
-
-Both halves are now confirmed against the live site: `contest.status` against the API, and the
-problems-page parser by a real add of 712373, which found all six problems with correct indices and
-names. `curl` still gets a 403 from this machine (see below), so the tests remain synthetic apart
-from the captured sidebar markup.
-
-### You cannot fetch Codeforces HTML from a dev machine
-
-`codeforces.com/contest/<id>/standings` answers a plain `curl`/`fetch` with a Cloudflare interstitial — HTTP 403, `cf-mitigated: challenge`, and a "Just a moment" body. **Don't burn time on headers**: sending a browser-like `Accept: text/html` was measured and changes nothing, and `Sec-Fetch-*`, `Origin` and `User-Agent` are forbidden for JS to set, so a fetch cannot be made to resemble a navigation. The response demands things a fetch structurally cannot supply — executing the challenge scripts, and the `Critical-CH` client-hint retry, both of which only navigations do. The API (`codeforces.com/api/*`) is unaffected and answers fine.
-
-**This file used to claim the extension "only gets through because it runs inside a browser with a real session." That was wrong**, and measurement showed it: the panel's requests were never authenticated at all. They worked only because Codeforces was not challenging anonymous traffic, and began failing the moment that changed — no code change was involved, and `git log` confirms it, the last commit touching that path predating the last successful add by four days. See **Requests go through a page, not from the panel** for the measurement and what it forced.
-
-The consequence is that the HTML half of the pipeline is verified against synthetic markup (`tests/platforms/codeforces/gyms/platform.test.js`, `tests/platforms/codeforces/scraper.problems-page.test.js`) and against real *data* pulled via the API (`tests/fixtures/`), but never against a live page. If a selector assumption is wrong, the failure modes are deliberately safe rather than silent: a problems page the parser does not recognise — no table, or a row with no index — returns null and the add refuses loudly, and an unreadable contest name falls back to `Contest <id>`. The residual risk is a refused add, never a wrong rating. Adding a hidden-standings gym in the real extension is the only way to confirm it, and one has been (712373).
-
-### Scraped markup is quarantined in `codeforces/scraper.js`
-
-Every CSS selector and parsing rule for Codeforces' HTML lives in that file — today one page, parsed by `parseProblemsPage`, with its selectors in one block above it and ordered fallback chains (the contest name tries the sidebar header link, then `<title>`). A CF layout change should be a one-block fix.
-
-**Its parser was called `standings-dom.js` for a long time after the standings scrape was deleted**, holding no standings parsing at all, and nothing caught it because nothing tied a parser's name to the page it reads. That is the whole argument for naming a `parse*` function after its page: the name is what makes the next such drift visible.
-
-**A scraper returns `null`, never a plausible default.** This is the important invariant. The old code left solve counts at `0` when the totals row went missing and `parseInt(...) || 0` turned an unparseable cell into a zero — so a markup change didn't break anything visibly, it produced *confidently wrong ratings* that were stored and sorted like real ones. Returning `null` forces the caller to decide.
-
-`contest-manager.js` makes that decision as late as possible: it only refuses when unreadable counts actually matter, i.e. when some problem has no published rating to fall back on. A rated official contest doesn't need the totals row at all.
-
-### Tags and published ratings
-
-Both come from **`contest.standings`**, applied by `codeforces/api.js#applyStandingsProblemData` (`tag-service.js` now only counts tags for the stats view). Ratings are preferred over estimates — same quantity, measured rather than inferred — and `problem.ratingSource` records `"official"` or `"estimated"`. Because CF publishes ratings days after a round, a contest added right after it ends starts estimated and settles on a later refresh.
-
-`problemset.problems` returns all **~11k problems in one request** (~2 MB, memoised 60 s),
-which is what makes it a cheap readiness gate and a tempting difficulty source.
-
-**`problemset.problems` is not the source, and the reason is easy to miss.** It lists each
-problem *once*, under the contest it originated in — so a shared Div. 1 / Div. 2 problem is
-filed under Div. 1 only. Round 1079's Div. 2 (2197) lists just A and B; C–F live under 2196
-with Div. 1 indices. Matching on `contestId-index` finds nothing for them, so the estimator
-rates problems Codeforces has already rated — measured on 2197, D stored 1500 against a
-published 1600 and E2 stored 2100 against 2000. It is not usable as a *roster* either, for the
-same reason: filtering it by contest id would store a contest several problems short, and a
-short contest reads as a small contest rather than as a fault.
-
-**It is not rare.** Of 936 finished Div. 2 rounds, 282 have exactly two problems in the
-problemset and 330 have three or fewer, against five to seven for a standalone round — a
-bimodal distribution whose spike at two is the paired-round signature. So for roughly a third
-of Div. 2 rounds the problemset can never supply most of the ratings, and a re-check reading
-it would leave those estimated permanently while re-fetching them every week forever.
-
-The two sources do **not** differ in timing, which is worth recording so it is not re-tested:
-sampled at the same moment, a round unrated in one is unrated in the other, and a rated one
-carries identical values in both. The difference is coverage alone.
-
-`contest.standings` reports a shared problem's rating under *this* contest's index, because a
-rating belongs to the problem rather than the contest. Four things about that call:
-
-- **It must not be signed.** Codeforces serves a non-gym standings only to *"anonymous GET
-  requests with no extra parameters"*, and the signed call always appends `apiKey` and `time`.
-  A signed request is refused with that exact complaint independently of key validity — so
-  `publicContestStandings` is a bare GET on purpose. Signing it would break it, which is
-  why the comment there is long.
-- **It cannot be trimmed.** `count`, `from`, `handles`, `showUnofficial` and
-  `participantTypes` are all rejected by the same rule, verified across five contests. ~8.5 MB
-  buys seven problem objects out of eleven thousand rows. Read and drop it; never retain it.
-- **Nothing cheaper exists — this was searched for, not assumed.** No API field links the
-  paired contests (a problem carries only `contestId, index, name, type, points, tags,
-  rating`; a contest only `id, name, type, phase, frozen, duration/start/relativeTimeSeconds`).
-  Nor does the HTML: the contest page, the problem statement and the standings page never
-  mention the twin's id. Matching on start time is unsound — 13% of same-start groups are
-  unrelated contests, including ICPC problem sets — and matching on problem name is unsound
-  too, since contest 100 also has a "Friendly Numbers".
-- **Failure is soft on the add.** The estimator covers whatever the call did not, so losing
-  it costs accuracy rather than the contest. On the re-check it is softer still: the stamp is
-  written only on success, so a failed call is retried on the next refresh instead of waiting
-  out another week.
-
-The same rule had left a dead fallback: `estimator.js` answered an empty `ratingChanges` by
-calling `readField` on an official contest, which signs — so it was refused every
-time, leaving the field empty. It now fetches unsigned and hands the payload over.
-
-The tag source differs by contest type:
-
-- **Official** — the same `contest.standings` response the roster comes from, so tags and ratings arrive together and the add pays for one call rather than two. `problemset.problems` is still fetched, but only as the readiness gate (`official/platform.js`'s `inProblemset`), where one ~2 MB request memoised for 60 s answers "has Codeforces published this contest at all" for every contest at once.
-- **Gym** — absent from the problemset entirely. Tags *and the published rating* are lifted from the `problems` array of the standings response that adding a gym already fetches (`codeforces/api.js#applyStandingsProblemData`). Tags are usually empty, since gyms sit outside CF's taxonomy — but **about a third of gym problems carry a `rating`**, and taking it is not optional decoration.
-
-  Those are problems the setter picked from the CF archive rather than preparing in Polygon, so CF still recognises them and serves its own number; problems written for the contest have none and are estimated as before. Measured over the 62 stored gym problems CF also rates, the estimate was a mean **211** off with 14 out by 400+, so ignoring the published value — which this code did until it was noticed — actively mis-sorted the queue. A one-time correction of the affected install was applied through Import rather than left as a normaliser, per the no-back-compat rule at the top of this file.
-
-  **Don't add a recurring gym re-check.** A gym rating is inherited from an already-rated archive problem, so unlike CF's editable tags it never appears later. Re-checking would cost one `contest.standings` per gym per refresh forever, and the gyms with no rated problems would never resolve — the same sweep the CodeChef practice-flag section argues against.
-
-  Note this shrinks the unrated set `estimateMissing` sees, so a fully-rated gym skips the estimator entirely.
-
-  **That duplicate `contest.standings` fetch is gone.** `CodeforcesGyms#fetchContest` fetches the response to count gym solves and keeps it; `fetchContest` carries it in `context` and `CodeforcesGyms#readField` measures the field from it rather than fetching again. It is passed, never stored — the built contest is what reaches `chrome.storage`, and a whole gym's field has no business there. Two things worth knowing before assuming it applied more widely: the official field reads `ratingChanges` first and falls back to the same carried response; and the hidden-standings path has no such response to pass, so it still fetches. `tests/platforms/codeforces/platform.test.js` counts the calls, because nothing about a correct rating says how many requests produced it — this could otherwise regress silently forever.
-
-  Worth knowing before trusting the number: a setter *can* keep the rating and replace the statement — CF supports it directly ([Rewrite Statements in Mashups](https://codeforces.com/blog/entry/84795)), to stop trainees googling the editorial. The official test set is unchanged and the form warns when the formulas differ, so the rating still describes the problem being judged; the residual risk is a rewrite that quietly strips a hint. Of the 62, 55 match exactly one archive problem by name with an identical rating and zero disagreements, and a re-*upload* of a rated contest inherits nothing at all (gym 100001 has no ratings and its problem name drifted to "Spreadsheets").
-
-#### The re-check stops after six weeks
-
-`syncPublishedData` in `codeforces/official/platform.js` re-asks `contest.standings` for a contest that still has a
-problem without an official rating or without tags — at most weekly, and **only
-until six weeks after the round ran**.
-
-The cutoff is what makes it terminate, and it is the part worth not undoing. A
-round Codeforces will never rate — an ICPC challenge, a Kotlin Heroes practice
-round, the H-series of a marathon — stays incomplete by definition, so without a
-cutoff it is re-fetched every week for the life of the queue, at 6.5–8.5 MB a time —
-the response scales with turnout, so the figure quoted elsewhere in this file varies for
-that reason rather than through disagreement.
-That is the same sweep the CodeChef practice-flag and gym-recheck sections argue
-against, arrived at from a different direction.
-
-Three details are deliberate:
-
-- **It is measured from `contest.startTimeSeconds`, not from the last check or
-  the add.** A stamp that moves every time we look can never bound anything; the
-  run date is fixed, so a contest provably leaves the rotation and never
-  re-enters it. `addedAt` is the fallback when the start time is null, since a
-  contest that cannot be dated is better bounded by something than by nothing.
-- **`startTimeSeconds` is epoch *seconds* while every other stamp on a record is
-  milliseconds.** Comparing them directly is off by a factor of 1000 and dates
-  every contest to 1970, which silently puts the whole queue past the cutoff and
-  disables the re-check entirely — a failure with no symptom except ratings that
-  quietly stop converging. `tests/platforms/codeforces/official/platform.test.js` pins it.
-- **There is no per-refresh cap**, unlike AtCoder's `syncMetadata`, and that is a
-  decision rather than an omission. A cap interacts badly with the cutoff: with
-  several stale contests and an infrequent refresher, a capped rotation gives
-  each contest one look every few refreshes, and one that loses that race ages
-  past six weeks *before* it ever converged — causing the exact failure the
-  re-check exists to prevent. The weekly gate and the six-week window bound the
-  work between them, and the steady state is small, since only a round added
-  within days of running is stale at all.
-
-The add does **not** run this pass. `fetchContest` has already applied every
-rating and tag the standings carry, so calling it again would re-fetch the same
-~6.5 MB response to learn nothing — which is why the add stamps
-`publishedDataCheckedAt: Date.now()` rather than `null`.
-
-`contest.publishedDataCheckedAt` records *when* the platform was last asked for what it publishes, which is what distinguishes "not fetched yet" from "genuinely untagged" — without it, contests whose problems have no tags would be re-requested forever.
-
-**Two different things leave a problem unrated, and only one of them is real.** A problem
-shared with the paired division is filed under *that* division and simply is not listed under
-this contest — its rating exists, and `contest.standings` reports it under this contest's own
-index. Separately, **283 of the ~11k problemset entries (about 2.5%) are listed with no rating
-at all**, which is the genuine case and the only one the estimator should ever see. Conflating
-them is what made the old problemset-based re-check look like it was doing something.
-
-CF tags are editable after publication, so a problem can gain tags days later — about 1.6% of the problemset is untagged at any time. `syncPublishedData` in `codeforces/platform.js` therefore re-checks a contest that still has bare problems, but only once a week, and only until the round is six weeks old; a contest where every problem is tagged and officially rated is never re-requested. It runs from the refresh only — the add has already applied whatever the standings carry — and costs one `contest.standings` (~6.5 MB) per stale contest, which the weekly gate and the cutoff bound between them.
+All Codeforces' own, and all in `core/platforms/codeforces/CLAUDE.md`: how a
+freshly-finished official field is sampled down to ~1,500 competitors and why a
+uniform random sample was measured and rejected; why a dev machine cannot fetch
+Codeforces HTML at all; where the scraped markup is quarantined; and how tags
+and published ratings arrive, including the six-week cutoff that makes the
+re-check terminate.
 
 ### Start times
 

@@ -732,8 +732,16 @@ test("Codeforces signs in exactly one place, and it is the API", () => {
  * beside `submissions.js` doing something unrelated, and `solve-stats.js`
  * returned a contest's name, problems, ratings, tags, start time and phase,
  * of which counts were one field.
+ *
+ * `CLAUDE.md` is the one widening, and it is not code: it is the site's own
+ * documentation, which used to live in the root `CLAUDE.md` until that file
+ * outgrew its size limit. A subdirectory's `CLAUDE.md` is loaded only when a
+ * file in that directory is read, so putting each site's notes beside its code
+ * is what keeps them in context exactly when they are relevant and out of it
+ * otherwise. It says nothing about what the site *does*, which is the property
+ * the rest of this set protects, and `.js` is still closed against invention.
  */
-const SITE_FILES = new Set(["site.js", "api.js", "scraper.js", "estimator.js", "platform.js"]);
+const SITE_FILES = new Set(["site.js", "api.js", "scraper.js", "estimator.js", "platform.js", "CLAUDE.md"]);
 const SITE_REQUIRED = ["site.js", "api.js"];
 const CHILD_FILES = new Set(["platform.js"]);
 
