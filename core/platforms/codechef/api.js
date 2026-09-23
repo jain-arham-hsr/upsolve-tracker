@@ -126,6 +126,10 @@ export class CodeChefApi extends Api {
    * @returns {Promise<object[]>} rows carrying at least `code` and `status`
    */
   async attemptedProblems(onProgress = () => {}) {
+    // Once, not per page: the list arrives whole in pages of 100, so a count
+    // would only ever read "87 of 87" after the one request most accounts need.
+    onProgress("Checking your CodeChef submissions…");
+
     const rows = [];
     let total = null;
 
@@ -158,7 +162,6 @@ export class CodeChefApi extends Api {
       if (batch.length === 0) break;
 
       rows.push(...batch);
-      onProgress(`Checking CodeChef solves — ${Math.min(rows.length, total)} of ${total}…`);
     }
 
     return rows;
