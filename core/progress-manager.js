@@ -137,7 +137,12 @@ async function syncPlatforms(trackedContests, onProgress) {
         );
       }
 
-      const keys = await platform.fetchSolvedKeys(session, mine, onProgress);
+      // Everything this platform does is one step on the status strip: its
+      // messages replace each other freely, and only the platform as a whole
+      // is held to the strip's minimum.
+      const report = (message) => onProgress(message, { step: platform.id });
+
+      const keys = await platform.fetchSolvedKeys(session, mine, report);
       keys.forEach((key) => solvedKeys.add(key));
 
       // Verified in the same call as the identity, so no extra request.
@@ -145,7 +150,7 @@ async function syncPlatforms(trackedContests, onProgress) {
 
       // Fill in metadata for contests still missing it. Handed only this
       // platform's contests, since these match on bare contest ids.
-      await platform.syncMetadata(session, mine, onProgress);
+      await platform.syncMetadata(session, mine, report);
 
       anySucceeded = true;
     } catch (error) {

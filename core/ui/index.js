@@ -24,12 +24,12 @@ import {
 } from "../waiting-contests.js";
 import { escapeHtml } from "./escape-html.js";
 import { platformIcon } from "./platform-icons.js";
+import { StatusQueue } from "./status-queue.js";
 
 // Long enough to read a one-line rating note before the backup step
-// replaces it.
+// replaces it — twice the strip's ordinary minimum, since it is a sentence
+// to read rather than a stage to glance at.
 const RATING_NOTE_HOLD_MS = 3000;
-
-const holdFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Inline so it inherits the header's colour and hover transition, which a
 // colour emoji would ignore. Knobs are filled with the header background so
@@ -63,6 +63,20 @@ export class UpsolveApp extends HTMLElement {
     this.btnSettings = this.querySelector("#btn-settings");
     this.btnRefresh = this.querySelector("#btn-refresh");
     this.syncStatus = this.querySelector("#sync-status");
+    // Owns the strip's timing: every step stays up for its minimum. See
+    // status-queue.js for why that is the strip's job and not the callers'.
+    this.status = new StatusQueue({
+      paint: ({ message, tone }) => {
+        this.syncStatus.textContent = message;
+        this.syncStatus.classList.remove("hidden");
+        this.syncStatus.classList.toggle("is-error", tone === "error");
+        this.syncStatus.classList.toggle("is-warning", tone === "warning");
+      },
+      hide: () => {
+        this.syncStatus.classList.add("hidden");
+        this.syncStatus.classList.remove("is-error", "is-warning");
+      },
+    });
     this.tabBar = this.querySelector("#tab-bar");
     this.addBanner = this.querySelector("#add-banner");
 
@@ -170,6 +184,8 @@ export class UpsolveApp extends HTMLElement {
   renderAddBanner(state = {}) {
     const pending = this.pendingContest;
     if (!pending) return;
+    // Mid-add, only the add itself may redraw the banner.
+    if (this.adding && !state.busy) return;
 
     const { match, tracked, waiting } = pending;
 
@@ -206,7 +222,12 @@ export class UpsolveApp extends HTMLElement {
     // survive the network work below.
     const dirHandle = await verifyExportPermission();
 
+    // The banner stays on "Adding…" until the strip has shown the add's last
+    // message: storage changes redraw it mid-add, and "Added" appearing while
+    // the strip still narrates the add reads as the two disagreeing.
+    this.adding = true;
     this.renderAddBanner({ busy: true, label: "Adding\u2026" });
+    let bannerState = {};
     // Empty until read: a failed read then yields no note rather than a stuck
     // banner, since only a read inside the try reaches the finally.
     let ratingsBefore = {};
@@ -216,15 +237,17 @@ export class UpsolveApp extends HTMLElement {
 
       // The stored record comes back, which is what lets the banner name the
       // resolved division rather than the parent code the URL carried.
+      // Every stage of one add is one step, so they replace each other freely
+      // and only the add as a whole is held to the strip's minimum.
       const contest = await processNewContest(pending.url, (message) =>
-        message === null ? this.clearSyncStatus() : this.setSyncStatus(message),
+        this.setSyncStatus(message, { step: "add" }),
       );
 
       pending.tracked = contest;
-      this.renderAddBanner();
 
-      // One message, not two: the add shows no "Writing backup…", so a
-      // backup outcome posted after the rating note would flash it away.
+      // One message, not two: the rating note and the backup outcome close
+      // the same add, and as separate steps the strip would spend a second
+      // minimum on what is one outcome.
       const outcome = await backUp(dirHandle);
       const notes = [
         await ratingChangeMessage(ratingsBefore),
@@ -249,7 +272,6 @@ export class UpsolveApp extends HTMLElement {
           contestId: pending.match.contestId,
           lastError: error.message,
         });
-        this.renderAddBanner();
         // The waiting entry is stored, and it travels in the backup like
         // everything else in storage — so this branch backs up too.
         const outcome = await backUp(dirHandle);
@@ -263,10 +285,12 @@ export class UpsolveApp extends HTMLElement {
         this.setSyncStatus(notes.join(" · "), { sticky: true });
       } else {
         this.setSyncStatus(error.message, { sticky: true });
-        this.renderAddBanner({ label: "Add" });
+        bannerState = { label: "Add" };
       }
     } finally {
-      this.clearSyncStatus();
+      await this.clearSyncStatus();
+      this.adding = false;
+      this.renderAddBanner(bannerState);
     }
   }
 
@@ -348,16 +372,17 @@ export class UpsolveApp extends HTMLElement {
       // then gets its solved status marked and lands in the same backup write,
       // rather than sitting a whole refresh behind.
       const { added: addedWaiting } = await retryWaitingContests((message) =>
-        this.setSyncStatus(message),
+        this.setSyncStatus(message, { step: "retry-waiting" }),
       );
 
       // 4. Run the sync logic, reporting each stage as it starts. A rating
       // that moved is announced as its "Updating your queue…" step, and
       // `hold` is how long that step then stays up — the length is the
       // panel's call, so progress-manager only asks for it.
-      const progress = Object.assign((message) => this.setSyncStatus(message), {
-        hold: () => holdFor(RATING_NOTE_HOLD_MS),
-      });
+      const progress = Object.assign(
+        (message, options) => this.setSyncStatus(message, options),
+        { hold: () => this.status.extendLatest(RATING_NOTE_HOLD_MS) },
+      );
       const { removed: removedContests, failures } = await updateSolvedStatus(
         progress,
         { ratingsBefore },
@@ -374,8 +399,8 @@ export class UpsolveApp extends HTMLElement {
       await this.refreshCurrentView(removedContests);
 
       // 7. A refresh that quietly grew the backlog is easy to miss, so say
-      // what arrived — in one message with the backup outcome, since the
-      // strip shows one at a time and either would flash the other away.
+      // what arrived — in one message with the backup outcome, since both
+      // close the same refresh and two steps would hold the strip twice.
       const closing = [];
       if (addedWaiting.length > 0) {
         const names = addedWaiting.map((entry) => entry.id).join(", ");
@@ -404,10 +429,11 @@ export class UpsolveApp extends HTMLElement {
       console.error("Refresh failed:", error);
       this.setSyncStatus(`Sync failed: ${error.message}`, { sticky: true });
     } finally {
-      // 9. UI Feedback: Stop spinning
+      // 9. UI Feedback: stop spinning — once the strip has shown the last
+      // step, so the button does not say "done" while it is still narrating.
+      await this.clearSyncStatus();
       this.btnRefresh.classList.remove("spinning");
       this.btnRefresh.disabled = false;
-      this.clearSyncStatus();
     }
   }
 
@@ -415,23 +441,17 @@ export class UpsolveApp extends HTMLElement {
    * The stages have no measurable total, so this reports what is happening
    * rather than how far along it is.
    */
-  setSyncStatus(message, { sticky = false, tone = sticky ? "error" : null } = {}) {
-    clearTimeout(this.syncStatusTimer);
-    this.syncStatus.textContent = message;
-    this.syncStatus.classList.remove("hidden");
-    this.syncStatus.classList.toggle("is-error", tone === "error");
-    this.syncStatus.classList.toggle("is-warning", tone === "warning");
-    this.stickyStatus = sticky;
+  setSyncStatus(message, { sticky = false, tone = sticky ? "error" : null, step = null } = {}) {
+    this.status.enqueue(message, { sticky, tone, step });
   }
 
+  /**
+   * The operation is over. Resolves once its last message has had its time on
+   * screen, which is when a caller may say it is done; a note or a failure
+   * then lingers, while progress text goes.
+   */
   clearSyncStatus() {
-    // A failure message outlives the spinner; progress text does not.
-    const delay = this.stickyStatus ? 6000 : 400;
-    this.syncStatusTimer = setTimeout(() => {
-      this.syncStatus.classList.add("hidden");
-      this.syncStatus.classList.remove("is-error", "is-warning");
-      this.stickyStatus = false;
-    }, delay);
+    return this.status.finish();
   }
 
   navigate(componentTagName) {
