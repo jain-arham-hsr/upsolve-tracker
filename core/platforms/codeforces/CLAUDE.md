@@ -43,7 +43,10 @@ Three consequences worth knowing before changing anything here:
   platforms, so a refresh reads the whole account's submissions twice. The response carries
   no gym/official marker, so each platform stamps its own `solvedKey` prefix on the same
   stream and `applySolvedStatus` looks up by the prefix of the platform that *owns* the
-  contest. Skip either fetch and that platform's solves stop clearing.
+  contest. Skip either fetch and that platform's solves stop clearing. The status strip
+  still shows it as **one** step, *"Checking your Codeforces submissions…"* from
+  `api.js#accepted`: `progress-manager.js` keys strip steps by site, so the two platforms'
+  messages merge rather than showing the same step twice.
 - **They share one request budget.** The signed client is one object in `api.js`, named
   `budget: "codeforces-api"`; without that, two instances each honouring a 2 s gap would serve
   one request per second to codeforces.com.

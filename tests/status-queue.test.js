@@ -89,19 +89,19 @@ test("messages of one step replace each other at once, and share one minimum", a
   // its own 1.5 s would slow the strip far behind the work.
   const { queue, painted, advance } = harness();
 
-  queue.enqueue("Checking AtCoder… (1/3)", { step: "atcoder" });
+  queue.enqueue("Checking your AtCoder submissions… (1/3)", { step: "atcoder" });
   await advance(200);
-  queue.enqueue("Checking AtCoder… (2/3)", { step: "atcoder" });
-  queue.enqueue("Checking AtCoder… (3/3)", { step: "atcoder" });
+  queue.enqueue("Checking your AtCoder submissions… (2/3)", { step: "atcoder" });
+  queue.enqueue("Checking your AtCoder submissions… (3/3)", { step: "atcoder" });
   assert.deepEqual(
     painted.map(({ at, message }) => [at, message]),
-    [[0, "Checking AtCoder… (1/3)"], [200, "Checking AtCoder… (2/3)"], [200, "Checking AtCoder… (3/3)"]],
+    [[0, "Checking your AtCoder submissions… (1/3)"], [200, "Checking your AtCoder submissions… (2/3)"], [200, "Checking your AtCoder submissions… (3/3)"]],
   );
 
   // The next step still waits for the minimum measured from the step's start.
   queue.enqueue("Updating your queue…");
   await advance(MIN - 201);
-  assert.equal(painted.at(-1).message, "Checking AtCoder… (3/3)");
+  assert.equal(painted.at(-1).message, "Checking your AtCoder submissions… (3/3)");
   await advance(1);
   assert.deepEqual(painted.at(-1), { at: MIN, message: "Updating your queue…", tone: null });
 });
@@ -110,11 +110,11 @@ test("a step's messages that arrive while it is still queued update it in the qu
   const { queue, painted, advance } = harness();
 
   queue.enqueue("Starting sync…");
-  queue.enqueue("Checking CodeChef — 1 of 3…", { step: "codechef" });
-  queue.enqueue("Checking CodeChef — 3 of 3…", { step: "codechef" });
+  queue.enqueue("Checking your AtCoder submissions… (1/3)", { step: "atcoder" });
+  queue.enqueue("Checking your AtCoder submissions… (3/3)", { step: "atcoder" });
   await advance(MIN);
 
-  assert.deepEqual(painted.map((p) => p.message), ["Starting sync…", "Checking CodeChef — 3 of 3…"]);
+  assert.deepEqual(painted.map((p) => p.message), ["Starting sync…", "Checking your AtCoder submissions… (3/3)"]);
 });
 
 test("extendLatest holds one message longer — the rating note", async () => {
