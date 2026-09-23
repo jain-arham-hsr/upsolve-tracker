@@ -133,7 +133,8 @@ export class CodeforcesApi extends Api {
   }
 
   /** The accepted pairs in the whole account's `user.status`, in one call. */
-  async accepted(handle) {
+  async accepted(handle, onProgress = () => {}) {
+    onProgress("Checking your Codeforces submissions…");
     const submissions = await this.userStatus(handle);
     return submissions
       .filter((submission) => submission.verdict === "OK")

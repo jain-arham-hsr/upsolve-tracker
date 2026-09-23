@@ -137,10 +137,12 @@ async function syncPlatforms(trackedContests, onProgress) {
         );
       }
 
-      // Everything this platform does is one step on the status strip: its
-      // messages replace each other freely, and only the platform as a whole
-      // is held to the strip's minimum.
-      const report = (message) => onProgress(message, { step: platform.id });
+      // Everything this site does is one step on the status strip: its
+      // messages replace each other freely, and only the site as a whole is
+      // held to the strip's minimum. The site, not the platform — Codeforces'
+      // two platforms are one account and sync back to back, so keyed by
+      // platform they showed the same step twice.
+      const report = (message) => onProgress(message, { step: platform.site.id });
 
       const keys = await platform.fetchSolvedKeys(session, mine, report);
       keys.forEach((key) => solvedKeys.add(key));

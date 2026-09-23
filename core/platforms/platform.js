@@ -48,7 +48,7 @@
  *   identify(session)                     → {username, rating}
  *                                                        default: api.identity(handle)
  *   fetchAccepted(session, contests, onProgress)
- *                                          → Accepted[]  default: api.accepted(handle)
+ *                                          → Accepted[]  default: api.accepted(handle, onProgress)
  *   readField({contest, context, session, onProgress})
  *                                          → Status | Field | null   iff canEstimate
  *   estimate(contest, field)              pure; fills the gaps       iff canEstimate
@@ -326,10 +326,13 @@ export class Platform {
     return identity;
   }
 
-  /** A site with a per-user submission list answers in one call. */
+  /**
+   * A site with a per-user submission list answers in one call. This only
+   * hands the call to the site's `Api`, which does the fetching and so words
+   * its own step; the base posts nothing, since it performs nothing.
+   */
   async fetchAccepted(session, _contests, onProgress = () => {}) {
-    onProgress("Checking your submissions…");
-    return session.api.accepted(session.handle);
+    return session.api.accepted(session.handle, onProgress);
   }
 
   /** The bulk contest list this platform dates contests from, where the site has one. */

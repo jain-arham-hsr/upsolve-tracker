@@ -306,3 +306,19 @@ test("refuses a contest too large to rebuild rather than truncating", async () =
     /too many to rebuild/,
   );
 });
+
+test("accepted words its own step, naming Codeforces", async () => {
+  // The base's fetchAccepted only delegates here, so this is the one place
+  // the strip learns whose submissions are being read.
+  const api = new CodeforcesApi("k", "s");
+  api.userStatus = async () => [
+    { verdict: "OK", problem: { contestId: 2266, index: "A" } },
+    { verdict: "WRONG_ANSWER", problem: { contestId: 2266, index: "B" } },
+  ];
+  const messages = [];
+
+  const accepted = await api.accepted("me", (message) => messages.push(message));
+
+  assert.deepEqual(messages, ["Checking your Codeforces submissions…"]);
+  assert.deepEqual(accepted, [{ contest: { id: 2266 }, problem: { index: "A" } }]);
+});
