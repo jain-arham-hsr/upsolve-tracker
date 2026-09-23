@@ -7,6 +7,10 @@ import {
   writeBackup,
 } from "../services/auto-export.js";
 import { hasCompleteSetup } from "../settings/store.js";
+import {
+  getEffectiveRatings,
+  describeRatingChanges,
+} from "../services/user-ratings.js";
 import { processNewContest } from "../contest-manager.js";
 import { LocalDB } from "../services/storage.js";
 import { matchContestUrl, findTrackedContest } from "../platforms/registry.js";
@@ -197,8 +201,13 @@ export class UpsolveApp extends HTMLElement {
     const dirHandle = await verifyExportPermission();
 
     this.renderAddBanner({ busy: true, label: "Adding\u2026" });
+    // Empty until read: a failed read then yields no note rather than a stuck
+    // banner, since only a read inside the try reaches the finally.
+    let ratingsBefore = {};
 
     try {
+      ratingsBefore = await getEffectiveRatings();
+
       // The stored record comes back, which is what lets the banner name the
       // resolved division rather than the parent code the URL carried.
       const contest = await processNewContest(pending.url, (message) =>
@@ -207,6 +216,8 @@ export class UpsolveApp extends HTMLElement {
 
       pending.tracked = contest;
       this.renderAddBanner();
+
+      await this.announceRatingChanges(ratingsBefore);
 
       if (dirHandle && !(await writeBackup(dirHandle))) {
         this.setSyncStatus("Added, but auto-export failed to write the file.", {
@@ -227,9 +238,13 @@ export class UpsolveApp extends HTMLElement {
           lastError: error.message,
         });
         this.renderAddBanner();
-        this.setSyncStatus(waitingExplanation(error, pending.match.contestId), {
-          sticky: true,
-        });
+        // The identity, and with it the rating, was settled before the fetch
+        // that found nothing, so a waiting add can still have moved it.
+        const notes = [
+          waitingExplanation(error, pending.match.contestId),
+          ...(await this.ratingChangeNotes(ratingsBefore)),
+        ];
+        this.setSyncStatus(notes.join(" · "), { sticky: true });
       } else {
         this.setSyncStatus(error.message, { sticky: true });
         this.renderAddBanner({ label: "Add" });
@@ -302,6 +317,9 @@ export class UpsolveApp extends HTMLElement {
     const dirHandle = await verifyExportPermission();
 
     try {
+      // Inside the try so a failed read cannot leave the button spinning.
+      const ratingsBefore = await getEffectiveRatings();
+
       // 3. Retry anything that failed to add because the platform had not
       // published it yet. Before the sync, deliberately: a contest added here
       // then gets its solved status marked and lands in the same backup write,
@@ -327,13 +345,18 @@ export class UpsolveApp extends HTMLElement {
       // is what the queue announces, and a storage event cannot carry it.
       await this.refreshCurrentView(removedContests);
 
-      // 7. A refresh that quietly grew the backlog is easy to miss, so say what
-      // arrived. Reported before failures, which still get the last word.
+      // 7. A refresh that quietly grew the backlog, or re-sorted it because a
+      // rating moved, is easy to miss — so say so. One message, since the
+      // strip shows one at a time. Reported before failures, which still get
+      // the last word.
+      const notes = [];
       if (addedWaiting.length > 0) {
         const names = addedWaiting.map((entry) => entry.id).join(", ");
-        this.setSyncStatus(`Added ${names} — it's published now.`, {
-          sticky: true,
-        });
+        notes.push(`Added ${names} — it's published now.`);
+      }
+      notes.push(...(await this.ratingChangeNotes(ratingsBefore)));
+      if (notes.length > 0) {
+        this.setSyncStatus(notes.join(" · "), { sticky: true, error: false });
       }
 
       // 8. Report a refusal *last*, so nothing overwrites it. A platform
@@ -359,14 +382,34 @@ export class UpsolveApp extends HTMLElement {
   }
 
   /**
+   * One line per site whose rating moved since `before`. Ratings are compared,
+   * not the queue: a rating is the one input that moves a platform's whole
+   * block at once, which is what makes the top of the queue change for no
+   * visible reason.
+   */
+  async ratingChangeNotes(before) {
+    const after = await getEffectiveRatings();
+    return describeRatingChanges(before, after).map(
+      ({ label, from, to }) => `${label} rating change detected (${from} → ${to}). Queue reordered.`,
+    );
+  }
+
+  async announceRatingChanges(before) {
+    const notes = await this.ratingChangeNotes(before);
+    if (notes.length > 0) {
+      this.setSyncStatus(notes.join(" · "), { sticky: true, error: false });
+    }
+  }
+
+  /**
    * The stages have no measurable total, so this reports what is happening
    * rather than how far along it is.
    */
-  setSyncStatus(message, { sticky = false } = {}) {
+  setSyncStatus(message, { sticky = false, error = sticky } = {}) {
     clearTimeout(this.syncStatusTimer);
     this.syncStatus.textContent = message;
     this.syncStatus.classList.remove("hidden");
-    this.syncStatus.classList.toggle("is-error", sticky);
+    this.syncStatus.classList.toggle("is-error", error);
     this.stickyStatus = sticky;
   }
 

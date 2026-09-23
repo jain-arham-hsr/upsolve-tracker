@@ -71,3 +71,33 @@ test("no data anywhere yields an empty map, not zeroes", async () => {
   // A zero would read as a real rating and make every problem look impossible.
   assert.deepEqual(await getEffectiveRatings(), {});
 });
+
+const { describeRatingChanges } = await import("../core/services/user-ratings.js");
+
+test("a rating change is reported once per site, not once per platform", () => {
+  // Codeforces' official and gym platforms share one rating; two lines saying
+  // the same thing would read as two changes.
+  const before = { "codeforces-official": 1223, "codeforces-gyms": 1223, codechef: 1355 };
+  const after = { "codeforces-official": 1346, "codeforces-gyms": 1346, codechef: 1355 };
+
+  assert.deepEqual(describeRatingChanges(before, after), [
+    { label: "Codeforces", from: 1223, to: 1346 },
+  ]);
+});
+
+test("every site whose rating moved is reported", () => {
+  const changes = describeRatingChanges(
+    { "codeforces-official": 1223, atcoder: 500, codechef: 1355 },
+    { "codeforces-official": 1346, atcoder: 525, codechef: 1355 },
+  );
+
+  assert.deepEqual(changes.map((change) => change.label).sort(), ["AtCoder", "Codeforces"]);
+});
+
+test("an unchanged, first or cleared rating is not a change", () => {
+  // A first rating had no earlier order to re-sort; a null is an unrated account.
+  assert.deepEqual(describeRatingChanges({ codechef: 1355 }, { codechef: 1355 }), []);
+  assert.deepEqual(describeRatingChanges({}, { codechef: 1355 }), []);
+  assert.deepEqual(describeRatingChanges({ atcoder: null }, { atcoder: 525 }), []);
+  assert.deepEqual(describeRatingChanges({ atcoder: 525 }, { atcoder: null }), []);
+});

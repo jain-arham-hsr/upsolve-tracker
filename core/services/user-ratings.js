@@ -14,6 +14,8 @@
  * platform-identity.js), so they arrive with an identity attached rather than
  * floating free.
  */
+import { listSites } from "../platforms/registry.js";
+
 const AUTO_KEY = "upsolve_tracker.platform_ratings";
 
 /** @returns {Promise<Record<string, number|null>>} platform id → your rating. */
@@ -40,6 +42,33 @@ export async function storeFetchedRatings(fetched) {
   }
 
   await chrome.storage.local.set({ [AUTO_KEY]: next });
+}
+
+/**
+ * Which sites' ratings moved between two readings of the stored ratings, so the
+ * shell can say why the queue just re-ordered. Without it a contest rating
+ * update silently reshuffles a whole platform's block, which reads as a bug.
+ *
+ * Per **site**, not per platform: Codeforces' two platforms share one account
+ * and one rating, and reporting it twice would read as two changes.
+ *
+ * Only a number becoming a different number counts. A first rating had no
+ * earlier order to change, and a null is an account with no rating at all.
+ *
+ * @returns {{label: string, from: number, to: number}[]}
+ */
+export function describeRatingChanges(before, after) {
+  const changes = [];
+
+  for (const site of listSites()) {
+    const moved = site.platforms
+      .map((platform) => ({ from: before?.[platform.id], to: after?.[platform.id] }))
+      .find(({ from, to }) => typeof from === "number" && typeof to === "number" && from !== to);
+
+    if (moved) changes.push({ label: site.label, ...moved });
+  }
+
+  return changes;
 }
 
 export const RATING_KEYS = { AUTO_KEY };
