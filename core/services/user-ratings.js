@@ -57,7 +57,7 @@ export async function storeFetchedRatings(fetched) {
  *
  * @returns {{label: string, from: number, to: number}[]}
  */
-export function describeRatingChanges(before, after) {
+function describeRatingChanges(before, after) {
   const changes = [];
 
   for (const site of listSites()) {
@@ -69,6 +69,20 @@ export function describeRatingChanges(before, after) {
   }
 
   return changes;
+}
+
+/**
+ * The status-strip sentence for `describeRatingChanges`, or null when nothing
+ * moved. One wording for the refresh and the add alike.
+ */
+export async function ratingChangeMessage(before) {
+  const after = await getEffectiveRatings();
+  const changes = describeRatingChanges(before, after);
+  if (changes.length === 0) return null;
+
+  return changes
+    .map(({ label, from, to }) => `${label} rating change detected (${from} → ${to}). Queue reordered.`)
+    .join(" · ");
 }
 
 export const RATING_KEYS = { AUTO_KEY };

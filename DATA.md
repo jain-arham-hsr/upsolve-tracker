@@ -133,7 +133,7 @@ against the new account.
 | `upsolve_tracker.platform_ratings` | Your rating on each site |
 | `upsolve_tracker.platform_identity` | Which account each site's solved flags belong to |
 | `upsolve_tracker.waiting_contests` | Contests you asked for that the site hasn't published yet, retried on every refresh |
-| `upsolve_tracker.auto_export` | Whether the backup file is kept current |
+| `upsolve_tracker.auto_export` | Whether the backup file is kept current. Not restored by Import, since the folder it writes to isn't in the backup |
 | `upsolve_tracker.platform_filter`, `.stats_scope`, `.expanded_contests`, `.waiting_expanded`, `.tag_rating_range.*` | UI state that should survive switching tabs |
 
 **IndexedDB** (`upsolve_tracker_db`) — deliberately separate, because it must **not** appear

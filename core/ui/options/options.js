@@ -18,11 +18,11 @@
  */
 import { getPlatform } from "../../platforms/registry.js";
 import { saveDirHandle, loadDirHandle, clearDirHandle } from "../../services/secure-store.js";
+import { AUTO_EXPORT_KEY } from "../../services/auto-export.js";
 import { SECTIONS } from "../../settings/schema.js";
 import { readSection, writeSettings } from "../../settings/store.js";
 import { renderSettingsSections, describeIdentity } from "./sections.js";
 
-const AUTO_EXPORT_KEY = "upsolve_tracker.auto_export";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const mount = document.getElementById("settings-sections");
@@ -74,20 +74,25 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ==========================================
   // JOB 2: AUTO-EXPORT & FOLDER PICKER
   // ==========================================
+  //
+  // The flag and the folder are staged together here and written together on
+  // Save, like everything else on the page. Staging only one of them is what
+  // once let auto-export be on with no folder: the folder was saved or cleared
+  // the moment it changed, while the flag waited for a Save that might never
+  // come.
   autoExportCheckbox.addEventListener("change", async () => {
     if (autoExportCheckbox.checked) {
       try {
         pendingDirHandle = await window.showDirectoryPicker();
-        await saveDirHandle(pendingDirHandle);
         folderStatus.textContent = `✓ Folder: ${pendingDirHandle.name}`;
         folderInfo.classList.remove("hidden");
       } catch {
+        // No folder, no auto-export: the box cannot be ticked without one.
         autoExportCheckbox.checked = false;
         console.log("Folder selection cancelled.");
       }
     } else {
       folderInfo.classList.add("hidden");
-      await clearDirHandle();
       pendingDirHandle = null;
     }
   });
@@ -95,7 +100,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   chooseFolderBtn.addEventListener("click", async () => {
     try {
       pendingDirHandle = await window.showDirectoryPicker();
-      await saveDirHandle(pendingDirHandle);
       folderStatus.textContent = `✓ Folder: ${pendingDirHandle.name}`;
     } catch {}
   });
@@ -168,10 +172,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ==========================================
   // JOB 4: SAVE TO STORAGE
   // ==========================================
+  // The pair, written as one: ticked always carries a folder, because the box
+  // cannot be ticked without a successful pick.
+  async function saveAutoExport() {
+    const on = autoExportCheckbox.checked && pendingDirHandle !== null;
+    if (on) {
+      await saveDirHandle(pendingDirHandle);
+    } else {
+      await clearDirHandle();
+    }
+    await chrome.storage.local.set({ [AUTO_EXPORT_KEY]: on });
+  }
+
   saveBtn.addEventListener("click", async () => {
     await Promise.all([
       ...SECTIONS.map((section) => writeSettings(typedValues(section))),
-      chrome.storage.local.set({ [AUTO_EXPORT_KEY]: autoExportCheckbox.checked }),
+      saveAutoExport(),
     ]);
 
     saveMsg.classList.remove("hidden");

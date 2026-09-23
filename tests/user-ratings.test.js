@@ -72,32 +72,40 @@ test("no data anywhere yields an empty map, not zeroes", async () => {
   assert.deepEqual(await getEffectiveRatings(), {});
 });
 
-const { describeRatingChanges } = await import("../core/services/user-ratings.js");
+const { ratingChangeMessage } = await import("../core/services/user-ratings.js");
 
-test("a rating change is reported once per site, not once per platform", () => {
+/** What the strip would say, given the ratings before and those now stored. */
+async function messageFor(before, after) {
+  stubChrome({ [AUTO_KEY]: after });
+  return ratingChangeMessage(before);
+}
+
+test("a rating change is reported once per site, not once per platform", async () => {
   // Codeforces' official and gym platforms share one rating; two lines saying
   // the same thing would read as two changes.
-  const before = { "codeforces-official": 1223, "codeforces-gyms": 1223, codechef: 1355 };
-  const after = { "codeforces-official": 1346, "codeforces-gyms": 1346, codechef: 1355 };
+  const message = await messageFor(
+    { "codeforces-official": 1223, "codeforces-gyms": 1223, codechef: 1355 },
+    { "codeforces-official": 1346, "codeforces-gyms": 1346, codechef: 1355 },
+  );
 
-  assert.deepEqual(describeRatingChanges(before, after), [
-    { label: "Codeforces", from: 1223, to: 1346 },
-  ]);
+  assert.equal(message, "Codeforces rating change detected (1223 → 1346). Queue reordered.");
 });
 
-test("every site whose rating moved is reported", () => {
-  const changes = describeRatingChanges(
+test("every site whose rating moved is reported", async () => {
+  const message = await messageFor(
     { "codeforces-official": 1223, atcoder: 500, codechef: 1355 },
     { "codeforces-official": 1346, atcoder: 525, codechef: 1355 },
   );
 
-  assert.deepEqual(changes.map((change) => change.label).sort(), ["AtCoder", "Codeforces"]);
+  assert.match(message, /Codeforces rating change detected \(1223 → 1346\)/);
+  assert.match(message, /AtCoder rating change detected \(500 → 525\)/);
+  assert.doesNotMatch(message, /CodeChef/);
 });
 
-test("an unchanged, first or cleared rating is not a change", () => {
+test("an unchanged, first or cleared rating is not a change", async () => {
   // A first rating had no earlier order to re-sort; a null is an unrated account.
-  assert.deepEqual(describeRatingChanges({ codechef: 1355 }, { codechef: 1355 }), []);
-  assert.deepEqual(describeRatingChanges({}, { codechef: 1355 }), []);
-  assert.deepEqual(describeRatingChanges({ atcoder: null }, { atcoder: 525 }), []);
-  assert.deepEqual(describeRatingChanges({ atcoder: 525 }, { atcoder: null }), []);
+  assert.equal(await messageFor({ codechef: 1355 }, { codechef: 1355 }), null);
+  assert.equal(await messageFor({}, { codechef: 1355 }), null);
+  assert.equal(await messageFor({ atcoder: null }, { atcoder: 525 }), null);
+  assert.equal(await messageFor({ atcoder: 525 }, { atcoder: null }), null);
 });

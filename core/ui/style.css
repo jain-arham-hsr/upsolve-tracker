@@ -207,6 +207,18 @@ upsolve-stats-view {
   background: rgba(239, 83, 80, 0.5);
 }
 
+/* A nudge rather than a failure — auto-export switched off. Literal amber, not
+   --band-orange: the band colours carry rank meaning, the same reason the
+   error pair above does not borrow --band-red. */
+.sync-status.is-warning {
+  color: #ffcc80;
+}
+
+.sync-status.is-warning::before {
+  animation: none;
+  background: rgba(255, 167, 38, 0.5);
+}
+
 @keyframes syncSweep {
   from {
     transform: translateX(-100%);

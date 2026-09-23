@@ -3,7 +3,8 @@ import { LocalDB } from "../../services/storage.js";
 import {
   BACKUP_FILENAME,
   verifyExportPermission,
-  writeBackup,
+  backUp,
+  AUTO_EXPORT_KEY,
 } from "../../services/auto-export.js";
 import { byStartTimeDesc } from "../../queue-order.js";
 import { describeBackupProblem } from "../../backup-validation.js";
@@ -302,6 +303,9 @@ export class ContestList extends HTMLElement {
     if (!pending) return;
 
     const { contest, entry } = pending;
+    // While the confirm click is fresh: a lapsed folder can only be
+    // re-prompted under user activation.
+    const dirHandle = await verifyExportPermission();
 
     if (entry) {
       await cancelWaiting(entry.platform, entry.contestId);
@@ -315,8 +319,13 @@ export class ContestList extends HTMLElement {
 
     // Storage changed, so the backup has to follow it or the exported JSON
     // drifts from what the panel shows.
-    const dirHandle = await verifyExportPermission();
-    if (dirHandle) await writeBackup(dirHandle);
+    await this.backUpAndReport(dirHandle);
+  }
+
+  /** Writes the backup and puts the outcome, if any, in the shell's strip. */
+  async backUpAndReport(dirHandle) {
+    const outcome = await backUp(dirHandle);
+    if (outcome) this.reportStatus({ ...outcome, sticky: true });
   }
 
   /**
@@ -327,7 +336,10 @@ export class ContestList extends HTMLElement {
     await this.renderAll();
   }
 
-  /** Routes a long-operation message to the shell's status strip. */
+  /**
+   * Routes a message to the shell's status strip: a string for progress, or
+   * `{message, sticky, tone}` for one that has to stay up.
+   */
   reportStatus(message) {
     this.dispatchEvent(
       new CustomEvent("cf-status", { detail: message, bubbles: true }),
@@ -359,10 +371,16 @@ export class ContestList extends HTMLElement {
     this.alertDiv
       .querySelector("[data-import-confirm]")
       .addEventListener("click", async () => {
+        const dirHandle = await verifyExportPermission();
         try {
-          await chrome.storage.local.set(data);
+          // Auto-export belongs to this browser, not the backup: its folder
+          // lives in IndexedDB and never travels in the file. Importing the
+          // flag would switch auto-export on with no folder behind it.
+          const { [AUTO_EXPORT_KEY]: _ignored, ...incomingData } = data;
+          await chrome.storage.local.set(incomingData);
           await this.renderAll();
           this.showInlineAlert(`Imported ${incoming} contest(s).`);
+          await this.backUpAndReport(dirHandle);
         } catch (error) {
           this.showInlineAlert(`Import failed: ${error.message}`);
         }

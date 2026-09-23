@@ -7,7 +7,11 @@ import {
   platformOf,
   contestsOnPlatform,
 } from "./platforms/registry.js";
-import { storeFetchedRatings } from "./services/user-ratings.js";
+import {
+  getEffectiveRatings,
+  storeFetchedRatings,
+  ratingChangeMessage,
+} from "./services/user-ratings.js";
 import {
   settleIdentity,
   clearSolvedForPlatform,
@@ -23,8 +27,12 @@ import {
  *   are returned rather than only logged: refusing silently looks the same to
  *   the user as corrupting silently.
  */
-export async function updateSolvedStatus(onProgress = () => {}) {
+export async function updateSolvedStatus(onProgress = () => {}, { ratingsBefore } = {}) {
   const trackedContests = await LocalDB.getTrackedContests();
+  // The caller's reading when it has one: a refresh can move a rating before
+  // it gets here, in the waiting-contest retry, and that change is this
+  // step's to announce too.
+  const before = ratingsBefore ?? (await getEffectiveRatings());
 
   const { solvedKeys, ratings, failures, anySucceeded } = await syncPlatforms(
     trackedContests,
@@ -39,10 +47,17 @@ export async function updateSolvedStatus(onProgress = () => {}) {
   // Returning before the write keeps a bad sync from touching storage at all.
   if (!anySucceeded) return { removed: [], failures };
 
-  onProgress("Updating your queue…");
+  // A rating that moved re-sorts that platform's whole block, which is this
+  // step's work — so it is this step's message, not a separate one after it.
+  // A message of its own followed a step lasting milliseconds and read as a
+  // flash. It is held for as long as the caller's `hold` asks, *after* the
+  // save, so the queue re-orders while the note says it has.
+  const ratingNote = await ratingChangeMessage(before);
+  onProgress(ratingNote ?? "Updating your queue…");
   const { kept, removed } = applySolvedStatus(trackedContests, solvedKeys);
 
   await LocalDB.saveTrackedContests(kept);
+  if (ratingNote) await onProgress.hold?.();
 
   return { removed, failures };
 }

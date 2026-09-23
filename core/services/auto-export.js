@@ -18,8 +18,7 @@ export const BACKUP_FILENAME = "upsolve_tracker_backup.json";
  * @returns {Promise<FileSystemDirectoryHandle|null>} The unlocked handle, or null.
  */
 export async function verifyExportPermission() {
-  const settings = await chrome.storage.local.get("upsolve_tracker.auto_export");
-  if (!settings["upsolve_tracker.auto_export"]) return null;
+  if (!(await isAutoExportOn())) return null;
 
   const dirHandle = await loadDirHandle();
   if (!dirHandle) return null;
@@ -47,11 +46,53 @@ export async function verifyExportPermission() {
   }
 }
 
+export const AUTO_EXPORT_KEY = "upsolve_tracker.auto_export";
+
+/**
+ * Whether auto-export is switched on. Settings writes this flag in the same
+ * moment as the folder, so "on" always has a folder chosen; a null handle
+ * with the flag on therefore means Chrome refused access, not that none was
+ * ever picked.
+ */
+async function isAutoExportOn() {
+  const settings = await chrome.storage.local.get(AUTO_EXPORT_KEY);
+  return Boolean(settings[AUTO_EXPORT_KEY]);
+}
+
+/**
+ * Writes the backup after a storage change and says how it went, so every
+ * writer — refresh, add, remove, import — words the outcome identically.
+ *
+ * Takes the handle rather than resolving it, because `verifyExportPermission`
+ * has to run while the click is still fresh, before the caller's slow work.
+ *
+ * @returns {Promise<{tone: "warning"|"error", message: string}|null>} null
+ *   when the file was written.
+ */
+export async function backUp(dirHandle) {
+  if (dirHandle) {
+    return (await writeBackup(dirHandle)) ? null : BACKUP_FAILED;
+  }
+  // No handle: either auto-export is off, which is a choice worth a nudge, or
+  // it is on and Chrome refused the folder, which is a failure.
+  return (await isAutoExportOn()) ? BACKUP_FAILED : AUTO_EXPORT_OFF;
+}
+
+const AUTO_EXPORT_OFF = {
+  tone: "warning",
+  message: "Automatic backups are off. You can enable them in Settings.",
+};
+
+const BACKUP_FAILED = {
+  tone: "error",
+  message: "Backup couldn't be written to the export folder.",
+};
+
 /**
  * Writes the current storage snapshot using a pre-authorized handle.
  * @returns {Promise<boolean>} Whether the file was written.
  */
-export async function writeBackup(dirHandle) {
+async function writeBackup(dirHandle) {
   try {
     const allData = await chrome.storage.local.get(null);
     const json = JSON.stringify(allData, null, 2);

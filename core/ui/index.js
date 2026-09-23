@@ -4,12 +4,12 @@ import "./views/stats-view.js";
 import { updateSolvedStatus } from "../progress-manager.js"; // Import the logic
 import {
   verifyExportPermission,
-  writeBackup,
+  backUp,
 } from "../services/auto-export.js";
 import { hasCompleteSetup } from "../settings/store.js";
 import {
   getEffectiveRatings,
-  describeRatingChanges,
+  ratingChangeMessage,
 } from "../services/user-ratings.js";
 import { processNewContest } from "../contest-manager.js";
 import { LocalDB } from "../services/storage.js";
@@ -24,6 +24,12 @@ import {
 } from "../waiting-contests.js";
 import { escapeHtml } from "./escape-html.js";
 import { platformIcon } from "./platform-icons.js";
+
+// Long enough to read a one-line rating note before the backup step
+// replaces it.
+const RATING_NOTE_HOLD_MS = 3000;
+
+const holdFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Inline so it inherits the header's colour and hover transition, which a
 // colour emoji would ignore. Knobs are filled with the header background so
@@ -217,11 +223,17 @@ export class UpsolveApp extends HTMLElement {
       pending.tracked = contest;
       this.renderAddBanner();
 
-      await this.announceRatingChanges(ratingsBefore);
-
-      if (dirHandle && !(await writeBackup(dirHandle))) {
-        this.setSyncStatus("Added, but auto-export failed to write the file.", {
+      // One message, not two: the add shows no "Writing backup…", so a
+      // backup outcome posted after the rating note would flash it away.
+      const outcome = await backUp(dirHandle);
+      const notes = [
+        await ratingChangeMessage(ratingsBefore),
+        outcome?.message,
+      ].filter(Boolean);
+      if (notes.length > 0) {
+        this.setSyncStatus(notes.join(" · "), {
           sticky: true,
+          tone: outcome?.tone ?? null,
         });
       }
 
@@ -238,12 +250,16 @@ export class UpsolveApp extends HTMLElement {
           lastError: error.message,
         });
         this.renderAddBanner();
+        // The waiting entry is stored, and it travels in the backup like
+        // everything else in storage — so this branch backs up too.
+        const outcome = await backUp(dirHandle);
         // The identity, and with it the rating, was settled before the fetch
         // that found nothing, so a waiting add can still have moved it.
         const notes = [
           waitingExplanation(error, pending.match.contestId),
-          ...(await this.ratingChangeNotes(ratingsBefore)),
-        ];
+          await ratingChangeMessage(ratingsBefore),
+          outcome?.message,
+        ].filter(Boolean);
         this.setSyncStatus(notes.join(" · "), { sticky: true });
       } else {
         this.setSyncStatus(error.message, { sticky: true });
@@ -280,11 +296,18 @@ export class UpsolveApp extends HTMLElement {
 
     // Views report long operations through the shell's status strip rather
     // than each growing their own progress UI. null clears it.
+    // A string is progress; an object carries the options a message that has
+    // to stay up needs.
     this.routerOutlet.addEventListener("cf-status", (event) => {
-      if (event.detail === null) {
+      const detail = event.detail;
+      if (detail === null) {
         this.clearSyncStatus();
+      } else if (typeof detail === "string") {
+        this.setSyncStatus(detail);
       } else {
-        this.setSyncStatus(event.detail);
+        const { message, ...options } = detail;
+        this.setSyncStatus(message, options);
+        if (options.sticky) this.clearSyncStatus();
       }
     });
 
@@ -328,35 +351,42 @@ export class UpsolveApp extends HTMLElement {
         this.setSyncStatus(message),
       );
 
-      // 4. Run the sync logic, reporting each stage as it starts
+      // 4. Run the sync logic, reporting each stage as it starts. A rating
+      // that moved is announced as its "Updating your queue…" step, and
+      // `hold` is how long that step then stays up — the length is the
+      // panel's call, so progress-manager only asks for it.
+      const progress = Object.assign((message) => this.setSyncStatus(message), {
+        hold: () => holdFor(RATING_NOTE_HOLD_MS),
+      });
       const { removed: removedContests, failures } = await updateSolvedStatus(
-        (message) => this.setSyncStatus(message),
+        progress,
+        { ratingsBefore },
       );
 
       // 5. The sync rewrites stored contests, so the backup has to follow it
       // or the file drifts from what the extension shows.
-      if (dirHandle) {
-        this.setSyncStatus("Writing backup…");
-        await writeBackup(dirHandle);
-      }
+      if (dirHandle) this.setSyncStatus("Writing backup…");
+      const outcome = await backUp(dirHandle);
 
       // 6. If we are currently looking at the queue, tell it to update
       // Explicit here, and not left to the storage listener: the removed list
       // is what the queue announces, and a storage event cannot carry it.
       await this.refreshCurrentView(removedContests);
 
-      // 7. A refresh that quietly grew the backlog, or re-sorted it because a
-      // rating moved, is easy to miss — so say so. One message, since the
-      // strip shows one at a time. Reported before failures, which still get
-      // the last word.
-      const notes = [];
+      // 7. A refresh that quietly grew the backlog is easy to miss, so say
+      // what arrived — in one message with the backup outcome, since the
+      // strip shows one at a time and either would flash the other away.
+      const closing = [];
       if (addedWaiting.length > 0) {
         const names = addedWaiting.map((entry) => entry.id).join(", ");
-        notes.push(`Added ${names} — it's published now.`);
+        closing.push(`Added ${names} — it's published now.`);
       }
-      notes.push(...(await this.ratingChangeNotes(ratingsBefore)));
-      if (notes.length > 0) {
-        this.setSyncStatus(notes.join(" · "), { sticky: true, error: false });
+      if (outcome) closing.push(outcome.message);
+      if (closing.length > 0) {
+        this.setSyncStatus(closing.join(" · "), {
+          sticky: true,
+          tone: outcome?.tone ?? null,
+        });
       }
 
       // 8. Report a refusal *last*, so nothing overwrites it. A platform
@@ -382,34 +412,15 @@ export class UpsolveApp extends HTMLElement {
   }
 
   /**
-   * One line per site whose rating moved since `before`. Ratings are compared,
-   * not the queue: a rating is the one input that moves a platform's whole
-   * block at once, which is what makes the top of the queue change for no
-   * visible reason.
-   */
-  async ratingChangeNotes(before) {
-    const after = await getEffectiveRatings();
-    return describeRatingChanges(before, after).map(
-      ({ label, from, to }) => `${label} rating change detected (${from} → ${to}). Queue reordered.`,
-    );
-  }
-
-  async announceRatingChanges(before) {
-    const notes = await this.ratingChangeNotes(before);
-    if (notes.length > 0) {
-      this.setSyncStatus(notes.join(" · "), { sticky: true, error: false });
-    }
-  }
-
-  /**
    * The stages have no measurable total, so this reports what is happening
    * rather than how far along it is.
    */
-  setSyncStatus(message, { sticky = false, error = sticky } = {}) {
+  setSyncStatus(message, { sticky = false, tone = sticky ? "error" : null } = {}) {
     clearTimeout(this.syncStatusTimer);
     this.syncStatus.textContent = message;
     this.syncStatus.classList.remove("hidden");
-    this.syncStatus.classList.toggle("is-error", error);
+    this.syncStatus.classList.toggle("is-error", tone === "error");
+    this.syncStatus.classList.toggle("is-warning", tone === "warning");
     this.stickyStatus = sticky;
   }
 
@@ -418,7 +429,7 @@ export class UpsolveApp extends HTMLElement {
     const delay = this.stickyStatus ? 6000 : 400;
     this.syncStatusTimer = setTimeout(() => {
       this.syncStatus.classList.add("hidden");
-      this.syncStatus.classList.remove("is-error");
+      this.syncStatus.classList.remove("is-error", "is-warning");
       this.stickyStatus = false;
     }, delay);
   }
