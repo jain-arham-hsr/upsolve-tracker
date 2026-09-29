@@ -42,6 +42,22 @@ Where each kind of data comes from, and what happens when that source fails. Thi
 is treated by the browser as coming from somewhere else, so your cookies are not attached
 and the site sees a stranger. Everything unmarked is public.
 
+### Codeforces: official, gym and group contests compared
+
+| | **Official round** | **Gym** | **Group contest** |
+|---|---|---|---|
+| URL | `/contest/<id>` | `/gym/<id>` | `/group/<g>/contest/<id>` |
+| Can the API see it? | Yes, anonymously | Only with your signed key | **No.** "Contest not found", even with a member's key |
+| Problem list and name | `contest.standings`, unsigned | `contest.standings`, signed | The contest's dashboard page |
+| Is it ready to add? | Listed in `problemset.problems` | `phase` in the standings reply | "Finished" versus "Contest is running" on the standings page |
+| Published ratings | Yes; Codeforces rates them within days | About a third of problems (ones reused from the archive) | None; the problems are the group's own |
+| Tags | Yes | Rarely | None |
+| Participants, for estimates | `contest.ratingChanges`, or a sample of ~1,500 from the standings | Everyone in the standings (usually 5–76) | Everyone on the standings pages (719724 had 594), 200 per page |
+| Solve counts | Standings totals | Counted from each standings row | "Accepted" totals row on page 1 |
+| Your solves | `user.status` | `user.status` | `user.status`, which does include your group submissions |
+| Start date | `contest.list` | `contest.list?gym=true`, or the standings reply | Your own in-contest submissions, if you competed |
+| Needs a codeforces.com tab? | No | Only if the setter hid the standings | **Always**; the pages need your signed-in session |
+
 ### Everything else that gets fetched
 
 | | Also fetched |
