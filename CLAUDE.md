@@ -235,7 +235,7 @@ The guarantee rests on three independent layers, each confirmed by removing it a
 
 `updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption. The shell reports them **last**, after the backup write and the view refresh — reporting earlier let `"Writing backup…"` overwrite the message for exactly the users whose backup was at risk.
 
-Note the Codeforces page client (in `codeforces/scraper.js`) sends cookies, but the one page it still reads — `/gym/<id>`, parsed by `parseProblemsPage` in the same file — yields only the contest name and its problem list, nothing about the viewer. So it needs no identity, and neither does AtCoder's public tasks page. (That file used to read competitors' handles, solve counts and pagination too; the standings scrape is gone, which is what the rename recorded.)
+Note the Codeforces page client (in `codeforces/scraper.js`) sends cookies, but the pages it reads — a contest's problems page, parsed by `parseProblemsPage`, and a group contest's standings, parsed by `parseStandingsPage` — yield the contest's name, problems, participants and totals, nothing about the viewer. So they need no identity, and neither does AtCoder's public tasks page. The cookies matter for a different reason on group contests: they carry the *membership* that lets the page load at all, which is why a signed-out read waits rather than failing. (The standings scrape was removed once, when the API covered every contest it had served; it came back for group contests, which the API cannot see.)
 
 ### Platforms
 
@@ -528,7 +528,7 @@ challenged, needs no session, and expresses failure in the payload
 turned out to be expressible as *parameters* rather than as a separate transport: a
 direct `fetchImpl`, because routing it through a tab would add a dependency it does
 not need, and `refusal: () => null`, because it genuinely does not refuse at the
-transport. That is what lets one `Api.json()` serve all four platforms.
+transport. That is what lets one `Api.json()` serve all five platforms.
 
 **`services/ttl-cache.js` is the only short-lived cache.** Two platforms had
 grown the same eleven lines independently — the same `{body, at}` entry, the same
