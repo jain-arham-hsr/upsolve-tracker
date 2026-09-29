@@ -132,6 +132,23 @@ test("a block is flagged, so it can wait instead of failing the add", async () =
   }
 });
 
+test("a page that bounced to sign-in waits rather than failing as a layout change", async () => {
+  // A group contest's pages are behind membership, and without a session —
+  // no codeforces.com tab open — Codeforces answers with its sign-in form. As a
+  // page that is merely "no table", which would refuse the add as though the
+  // markup had changed. It is a failure to ask, so it is flagged to wait.
+  reset();
+  globalThis.fetch = async () => ({
+    status: 200,
+    url: "https://codeforces.com/enter?back=%2Fgym%2F719724",
+    async text() { return "<html><form id='enterForm'></form></html>"; },
+  });
+  const error = await client.document("https://codeforces.com/gym/719724").then(() => null, (e) => e);
+  assert.ok(error, "a sign-in page must throw");
+  assert.equal(error.isSourceUnreachable, true);
+  assert.match(error.message, /sign in/i);
+});
+
 test("an ordinary failure is not flagged, so it still fails loudly", async () => {
   // Only the challenge waits. A layout change or a genuine fault must not be
   // quietly retried forever under the same flag.

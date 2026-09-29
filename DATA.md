@@ -34,6 +34,7 @@ Where each kind of data comes from, and what happens when that source fails. Thi
 |:--|:--|:--|:--|
 | **Codeforces Official**<br>`/contest/<id>` | `contest.standings`<br><br>*Not published yet:* waits, and retries on every refresh | `contest.standings`<br><br>*Not yet rated by Codeforces:* stored as an estimate, then re-asked from the same endpoint at most weekly — and not at all once the round is six weeks old<br><br>*Never rated:* estimated here. Solve counts from the same standings rows; the field from `contest.ratingChanges`, or ~1,500 sampled rows resolved through `user.info` when that is empty | `user.status` — one call, whole history |
 | **Codeforces Gyms**<br>`/gym/<id>` | `contest.standings`, signed<br><br>*Standings hidden:* scraped from the `/gym/<id>` page — a problem nobody attempted is in no submission, so the list cannot be rebuilt from those | `contest.standings` — about a third of gym problems carry Codeforces' own rating<br><br>*The rest:* estimated here. Solve counts and field both from `contest.standings`; when the standings are hidden, from `contest.status` + `user.info` instead<br><br>*Field not visible at all:* refuses to add | `user.status` — the same call as official |
+| **Codeforces Group Contests**<br>`/group/<group>/contest/<id>` | Scraped from the contest's problems page 🔒 — the API answers "not found" for a group contest, even to a member's key | **Always estimated here** — nothing publishes one. Solve counts and the field scraped from the contest's standings pages 🔒, every page, with each participant's rating from `user.info`<br><br>*Signed out, or no tab:* waits and retries every refresh<br><br>*Nobody rateable in the standings:* refuses to add | `user.status` — the same call as official; it does carry group contest submissions |
 | **AtCoder** | Scraped from `/contests/<id>/tasks`<br><br>*Unreadable:* waits and retries every refresh | **Always estimated here** — AtCoder publishes no difficulty. Fitted from `/contests/<id>/standings/json` 🔒<br><br>*Unreadable:* waits and retries | Scraped from `/contests/<id>/submissions?f.User=…&f.Status=AC` 🔒<br><br>Once per tracked contest |
 | **CodeChef** | `/api/contests/<code>`, then `/api/contests/<code>/problems/<code>` — one request per problem<br><br>*Parent contest:* resolves to the division matching your rating; with no known rating it names the divisions rather than guessing | `difficulty_rating`, from that same per-problem call<br><br>*`-1` or `9999`:* stored as `???`, but only once the contest is a week old | `/api/list/problems?group=attempted`, paged 🔒 |
 
@@ -45,7 +46,7 @@ and the site sees a stranger. Everything unmarked is public.
 
 | | Also fetched |
 |:--|:--|
-| **Codeforces**<br>*both platforms* | `problemset.problems` — whether a contest has been published at all, which is the only thing it is used for<br>`user.info` — verifying your handle, and reading your rating<br>`contest.list` — when a contest started, so the Contests tab can sort by date. Official and gyms are separate lists, one call each. Asked only while some tracked contest is still undated: a site sets a start time when a contest is scheduled or never at all, so once it has answered — with a date, or with nothing — it is not asked again<br><br>Official and gyms are two platforms sharing one account, so each of these runs **twice** per refresh — including `user.status`, which has to, since the response carries no marker saying which kind a submission belongs to |
+| **Codeforces**<br>*all three platforms* | `problemset.problems` — whether a contest has been published at all, which is the only thing it is used for<br>`user.info` — verifying your handle, and reading your rating<br>`contest.list` — when a contest started, so the Contests tab can sort by date. Official and gyms are separate lists, one call each; a group contest is in neither, so it is dated from your own submissions to it when you took part, and otherwise left undated. Asked only while some tracked contest is still undated: a site sets a start time when a contest is scheduled or never at all, so once it has answered — with a date, or with nothing — it is not asked again<br><br>Official, gyms and group contests are three platforms sharing one account, so each of these runs once per platform you track contests on — including `user.status`, which has to, since the response carries no marker saying which kind a submission belongs to |
 | **AtCoder** | `/users/<handle>` — verifying your handle, reading your rating, and checking it matches the account you're signed in as<br>Contest name and start time come from the same `/tasks` page as the problems |
 | **CodeChef** | `/dashboard` — which account is signed in, which is what your configured handle is checked against<br>Contest name and divisions come from `/api/contests/<code>` |
 
@@ -70,8 +71,8 @@ Things that surprise people, with no bearing on where the data comes from.
 
 **Codeforces**
 
-- **No codeforces.com tab is needed**, with one exception: a gym whose standings the setter
-  hid is read from a page rather than the API, and that does need one.
+- **No codeforces.com tab is needed**, with two exceptions: a gym whose standings the setter
+  hid, and a group contest. Both are read from pages rather than the API, and those need one.
 - A difficulty the extension worked out itself is **underlined with a dotted line**; hover
   it for the reason. On an official round it is close — a mean 100 out, and it leans about 70
   points *low*. On a gym it is fitting 5–76 people instead of thousands and runs a mean 211

@@ -117,7 +117,7 @@ const importsOf = (source) =>
  * **platform** is a registered kind of contest on a site: a folder whose
  * `platform.js` exports the class a registered instance was built from,
  * which is the site folder itself (AtCoder, CodeChef) or a direct child of it
- * (Codeforces' official/ and gyms/). Anything else is an offender.
+ * (Codeforces' official/, gyms/ and group-contests/). Anything else is an offender.
  *
  * Classified once, at load, because most of the checks below need to know
  * where a platform lives without assuming its folder is named after its id.
@@ -539,24 +539,27 @@ test("the official Codeforces platform reaches no HTML at all", () => {
   assert.deepEqual(offenders, [], "the official path must stay pure JSON API");
 });
 
-test("only the hidden-standings path reads HTML on Codeforces", () => {
-  // Officially there is no HTML left at all, which the test above pins. On the
-  // gym side one page survives: a gym whose standings the setter hid answers
-  // FAILED to `contest.standings`, and the `/gym/<id>` problems page is the one
-  // page those contests still render. A second read here would mean a visible
-  // gym had started scraping again, and no other test would notice: the
-  // result is correct either way and only the request count differs.
-  const code = stripComments(readFileSync(path.join(siteOf("codeforces-gyms"), "scraper.js"), "utf8"));
+test("only hidden-standings gyms and group contests read HTML on Codeforces", () => {
+  // Officially there is no HTML left at all, which the test above pins. Two
+  // pages survive. The `/gym/<id>` problems page, for a gym whose standings the
+  // setter hid — `contest.standings` answers FAILED and that is the one page
+  // those contests still render. And the standings page, for a group contest,
+  // which the API cannot see at all: `contest.standings` and `contest.status`
+  // both answer "not found" to a member's key.
+  const scraper = stripComments(readFileSync(path.join(siteOf("codeforces-gyms"), "scraper.js"), "utf8"));
 
   // `this.document(...)` is the one way a page is read; the base's own
   // definition is `document(path, init)`, which this pattern does not match.
-  const fetched = [...code.matchAll(/\bthis\.document\(([^)]*)\)/g)].map((m) => m[1].trim());
+  const fetched = [...scraper.matchAll(/\bthis\.document\(([^)]*)\)/g)].map((m) => m[1].trim());
+  assert.equal(fetched.length, 2, `expected two page reads, got ${fetched.length}`);
 
-  assert.equal(fetched.length, 1, `expected one page read, got ${fetched.length}`);
-  assert.ok(
-    !fetched[0].includes("standings"),
-    `a standings page is being read again — a visible gym comes from the API: ${fetched[0]}`,
+  // The standings read is for group contests alone. A visible gym reaching it
+  // would be scraping again, and no other test would notice: the result is
+  // correct either way and only the request count differs.
+  const readers = ["codeforces-gyms", "codeforces-group-contests"].filter((id) =>
+    stripComments(readFileSync(path.join(folderOf(id), "platform.js"), "utf8")).includes("standingsPage("),
   );
+  assert.deepEqual(readers, ["codeforces-group-contests"], "only group contests read the standings page");
 });
 
 test("a site has estimator.js iff its platforms claim canEstimate", () => {
@@ -635,9 +638,9 @@ test("a parse* export takes a document or a payload and never fetches", () => {
 
   assert.deepEqual(offenders, [], "a parser takes what was fetched; it does not go and get it");
   // Or the loop above proves nothing: a rename that dropped the prefix from
-  // every parser would pass it silently. Six page parsers across three sites
+  // every parser would pass it silently. Seven page parsers across three sites
   // plus CodeChef's difficulty sentinel reader.
-  assert.equal(parsers, 7, `expected seven parse* exports, found ${parsers}`);
+  assert.equal(parsers, 8, `expected eight parse* exports, found ${parsers}`);
 });
 
 test("pages are read only in a scraper.js, and JSON only in an api.js", () => {

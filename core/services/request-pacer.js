@@ -18,8 +18,8 @@
  * ## `budget`, for two clients that are really one site
  *
  * Independence is the right default and the wrong answer in one case: when two
- * modules talk to the **same host**. Codeforces is two platforms —
- * official and gyms — each with its own API client, and two clients each
+ * modules talk to the **same host**. Codeforces is three platforms —
+ * official, gyms and group contests — each with its own API client, and two clients each
  * honouring a 2 s gap serve one request per second to codeforces.com. That is
  * the failure per-instance state was introduced to prevent, arrived at from the
  * other direction.

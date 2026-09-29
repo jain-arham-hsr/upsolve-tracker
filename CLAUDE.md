@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-The extension is **Upsolve Tracker**; the repo and directory were renamed to match. It covers Codeforces, AtCoder and CodeChef. Storage keys are `upsolve_tracker.*`, custom elements are `upsolve-*`, the IndexedDB store is `upsolve_tracker_db` and the backup file is `upsolve_tracker_backup.json`. **There is no back-compatibility code anywhere**, deliberately: this was a single-user project at the point of the rename, so the one existing install's data was canonicalised once by hand rather than leaving normalisers in the tree forever. A stored contest therefore always carries its `platform`, and the metadata timestamp is always `publishedDataCheckedAt` — code may read both as guaranteed, and anything malformed should fail loudly rather than be quietly repaired.
+The extension is **Upsolve Tracker**; the repo and directory were renamed to match. It covers Codeforces (official rounds, gyms and group contests), AtCoder and CodeChef. Storage keys are `upsolve_tracker.*`, custom elements are `upsolve-*`, the IndexedDB store is `upsolve_tracker_db` and the backup file is `upsolve_tracker_backup.json`. **There is no back-compatibility code anywhere**, deliberately: this was a single-user project at the point of the rename, so the one existing install's data was canonicalised once by hand rather than leaving normalisers in the tree forever. A stored contest therefore always carries its `platform`, and the metadata timestamp is always `publishedDataCheckedAt` — code may read both as guaranteed, and anything malformed should fail loudly rather than be quietly repaired.
 
 ## Commands
 
@@ -255,7 +255,7 @@ access at load time, so the build config reads `hostPermissions` straight off th
 
 **A site and a platform are two words for two things.** A site is a host the extension talks
 to — an account, its JSON, its pages, a fit. A platform is a registered kind of contest on
-a site. AtCoder and CodeChef are a site with one platform; Codeforces is a site with two. Each
+a site. AtCoder and CodeChef are a site with one platform; Codeforces is a site with three. Each
 class names its site (`static site`, the pure object in the site's `site.js`, which the base
 copies onto the instance: origin, host permission, mark, settings section), its site's `Api`
 class (`static Api`) and, where the platform reads pages, its site's `Scraper` class
@@ -286,7 +286,7 @@ so a platform overrides them only where its site's account works differently:
 | `estimate(contest, field)` | fills the gaps in place; **pure** | iff `canEstimate` |
 | `syncStartTimes`, `syncMetadata`, `describeIdentity` | overrides | optional |
 
-Codeforces' two platforms override none of the account hooks: their source answers `identity`
+Codeforces' three platforms override none of the account hooks: their source answers `identity`
 and `accepted`, and `fromSettings` builds it from the key pair. AtCoder overrides `identify`
 (a mismatch only on positive evidence) and `fetchAccepted` (per contest). CodeChef overrides
 `buildSession` (dashboard facts on the session), `identify` (the session *is* the identity) and
@@ -311,15 +311,16 @@ missing.
 **A folder is a site, and a site registers one or more platforms.** `module-boundaries.test.js`
 classifies every folder under `core/platforms/`: a folder with `site.js` is a site; a folder whose
 `platform.js` exports a registered class is a platform folder, and is the site folder itself or a
-direct child of it. AtCoder and CodeChef are both at once. Codeforces is a site with two
+direct child of it. AtCoder and CodeChef are both at once. Codeforces is a site with three
 platforms beneath it:
 
 ```
 atcoder/     site.js  api.js  scraper.js  estimator.js  platform.js  CLAUDE.md
 codechef/    site.js  api.js  scraper.js                platform.js  CLAUDE.md
 codeforces/  site.js  api.js  scraper.js  estimator.js               CLAUDE.md
-  official/  platform.js
-  gyms/      platform.js
+  official/        platform.js
+  gyms/            platform.js
+  group-contests/  platform.js
 ```
 
 `CLAUDE.md` is the one non-code name the set allows, and it is that site's own
@@ -450,7 +451,7 @@ investigated so they are not investigated again — lives beside its code:
 |---|---|
 | AtCoder | `core/platforms/atcoder/CLAUDE.md` |
 | CodeChef | `core/platforms/codechef/CLAUDE.md` |
-| Codeforces, both platforms | `core/platforms/codeforces/CLAUDE.md` |
+| Codeforces, all three platforms | `core/platforms/codeforces/CLAUDE.md` |
 
 **These are not loaded at session start.** A subdirectory's `CLAUDE.md` is pulled
 in when a file in that directory is read, which is the whole reason the split
@@ -553,11 +554,11 @@ and never expiring.
 | `atcoder/api.js` and `atcoder/scraper.js` | `gapMs: 1500`, `credentials: "include"`, one shared budget (`atcoder`) |
 | `codechef/api.js` and `codechef/scraper.js` | `gapMs: 1500`, `credentials: "include"`, one shared budget (`codechef`) |
 | `codeforces/scraper.js` (the page client) | `gapMs: [1000, 2500]`, `measureFrom: "end"`, `cooldown: { everyNth: 15, gapMs: [6000, 12000] }`, `credentials: "include"` |
-| `codeforces/api.js` (the signed API, both platforms) | `gapMs: 2000`, `budget: "codeforces-api"`, `credentials: "omit"` |
+| `codeforces/api.js` (the signed API, every Codeforces platform) | `gapMs: 2000`, `budget: "codeforces-api"`, `credentials: "omit"` |
 
 Each caller makes its own pacer, so budgets are independent by default — `HttpClient`'s counter was a single static shared by everything, which is now per-instance state and structurally impossible to cross. The one default that crosses is deliberate: `site-client.js` names a client's budget after its site's id, so a site's `api.js` and `scraper.js` queue as one, which `site-client.test.js` pins.
 
-**`budget` is the one deliberate exception, and it exists because independence is wrong for two clients addressing one *host*.** Codeforces is two platforms with an API client each, and two clients each honouring a 2 s gap serve one request per second to codeforces.com — the same failure per-instance state was introduced to prevent, arrived at from the other side. A caller may name a `budget` (`codeforces-api`); every pacer naming it shares one queue, marker and count, while keeping its own gaps, cooldowns and transport. The name comes from the caller, so `request-pacer.js` still never learns which platforms exist, and a pacer naming none keeps private state exactly as before. Both halves are pinned in `request-pacer.test.js` and were confirmed by breaking each: ignoring the budget, and letting it leak into unnamed pacers.
+**`budget` is the one deliberate exception, and it exists because independence is wrong for two clients addressing one *host*.** Codeforces is three platforms with an API client each, and two clients each honouring a 2 s gap serve one request per second to codeforces.com — the same failure per-instance state was introduced to prevent, arrived at from the other side. A caller may name a `budget` (`codeforces-api`); every pacer naming it shares one queue, marker and count, while keeping its own gaps, cooldowns and transport. The name comes from the caller, so `request-pacer.js` still never learns which platforms exist, and a pacer naming none keeps private state exactly as before. Both halves are pinned in `request-pacer.test.js` and were confirmed by breaking each: ignoring the budget, and letting it leak into unnamed pacers.
 
 **`measureFrom` exists because of a real difference, not for symmetry.** `"start"` waits until `previousStart + gap`, so a slow request eats into the next gap. `"end"` waits the full gap after the previous request *finished*, and waits it before the first request too — which is what `HttpClient` did. They diverge exactly when a request outlasts the gap, and collapsing them onto `"start"` silently makes the Codeforces scrape **faster**. Even sampled, adding a contest issues tens of requests, and these delays are what keeps the extension from being blocked — do not remove or shorten them when optimizing. `tests/request-pacer.test.js` fails on that specific collapse; it was confirmed by making it and watching exactly those two assertions go red.
 
@@ -1002,7 +1003,7 @@ Two conventions the shell depends on:
 - **`refreshData()`** — called on the current view after a global refresh. A view that needs post-sync updates must expose it; `queue-view` also takes the removed-contest list to announce.
 - **`cf-status` event** — views report long operations by dispatching a bubbling `CustomEvent` that the shell renders in its status strip (`null` clears it). That's how adding a contest narrates its stages without each view growing its own progress UI. The same `onProgress` callback is threaded through `processNewContest` and `updateSolvedStatus`; stages that no-op stay silent rather than claiming work they skipped.
 
-**Every step stays on the strip for at least 1.5 seconds** (`ui/status-queue.js`). Quick steps kept flashing — "Updating your queue…", then "Writing backup…" — and fixing them one message at a time only moved the flash to whichever quick step came next, so the rule lives in the strip, once. The minimum is per **step**, not per message: a step is one process, and may narrate itself in many messages (AtCoder's "(1/5)", "(2/5)"), which replace each other at once and share one minimum. Callers name the step with `step` — `progress-manager.js` tags each **site's** messages with its id — Codeforces' two platforms are one account, and keyed per platform they showed the same step twice, the add tags all its stages `"add"`, the waiting retry `"retry-waiting"` — and a message naming none is a step of its own. Steps are shown in order, none skipped. **The strip enforces it rather than the callers**: some twenty places post progress without awaiting it, across every platform, and making each wait would slow the work, whereas this only paces what is *shown*. So `clearSyncStatus()` now returns a promise that resolves once the last step has had its minimum, and the refresh's spinner and the add banner's "Adding…" wait for it rather than saying "done" while the strip still narrates. The banner is also held on "Adding…" against the storage listener's redraws for the same reason. A note or error lingers six seconds after the operation ends, as before. `tests/status-queue.test.js` drives it on a fake clock and was confirmed by breaking it two ways — painting immediately, and not merging a step's messages. `tests/progress-steps.test.js` pins the keying by site, through a stubbed Codeforces refresh — the only site where the two ids differ — and fails if it goes back to keying by platform.
+**Every step stays on the strip for at least 1.5 seconds** (`ui/status-queue.js`). Quick steps kept flashing — "Updating your queue…", then "Writing backup…" — and fixing them one message at a time only moved the flash to whichever quick step came next, so the rule lives in the strip, once. The minimum is per **step**, not per message: a step is one process, and may narrate itself in many messages (AtCoder's "(1/5)", "(2/5)"), which replace each other at once and share one minimum. Callers name the step with `step` — `progress-manager.js` tags each **site's** messages with its id — Codeforces' platforms are one account, and keyed per platform they showed the same step twice, the add tags all its stages `"add"`, the waiting retry `"retry-waiting"` — and a message naming none is a step of its own. Steps are shown in order, none skipped. **The strip enforces it rather than the callers**: some twenty places post progress without awaiting it, across every platform, and making each wait would slow the work, whereas this only paces what is *shown*. So `clearSyncStatus()` now returns a promise that resolves once the last step has had its minimum, and the refresh's spinner and the add banner's "Adding…" wait for it rather than saying "done" while the strip still narrates. The banner is also held on "Adding…" against the storage listener's redraws for the same reason. A note or error lingers six seconds after the operation ends, as before. `tests/status-queue.test.js` drives it on a fake clock and was confirmed by breaking it two ways — painting immediately, and not merging a step's messages. `tests/progress-steps.test.js` pins the keying by site, through a stubbed Codeforces refresh — the only site where the two ids differ — and fails if it goes back to keying by platform.
 
 **A rating change is announced in the status strip.** A contest's rating update moves that platform's whole block of the queue at once, and with nothing said it reads as the queue reshuffling itself — a Codeforces round once pushed a CodeChef problem off the top overnight. The refresh and the add read `getEffectiveRatings()` before they start, and `user-ratings.js#ratingChangeMessage` compares that against what is stored afterwards, naming each **site** whose number moved (Codeforces' two platforms are one line, since they share one rating): *"Codeforces rating change detected (1223 → 1346). Queue reordered."* Only a number becoming a different number counts, since a first rating had no earlier order.
 

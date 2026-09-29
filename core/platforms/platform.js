@@ -11,7 +11,7 @@
  * object every platform of that site takes on — origin, host permission, mark,
  * settings section — `api.js` is the site's JSON and `scraper.js`, where the
  * site reads pages, its HTML. AtCoder and CodeChef are a site with one
- * platform; Codeforces is a site with two.
+ * platform; Codeforces is a site with three.
  *
  * One subclass per platform, in `platform.js`, one instance each in
  * `registry.js`. The orchestrators and the settings page only ever call the

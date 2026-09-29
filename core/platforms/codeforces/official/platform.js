@@ -49,7 +49,7 @@ export class CodeforcesOfficial extends Platform {
   }
 
   /**
-   * One of Codeforces' two filter rows. The label names the platform because
+   * One of Codeforces' three filter rows. The label names the platform because
    * the filter is a flat list: a row has to stand on its own.
    */
   filterGroups = [{ key: "codeforces-official", label: "Codeforces Official" }];

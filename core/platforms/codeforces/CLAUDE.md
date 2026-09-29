@@ -1,11 +1,13 @@
-<!-- Site notes for Codeforces (both platforms). Split out of the root CLAUDE.md, which was over
+<!-- Site notes for Codeforces (all three platforms). Split out of the root CLAUDE.md, which was over
      its size limit; this file is loaded when a file in this folder is read.
      Cross-site rules stay in the root. -->
 # Codeforces
 
-One site, two registered platforms: `official/` and `gyms/`.
+One site, three registered platforms: `official/`, `gyms/` and `group-contests/`. The first two
+are compared below; group contests have their own section, since they share almost nothing
+with either beyond the account.
 
-## Codeforces is one site with two platforms
+## Official and gyms are two platforms, not two subtypes
 
 `codeforces/official/` and `codeforces/gyms/` are the two platforms of one site. They were one
 platform with two subtypes, and six modules independently asked which one they had — six
@@ -33,7 +35,7 @@ platform overrides an account hook, the three field readers (`officialField`, `g
 `partyField`, all ending in one `partyRatings`), and the pure readers of what came back: the
 applier that takes a standings response's published ratings and tags, the summariser that
 rebuilds a hidden gym from its submissions, and the sampling that picks which standings rows an
-official field is measured from. `codeforces/scraper.js` is the page client and the one page.
+official field is measured from. `codeforces/scraper.js` is the page client and its two pages.
 `codeforces/estimator.js` is the fit both run. Until this shape existed the two folders held
 744 byte-identical lines with a test forbidding them to diverge.
 
@@ -45,7 +47,7 @@ Three consequences worth knowing before changing anything here:
   stream and `applySolvedStatus` looks up by the prefix of the platform that *owns* the
   contest. Skip either fetch and that platform's solves stop clearing. The status strip
   still shows it as **one** step, *"Checking your Codeforces submissions…"* from
-  `api.js#accepted`: `progress-manager.js` keys strip steps by site, so the two platforms'
+  `api.js#accepted`: `progress-manager.js` keys strip steps by site, so its platforms'
   messages merge rather than showing the same step twice.
 - **They share one request budget.** The signed client is one object in `api.js`, named
   `budget: "codeforces-api"`; without that, two instances each honouring a 2 s gap would serve
@@ -59,19 +61,110 @@ Three consequences worth knowing before changing anything here:
   one no adapter test reaches, since they all stub the service — which is how it once shipped
   calling a pacer that no longer existed. The API test now drives it through a fetch stub.
 
-**The one page Codeforces still reads** is `/gym/<id>`, for a gym whose standings the setter
+**The one page a gym can still need** is `/gym/<id>`, for a gym whose standings the setter
 hid: it answers `FAILED` to `contest.standings`, and the problems page is the only page such
 a contest renders. It is the definitive problem list — a problem nobody attempted appears in
 no submission, so a list rebuilt from `contest.status` would come out silently short.
 `CodeforcesScraper#problemsPage` is how that page is read, through the page client with the
 session cookie and throttling tuned against the live site; `module-boundaries.test.js` pins that
-`codeforces/scraper.js` makes exactly one page read and that it is not a standings page. So **an
-add needs no codeforces.com tab** unless the gym's standings are hidden. Three scrapes went
+`codeforces/scraper.js` makes exactly two page reads, and that only the group contest platform
+reaches the standings one. So **an official or gym add needs no codeforces.com tab** unless the
+gym's standings are hidden. Three scrapes went
 before that: the official roster and its field sampling (both already in `contest.standings`),
 and the gym roster (the same call was made anyway, and the API's counts overwrote the page's).
 The recorded reason for the gym scrape — "a gym's roster has no API source: its standings
 need signing" — did not survive checking: needing a key is not an obstacle when the key is in
 hand.
+
+## Group contests (`group-contests/`)
+
+`/group/<group>/contest/<id>`. **The API cannot see these contests at all**, and that is the
+whole reason they are a platform. Measured with a member's signed key against 719724:
+
+| call | answer |
+|---|---|
+| `contest.standings`, signed | FAILED — *"Contest with id 719724 not found"* |
+| `contest.status`, signed | the same |
+| `contest.standings` with `asManager` | the same, plus *"Only contest managers can use asManager"* |
+| `contest.standings` from a signed-in browser tab | the same — the API ignores the session |
+| `user.status`, signed | **OK**, and carries the member's own submissions under `contestId: 719724` |
+
+The API also ignores unknown parameters without complaint, so `groupCode=` on these calls
+"succeeds" and changes nothing; a probe that passes one proves nothing either way. So the gym
+path is out, hidden-standings fallback included: both of its sources are API calls. Treating a
+group URL as a gym was tried first and failed on exactly this.
+
+What the platform reads instead, all through the page client and so through a codeforces.com
+tab carrying the membership:
+
+- **The dashboard first**, `/gym/<id>` — which redirects to the group contest. **Nothing below
+  `/gym/<id>` does**: `/gym/<id>/standings` lands on the dashboard, measured on the first
+  finished add, which failed on "not a standings page (page title "Dashboard - …")". So the
+  standings path is read off the dashboard's own menu: any link whose path is
+  `/contest/<id>/standings…`, the menu's first. **Not one ending in `/standings`** — that found
+  nothing on 719724's dashboard, whose tab most likely links the group's own standings
+  (`…/standings/groupmates/true`, the tab the saved page came from). That form is inferred, not
+  seen: the dashboard's markup has not been saved. The link is used as given, so the field is
+  whatever the tab opens — on 719724, the group's members. A missing link fails naming the
+  dashboard's title. Each
+  problem stores its `url` as the page linked it, which is what `contestUrl` — and through it
+  the site's `problemUrl` — reads the group path back from. A stored link must be on
+  codeforces.com, since it is rendered as an `href`.
+- **Then the standings**, by that link. **They are the authority on the name and on whether
+  the contest has ended**, because the problems page answers neither for a group contest: its
+  sidebar header is the *group's* name, and the slot where a gym shows "Finished" shows the
+  viewer's role ("Participant"). Reading it the gym way is exactly how the first real add went
+  wrong — a finished contest was filed as still running, and would have been named after the
+  group. The name is `.contest-name`. **Ended is read from the status line under it**, seen on
+  719724 in both states: *"Contest is running"* above a timer, or *"Finished"* with none. The
+  label wins over a timer, so a countdown to some other contest cannot strand a finished one; a
+  `.countdown` timer decides only when no label is found. A running contest stops after the first page, since partial counts
+  are not worth the rest.
+- **The problem list** comes from that dashboard, via the same `parseProblemsPage` a hidden
+  gym uses.
+- **Every standings page, by the page's own links.** 200 rows a page, and a group contest's
+  later pages are `/group/<g>/contest/<id>/standings/groupmates/true/page/N`, not anything a
+  `/gym/<id>` path reproduces. So the reader takes the highest-numbered link from
+  `.custom-links-pagination` and renumbers it. The first version matched
+  `a[href*="/standings/page/"]`, found nothing on 719724 (594 rows, three pages), and would have
+  fitted every problem against the first 200 while the totals row counted all 594.
+- **Only the first page must carry the totals row** (`tr.standingsStatisticsRow`, with the
+  "Accepted" label as a fallback — a team can be named that). Its counts cover the whole field,
+  and requiring the row on every page is the leading suspect for the first finished add failing
+  with "Couldn't read the standings": the saved first page has it, the later pages were never
+  seen. An unreadable page now fails naming its URL and title, so the next such failure says
+  which page and what Codeforces served instead.
+- **The rows**, via `parseStandingsPage`: one party per row (a team is one party; its own link is not a member, and
+  only `/profile/` links are read) and the totals row's Accepted counts. It was recovered from
+  the parser deleted in `467b959`, with one change: that version flattened every handle on the
+  page into one list, which would count a team as several competitors. One unreadable page
+  refuses the whole read — a short field reads as an easier contest, not a failure.
+- **`user.info`** for the field's ratings, through the same `partyField` a hidden gym uses.
+- **`user.status`** for solves (the base default) and for the start time: the user's own
+  `CONTESTANT` rows carry `author.startTimeSeconds`. A member who did not compete leaves the
+  contest undated, and `syncStartTimes` is a no-op, since the base default would fetch
+  `contest.list` every refresh for contests that are in no list.
+
+Nothing publishes a rating or tag for these problems — 719724's carry neither in `user.status`,
+the tell that they are the group's own Polygon problems rather than archive ones — so every rating
+is estimated, and `publishesTags` is false. Cloning one as a mashup does not help: a member
+cannot add unshared Polygon problems, and a clone's field would be one person.
+
+**Signed out waits; unreadable refuses.** Without a session a group page redirects to
+`/enter`, which as a document is merely "no table" and would refuse the add as a layout change.
+The scraper's `refusal` catches the redirect by `response.url` — the page transport's
+Response-shaped reply carries it for exactly this — and flags it `isSourceUnreachable`, so the
+add becomes a waiting entry. A page that loads and does not parse still returns null and fails
+loudly.
+
+**The standings parser is checked against the real page.** `tests/fixtures/cf-group-standings.html`
+is 719724's standings as the browser saved them, trimmed to four rows and the totals row, with
+handles and team names replaced. It was saved while a virtual participation was running, so it
+carries the running state; the finished state is derived from it the way the page was described
+changing ("Finished", timer gone), which is the one part not seen as markup. Every selector
+guessed before it arrived — `.contest-name`, `.contest-status`, `.countdown`,
+`td.contestant-cell`, the `Accepted` totals row — matched; only the page links did not. The
+problems page's sidebar shape is from a screenshot, not saved markup.
 
 ## Sampling the field (`codeforces/estimator.js`)
 
@@ -178,7 +271,7 @@ The consequence is that the HTML half of the pipeline is verified against synthe
 
 ## Scraped markup is quarantined in `codeforces/scraper.js`
 
-Every CSS selector and parsing rule for Codeforces' HTML lives in that file — today one page, parsed by `parseProblemsPage`, with its selectors in one block above it and ordered fallback chains (the contest name tries the sidebar header link, then `<title>`). A CF layout change should be a one-block fix.
+Every CSS selector and parsing rule for Codeforces' HTML lives in that file — today two pages, parsed by `parseProblemsPage` and `parseStandingsPage`, with its selectors in one block above it and ordered fallback chains (the contest name tries the sidebar header link, then `<title>`). A CF layout change should be a one-block fix.
 
 **Its parser was called `standings-dom.js` for a long time after the standings scrape was deleted**, holding no standings parsing at all, and nothing caught it because nothing tied a parser's name to the page it reads. That is the whole argument for naming a `parse*` function after its page: the name is what makes the next such drift visible.
 

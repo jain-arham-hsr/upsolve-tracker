@@ -62,9 +62,9 @@ export function renderFilterControl(selected) {
  * One mark per *site* with anything selected, in fixed order.
  *
  * Deduplicated by the rendered mark rather than by platform, which is not the
- * same thing any more: Codeforces is two platforms — official and gyms — that
- * are one site and share one icon, so selecting both used to draw the
- * Codeforces mark twice. The collapsed button is a summary, and a repeated mark
+ * same thing any more: Codeforces is three platforms — official, gyms and
+ * group contests — that are one site and share one icon, so selecting two used
+ * to draw the Codeforces mark twice. The collapsed button is a summary, and a repeated mark
  * reads as two different things.
  */
 function marksFor(platforms, active) {

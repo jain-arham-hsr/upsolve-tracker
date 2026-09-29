@@ -15,12 +15,14 @@
 import { Platform } from "./platform.js";
 import { CodeforcesOfficial } from "./codeforces/official/platform.js";
 import { CodeforcesGyms } from "./codeforces/gyms/platform.js";
+import { CodeforcesGroupContests } from "./codeforces/group-contests/platform.js";
 import { AtCoder } from "./atcoder/platform.js";
 import { CodeChef } from "./codechef/platform.js";
 
 const PLATFORMS = [
   new CodeforcesOfficial(),
   new CodeforcesGyms(),
+  new CodeforcesGroupContests(),
   new AtCoder(),
   new CodeChef(),
 ].map(Platform.check);
@@ -34,7 +36,7 @@ export function listPlatforms() {
  * Every site once, in platform order, with the platforms it registers.
  *
  * The stats view keys on sites: one account, one rating scale, one tag
- * vocabulary, one identity colour. Codeforces' two platforms are one site.
+ * vocabulary, one identity colour. Codeforces' three platforms are one site.
  */
 export function listSites() {
   const sites = new Map();

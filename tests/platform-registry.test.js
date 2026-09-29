@@ -21,7 +21,7 @@ import {
 test("sites group platforms: Codeforces is one site with two, and colours are distinct per site", () => {
   const sites = listSites();
   assert.deepEqual(sites.map((site) => site.id), ["codeforces", "atcoder", "codechef"]);
-  assert.deepEqual(sites[0].platforms.map((p) => p.id), ["codeforces-official", "codeforces-gyms"]);
+  assert.deepEqual(sites[0].platforms.map((p) => p.id), ["codeforces-official", "codeforces-gyms", "codeforces-group-contests"]);
   assert.equal(new Set(sites.map((site) => site.chartColor)).size, 3, "each site has its own identity colour");
   for (const site of sites) {
     for (const platform of site.platforms) {
@@ -32,7 +32,7 @@ test("sites group platforms: Codeforces is one site with two, and colours are di
   assert.equal(siteOf({ id: "1", platform: "codeforces-gyms" }).id, "codeforces");
 });
 
-test("Codeforces contest and gym URLs are recognised", () => {
+test("Codeforces contest, gym and group contest URLs are recognised", () => {
   // The path segment is the whole difference between the two Codeforces
   // platforms, so this is also what proves `/contest/` and `/gym/` resolve to
   // different adapters rather than to one that then branches.
@@ -40,6 +40,9 @@ test("Codeforces contest and gym URLs are recognised", () => {
     ["https://codeforces.com/contest/1993", "1993", "OFFICIAL", "codeforces-official"],
     ["https://codeforces.com/contest/1993/problem/B", "1993", "OFFICIAL", "codeforces-official"],
     ["http://www.codeforces.com/gym/104123", "104123", "GYM", "codeforces-gyms"],
+    // Its `/contest/` segment must not send a group contest to the official platform.
+    ["https://codeforces.com/group/wlb0UYQSQF/contest/719724", "719724", "GROUP", "codeforces-group-contests"],
+    ["https://codeforces.com/group/wlb0UYQSQF/contest/719724/problem/A", "719724", "GROUP", "codeforces-group-contests"],
     ["https://CODEFORCES.com/CONTEST/2193/standings", "2193", "OFFICIAL", "codeforces-official"],
   ]) {
     const match = matchContestUrl(url);
@@ -54,6 +57,7 @@ test("non-contest URLs return null rather than a plausible guess", () => {
   for (const url of [
     "https://codeforces.com/problemset",
     "https://codeforces.com/profile/tourist",
+    "https://codeforces.com/group/wlb0UYQSQF/contests",
     "not a url",
     "",
     null,
@@ -149,7 +153,7 @@ test("the queue label matches the badge wording, not a second vocabulary", () =>
   // Whatever the badge says is what the label says. Both Codeforces platforms,
   // since the two vocabularies could now drift apart in two files rather than
   // one.
-  for (const id of ["codeforces-official", "codeforces-gyms"]) {
+  for (const id of ["codeforces-official", "codeforces-gyms", "codeforces-group-contests"]) {
     const platform = getPlatform(id);
     const contest = { id: "1" };
     assert.ok(

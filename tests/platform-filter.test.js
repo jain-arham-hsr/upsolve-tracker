@@ -59,18 +59,18 @@ test("the collapsed button says what is filtered without being opened", () => {
   assert.match(renderFilterControl([]), /All platforms/);
 
   const some = renderFilterControl(["codeforces-gyms", "codechef"]);
-  assert.match(some, /2 of 4/, "should count selected groups against the total");
+  assert.match(some, /2 of 5/, "should count selected groups against the total");
   assert.ok(!/All platforms/.test(some));
 });
 
 test("the summary shows one mark per site, not one per platform", () => {
-  // Codeforces is two platforms now, but one site with one mark — so selecting
-  // both still shows a single Codeforces mark on the collapsed button, plus the
-  // two panel rows. Before the split this deduplicated by platform, which gave
+  // Codeforces is three platforms, but one site with one mark — so selecting
+  // two still shows a single Codeforces mark on the collapsed button, plus the
+  // three panel rows. Before the split this deduplicated by platform, which gave
   // the same answer for the wrong reason and would now draw the mark twice.
   const both = renderFilterControl(["codeforces-official", "codeforces-gyms"]);
-  assert.equal((both.match(/(?:aria-label|alt)="Codeforces"/g) ?? []).length, 3);
-  assert.match(both, /2 of 4/);
+  assert.equal((both.match(/(?:aria-label|alt)="Codeforces"/g) ?? []).length, 4);
+  assert.match(both, /2 of 5/);
 });
 
 test("the list is flat — every row names its platform in full", () => {
@@ -80,20 +80,20 @@ test("the list is flat — every row names its platform in full", () => {
   assert.ok(!/filter-group-head/.test(html));
   assert.ok(!/is-nested/.test(html));
 
-  for (const label of ["Codeforces Official", "Codeforces Gym", "AtCoder", "CodeChef"]) {
+  for (const label of ["Codeforces Official", "Codeforces Gym", "Codeforces Group Contests", "AtCoder", "CodeChef"]) {
     assert.ok(html.includes(label), `${label} should be a row of its own`);
   }
-  assert.equal((html.match(/class="filter-row"/g) ?? []).length, 4);
+  assert.equal((html.match(/class="filter-row"/g) ?? []).length, 5);
 });
 
-test("every row carries its platform's mark, including both Codeforces rows", () => {
+test("every row carries its platform's mark, including every Codeforces row", () => {
   const html = renderFilterControl([]);
   // Matched on the accessible name rather than the element: AtCoder's mark is
   // a raster with alt text, the others are inline SVG with aria-label.
   const named = (label) =>
     (html.match(new RegExp(`(?:aria-label|alt)="${label}"`, "g")) ?? []).length;
 
-  assert.equal(named("Codeforces"), 2, "one mark on each Codeforces row");
+  assert.equal(named("Codeforces"), 3, "one mark on each Codeforces row");
   assert.equal(named("AtCoder"), 1);
   assert.equal(named("CodeChef"), 1);
 });
@@ -112,7 +112,7 @@ test("the panel starts closed", () => {
 test("a stale key from an older build doesn't inflate the count", () => {
   // Selections persist, so a removed platform's key can outlive it.
   const html = renderFilterControl(["codechef", "leetcode:OFFICIAL"]);
-  assert.match(html, /1 of 4/);
+  assert.match(html, /1 of 5/);
 });
 
 test("round-tripping a selection through storage preserves it", async () => {

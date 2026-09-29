@@ -1,8 +1,9 @@
 /**
  * Codeforces' JSON: every route, the signing, and the reading of the payloads.
  *
- * One class serves both platforms. The routes an official round needs are all
- * JSON and one is deliberately unsigned; the routes a gym needs are signed;
+ * One class serves every Codeforces platform. The routes an official round needs
+ * are all JSON and one is deliberately unsigned; the routes a gym needs are
+ * signed; a group contest, which the API cannot see, needs only the account's;
  * and what the account needs — `identity`, `accepted`, `fromSettings` — is
  * what the platforms' defaults call. What a payload means is the pure half at
  * the bottom of this file: a `contest.standings` or `contest.status` response
@@ -13,7 +14,7 @@
  * typed but not saved. Both share the signed client, so neither gets a fresh
  * allowance.
  *
- * The field both platforms' estimates fit against is read here too — its shape,
+ * The field every Codeforces platform's estimate fits against is read here too — its shape,
  * the three ways of reading it, and the team collapse every reading ends in —
  * because one file reading every Codeforces field is what stops the two
  * platforms from each keeping a copy. `rating-models/` holds only the
@@ -43,7 +44,7 @@ const PAGE_SIZE = 10000;
 const MAX_SUBMISSIONS = 50000;
 
 /**
- * The one client for every signed call, on both platforms.
+ * The one client for every signed call, on every Codeforces platform.
  *
  * Through `services/site-client.js` like every other client, with two
  * deliberate parameters: a direct `fetchImpl`, since the API works anonymously
@@ -571,8 +572,8 @@ export function populateSolveCounts(standings, problems) {
  *
  * @throws flagged `isSourceUnreachable` when the response names no problems —
  *   there is nothing to store, and an unreachable API is a reason to retry.
- *   That is a fact about the payload, and both platforms would otherwise
- *   repeat it.
+ *   That is a fact about the payload, and every platform reading a standings
+ *   response would otherwise repeat it.
  */
 export function problemsFrom(contestId, standings) {
   const problems = (standings?.problems ?? []).map((problem) => ({

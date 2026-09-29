@@ -36,9 +36,9 @@ export const site = {
   },
 
   /**
-   * Namespaced by platform id, and the two Codeforces platforms namespace
+   * Namespaced by platform id, and the Codeforces platforms namespace
    * separately on purpose: `user.status` returns the whole account's
-   * submissions with no gym/official marker, so each platform reads the same
+   * submissions with no official/gym/group marker, so each platform reads the same
    * stream and stamps its own prefix, and `applySolvedStatus` looks up by the
    * prefix of the platform that owns the contest.
    */
@@ -68,7 +68,7 @@ export const site = {
 
   /**
    * Its three bars, yellow/blue/red with blue tallest — the favicon, drawn.
-   * Both platforms carry the same mark: they are the same site, and the
+   * Every Codeforces platform carries the same mark: they are the same site, and the
    * legend row's name is what tells them apart.
    */
   icon: `

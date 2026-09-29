@@ -132,6 +132,10 @@ Settings and it stays current by itself.
   Codeforces already knows their difficulty and the real number is used.
 - **Gyms with hidden standings work too.** Some setters turn standings off; the extension
   reads what it needs from the submissions instead.
+- **Codeforces group contests work, with a codeforces.com tab open.** Codeforces doesn't let
+  the extension ask about them directly, so it reads the contest's pages as you, which needs
+  you signed in on a tab. Without one the contest waits and is tried again on the next
+  refresh. Every difficulty is an estimate, from the group members who took part.
 
 ## Where your data comes from
 

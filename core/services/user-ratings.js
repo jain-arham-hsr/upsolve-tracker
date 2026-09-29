@@ -49,7 +49,7 @@ export async function storeFetchedRatings(fetched) {
  * shell can say why the queue just re-ordered. Without it a contest rating
  * update silently reshuffles a whole platform's block, which reads as a bug.
  *
- * Per **site**, not per platform: Codeforces' two platforms share one account
+ * Per **site**, not per platform: Codeforces' platforms share one account
  * and one rating, and reporting it twice would read as two changes.
  *
  * Only a number becoming a different number counts. A first rating had no

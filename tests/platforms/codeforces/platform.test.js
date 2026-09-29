@@ -45,9 +45,9 @@ const pageStub = () =>
   });
 
 /**
- * Codeforces is two platforms, and the subtype is what picks between them —
- * so this routes the way `matchContestUrl` does, and every case below keeps
- * naming the subtype it is about.
+ * Official and gym, two of Codeforces' three platforms, and the subtype is
+ * what picks between them — so this routes the way `matchContestUrl` does,
+ * and every case below keeps naming the subtype it is about.
  */
 const fetchContestRecord = ({ subtype, session, ...rest }) =>
   getPlatform(subtype === "GYM" ? "codeforces-gyms" : "codeforces-official")

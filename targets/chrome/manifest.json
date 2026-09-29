@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Upsolve Tracker",
-  "version": "2.14.0",
+  "version": "2.15.0",
   "description": "Systematically upsolve Codeforces, AtCoder and CodeChef contests.",
   "permissions": ["activeTab", "storage", "sidePanel"],
   "icons": {
