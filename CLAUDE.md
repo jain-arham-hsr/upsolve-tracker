@@ -38,6 +38,19 @@ The mirror direction is checked too: the run writes a new waiting entry **straig
 
 Each of these was confirmed the way the `nullAt` gap was: by removing the fix and watching the run report the original symptom. That is the standard for anything added here — a smoke check that has never been seen to fail is not yet evidence of anything.
 
+**The smoke's IndexedDB is a working fake, not a stub of secure-store's calls.** Firebase
+Auth keeps its sign-in there, listens with `addEventListener` rather than `onsuccess`,
+stores by `keyPath` and reads with `getAll`; the older fake answered only what secure-store
+asked, and Firebase waited on it forever. Two harness limits remain. `@firebase/app`'s
+heartbeat goes through the `idb` library, which recognises requests by `instanceof
+IDBRequest`, so it logs that it could not read (as a warning, harmlessly). And the
+Firestore chunk never finishes importing under `file://` — which is why only the
+**signed-out** Account state is exercised there, and why Firestore loads only after sign-in.
+The signed-in path is verified in real Chrome, where it needs a real Google account anyway.
+Build with a real `.env` (or `VITE_*` variables — under zsh, `env ${=E}`, since a plain `$E`
+does not word-split and passes every value as one) to exercise the configured state; an
+empty `.env` exercises "not set up".
+
 It skips rather than fails when no Chrome is found; set `CHROME_PATH` to point at one. It is mostly shallow — it proves the views run, not that they are right, so **layout still needs a real browser**: build, then load `dist/chrome` unpacked at `chrome://extensions` (Developer mode → Load unpacked).
 
 There are **two measured layout checks**, and they are the template for adding more. The unmirrored-practice `⚠` first shipped *after* the problem name, where `.compact-name`'s ellipsis clipped it off the end — the row rendered muted with no mark at all, while the unit test, which matched the HTML string, passed. So the run compares the mark's `getBoundingClientRect()` against its cell's, and separately asserts the seeded name **actually truncates**; without that second check the mark fits either way and the first proves nothing. Note the harness panel is wider than the real side panel, so a name long enough to truncate in Chrome may not be long enough here. The store also seeds `upsolve_tracker.expanded_contests`, since a collapsed accordion renders no rows and the check would silently measure zero.
@@ -233,7 +246,7 @@ The guarantee rests on three independent layers, each confirmed by removing it a
 
 `services/platform-identity.js` answers the one remaining question: **has that handle changed since the solved flags were derived?** If so they belong to the previous account and are cleared, for that platform only, so the next sync re-derives them. That restores what this file already claims — solved state derived fresh each sync rather than cached — which the stickiness had quietly made false. Contests already deleted for being fully solved cannot come back.
 
-`updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption. The shell reports them **last**, after the backup write and the view refresh — reporting earlier let `"Writing backup…"` overwrite the message for exactly the users whose backup was at risk.
+`updateSolvedStatus` returns `{removed, failures}` rather than a bare array. **Failures are surfaced, not just logged**: a silent refusal looks the same to the user as a silent corruption. The shell reports them **last**, after the cloud save and the view refresh — reporting earlier let the save step overwrite the message for exactly the users whose data was at risk.
 
 Note the Codeforces page client (in `codeforces/scraper.js`) sends cookies, but the pages it reads — a contest's problems page, parsed by `parseProblemsPage`, and a group contest's standings, parsed by `parseStandingsPage` — yield the contest's name, problems, participants and totals, nothing about the viewer. So they need no identity, and neither does AtCoder's public tasks page. The cookies matter for a different reason on group contests: they carry the *membership* that lets the page load at all, which is why a signed-out read waits rather than failing. (The standings scrape was removed once, when the API covered every contest it had served; it came back for group contests, which the API cannot see.)
 
@@ -409,7 +422,7 @@ Note every relative import must carry its `.js` extension. Vite resolves extensi
 
 `core/waiting-contests.js`. Adding a round minutes after it ends fails for the same reason everywhere: the data isn't there. AtCoder Problems has not indexed it; a Codeforces standings totals row has not settled. The message was correct and the only recovery was to come back and click Add again — at the one moment you most want the contest queued. So the attempt is remembered under `upsolve_tracker.waiting_contests`, and every global refresh retries it.
 
-**Waiting entries are their own storage key, never `trackedContests`.** They carry no `problems` array, so filing one in the queue would break `backup-validation.js`, `collectPendingProblems`, the platform ring and the stats histograms at once. They still ride along in the backup, since the backup dumps `chrome.storage.local` wholesale. Keying is `makeContestKey`, identical to a tracked contest, so the two can never be filed under different names for the same round.
+**Waiting entries are their own storage key, never `trackedContests`.** They carry no `problems` array, so filing one in the queue would break `backup-validation.js`, `collectPendingProblems`, the platform ring and the stats histograms at once. They still ride along in the exported backup and the cloud copy, since both are made from `chrome.storage.local` wholesale. Keying is `makeContestKey`, identical to a tracked contest, so the two can never be filed under different names for the same round.
 
 Four things are easy to get wrong:
 
@@ -421,7 +434,7 @@ Four things are easy to get wrong:
   **The same trap is still live in one place, knowingly.** `codeforces/api.js` logs every failed API call at `console.error`, so typing a wrong key into Settings and pressing *Test connection* files an extension error against the extension — a red badge for what is just a typo the page already explained. It was left alone because it is not only a Settings path: the same line fires when a sync genuinely fails, where an error *is* the right level. Splitting the two means deciding at the call site rather than in the client. Worth doing, not urgent.
 - **A retry drops an entry only when it will never resolve** — added, already tracked, or every problem solved. **Every other failure keeps it waiting.** `processNewContest` verifies identity before it fetches anything, so a 503 or an expired session throws something that is *not* a publication delay; dropping on that would lose the wait to a network blip, silently. The recorded `lastError` renders on the row, which is the only thing that tells a stuck entry from a young one.
 
-The retry runs **before** `updateSolvedStatus` in the shell's refresh, so a contest added here gets its solved status marked and lands in the same backup write rather than sitting a refresh behind. Failures are isolated per entry, the way `progress-manager` isolates them per platform. `retryWaitingContests(onProgress, {addContest})` takes the adder as a **test seam** — production always passes `processNewContest`, and `tests/waiting-contests.test.js` substitutes it so the outage case can be exercised without a network stack standing in for one.
+The retry runs **before** `updateSolvedStatus` in the shell's refresh, so a contest added here gets its solved status marked and lands in the same cloud save rather than sitting a refresh behind. Failures are isolated per entry, the way `progress-manager` isolates them per platform. `retryWaitingContests(onProgress, {addContest})` takes the adder as a **test seam** — production always passes `processNewContest`, and `tests/waiting-contests.test.js` substitutes it so the outage case can be exercised without a network stack standing in for one.
 
 **Both halves of this are now confirmed against a live site.** A waiting entry has resolved on its own — left the strip and entered the queue on a later refresh, unaided — and a Codeforces official round has entered the waiting state. An earlier version of this file warned that neither had ever been seen and that the Codeforces branch "may never fire in practice", on the reasoning that a just-finished round normally succeeds anyway because an empty `contest.ratingChanges` is what the standings sampling covers. That reasoning was wrong about the outcome; the branch fires.
 
@@ -727,10 +740,11 @@ Routing a failed lookup through `waiting-contests.js` instead was considered and
 
 ### Storage split — this is deliberate
 
-- **`chrome.storage.local`** (`services/storage.js`, `LocalDB`) — `trackedContests` array, keyed by `platform:id` (see the platform registry above), plus settings under dotted keys `upsolve_tracker.handle` and `upsolve_tracker.auto_export`. This is what the Export/Import JSON backup dumps wholesale.
-- **IndexedDB** (`services/secure-store.js`) — API key/secret, by the slug `core/settings/schema.js` declares, and the `FileSystemDirectoryHandle`. Credentials live here specifically so they never land in an exported backup; the directory handle lives here because handles aren't serializable into `chrome.storage`.
+- **`chrome.storage.local`** (`services/storage.js`, `LocalDB`) — `trackedContests` array, keyed by `platform:id` (see the platform registry above), plus settings under dotted keys such as `upsolve_tracker.handle`. This is the working copy, and what both the manual Export and the cloud copy are made from — minus `upsolve_tracker.cloud.*`, which is this device's bookkeeping about its cloud copy and travels nowhere.
+- **IndexedDB** (`services/secure-store.js`) — API key/secret, by the slug `core/settings/schema.js` declares. Credentials live here specifically so they reach neither an exported backup nor the cloud copy; a second device needs its own key pair.
+- **Firestore** (`services/cloud-sync.js`, `services/catalog.js`) — a mirror of the first, per signed-in user, and the shared catalog. See *Accounts, cloud sync and the shared catalog*.
 
-`LocalDB` deliberately holds only the tracked-contest methods. Settings are read directly from their dotted keys (`upsolve_tracker.handle`, `upsolve_tracker.auto_export`, `upsolve_tracker.platform_filter`, `upsolve_tracker.tag_rating_range`), and solved state is derived fresh from `user.status` on every sync rather than cached. Earlier accessors for a `cfHandle` key and a `solvedCache` were removed — nothing wrote them.
+`LocalDB` deliberately holds only the tracked-contest methods. Settings are read directly from their dotted keys (`upsolve_tracker.handle`, `upsolve_tracker.platform_filter`, `upsolve_tracker.tag_rating_range`), and solved state is derived fresh from `user.status` on every sync rather than cached. Earlier accessors for a `cfHandle` key and a `solvedCache` were removed — nothing wrote them.
 
 ### Deduplicating the queue
 
@@ -849,15 +863,153 @@ it, which is what a large near-white fill was doing wrong.
 
 ### Nothing is fetched but the three sites
 
-There is no server, no CDN, no analytics, no telemetry and no runtime font fetch. The only
-remote addresses in the built bundle are the platform APIs, which is why `host_permissions`
+There is no CDN, no analytics, no telemetry and no runtime font fetch. The only remote
+addresses in the built bundle are the platform APIs, which is why `host_permissions`
 is composed from the platforms and diffed against the previous build — that diff is the
 check on this invariant, not a formality.
+
+**The one exception is Firebase** — see the next section. None of its origins is in
+`host_permissions`: its endpoints answer CORS themselves, and keeping them out leaves that
+list composed purely from the platforms.
 
 It constrains ordinary-looking changes. A web font, an icon set from a CDN, an error
 reporter, a "check for updates" ping: each would be individually reasonable and would each
 break the claim `DATA.md` makes to the user in its opening lines. The fonts are bundled and
 every platform mark is inline SVG for this reason, not for load time.
+
+### Accounts, cloud sync and the shared catalog
+
+**One sentence: the owner's install rates contests and publishes them; every other install
+reads ratings from that catalog, and everyone's queue is mirrored to their own Firestore
+documents.** There is no server of ours. The extension talks to Firebase directly, and
+`services/firebase.js` is the only module that imports its SDK — everything else goes
+through the small interface it exposes (`get`, `list`, `commit`, the sign-in calls), which
+is also the one test seam: `tests/helpers/fake-firebase.js` implements it in memory, so no
+test loads the SDK.
+
+**`firestore.rules` is the trust boundary, not the extension.** Anyone can edit their copy,
+so every permission is decided on Google's side from the signed-in account: a user reads
+and writes only `users/{uid}/**`, anyone signed in reads `catalog/*`, and only the uid named
+in `config/owner` (set by hand in the console) writes it. The extension reads that same
+document to decide whether to *show* "Owner", so the label and the permission cannot
+disagree — but the label grants nothing. The file in the repo is the version of record,
+deployed by pasting it into the console. **Nothing here tests the rules**; that needs the
+Firestore emulator, which needs Java. It also cannot bound how many documents a user
+writes under their own uid — rules cannot count — so the shared free tier is protected
+only by the client writing little, not by enforcement.
+
+**Three modes, from `account.js#ratingMode`, asked once per add and per refresh:**
+
+| mode | who | the add | the refresh |
+|---|---|---|---|
+| `local` | a build whose `.env` has no Firebase config | as it always was: fetch, estimate, gap policy | as it always was |
+| `owner` | signed in as `config/owner`'s uid | the same, then publishes | the same, then publishes what changed |
+| `catalog` | everyone else | catalog hit → no fetch at all; miss → problem list only, every rating `pending` | sites' `syncMetadata` skipped; pending and estimated ratings re-read from the catalog |
+
+An unreadable role (offline, rules not deployed) **throws** rather than picking one: read as
+`catalog` it would store the owner's own adds unrated and never publish them. Signed out
+still answers `catalog` — the owner's adds are the only rated ones, and an owner who signed
+out is not one — though in practice the panel is not usable signed out at all (below).
+
+**A configured build cannot be used signed out.** `index.js#startGate` hides the whole app
+behind a sign-in prompt — tabs, add banner, strip and refresh, by one `is-gated` class on
+`<upsolve-app>` so a control added later is covered without being listed — and mounts no
+view behind it, since a mounted view keeps reacting to storage. It follows
+`account.js#watchSignIn`, Firebase's own auth-state notification, so signing out in
+Settings closes the panel and signing in there opens it without either page telling the
+other. Mid sign-in from the panel, the gate opens only once `reconcileOnSignIn` has run,
+or it would pull a cloud copy the reconcile was about to replace. The one "which queue do
+you keep?" prompt is `ui/choose-queue.js`, shared by both places a sign-in starts.
+
+**Settings is gated the same way**, because settings are stored in the account too: signed
+out, `options.js#settleGate` shows only the prompt, and `openSettings()` — which renders the
+sections, loads stored values and runs the platform checks — never runs, so a signed-out
+page makes no request to any site. Settings follows sign-in changes by **reloading** rather
+than re-rendering: every field is read once on load, and a reload is the one way to be sure
+none still shows a value from before the change. Its Account section therefore only signs
+out; signing in happens at the gate.
+
+**Both prompts use Google's branded button**, `ui/google-button.js` and
+`ui/google-button.css`: the official four-colour mark (the guidelines forbid redrawing or
+recolouring it), and the dark theme's fill, border, label colour and 40px sizing. One
+deliberate departure — the label is Inter, not Roboto, because Roboto is not bundled and
+naming a font the extension does not ship is how the panel once rendered differently on
+every machine.
+
+An **unconfigured** build (`.env` empty) has no gate, because it cannot sign in at all:
+that is the test and development build. The release workflow refuses to publish one — it
+fails unless the built manifest carries `oauth2.client_id`, which `vite.config.js` adds only
+from `.env`. `npm run smoke` covers both: the views pass strips `oauth2` from the stubbed
+manifest so the app opens, and a separate pass loads the panel with the real manifest,
+signed out, and fails unless only the prompt shows. Confirmed by opening the app while
+signed out, and by leaving the tabs unhidden — each reported. Settings has the same pair:
+its main pass uses the open manifest, and a gate pass fails if a signed-out page shows any
+setting, renders any section, makes any request, or lacks Google's button — confirmed by
+skipping the gate, which reported all five.
+
+**In catalog mode every rating comes from the catalog, the site's own published ones
+included** (`catalog.js#markPending`), so the queue reads one source rather than two that
+may disagree. That is also why the gap policy is skipped there — both its branches are
+about how *this* install rated the contest — and why `fetchContestRecord` takes
+`estimate: false`, skipping the field read and fit that are most of an add's requests.
+A pending rating renders **`…`, never `???`**: `???` keeps its one meaning, *the site says
+unrated*. A catalog record that carries a `null` with `ratingSource: null` is exactly that,
+and becomes `???` on the user's side.
+
+**What is published is `catalog.js#catalogRecord`**: the stored record minus `addedAt` and
+every `solved` flag. It is a named test seam because it fails quietly in the worst
+direction — a field it forgets to strip is the owner's solved history, published to
+everyone. A platform declares `capabilities.publishable`, required by `Platform.check` and
+never defaulted; group contests set it false, since they sit behind a membership.
+
+**Only the owner needs a Codeforces key.** A catalog-mode install never estimates, so it
+never needs a gym's standings — the one thing a key unlocks — and reads a gym's problem list
+off its page instead. So the key fields are **owner-only** (`ownerOnly` in
+`settings/schema.js`): they render hidden, `options.js#showOwnerFields` reveals them only for
+the owner or an unconfigured build, and neither the setup check nor "Test connection" asks
+for them. Showing them grants nothing — the key only signs requests to Codeforces. See *The
+key pair is owner-only* in `core/platforms/codeforces/CLAUDE.md`, including the measurement
+it rests on.
+
+**Known limit: a catalog entry freezes once it leaves the owner's queue.** Publishing
+follows the owner's tracked contests, and `updateSolvedStatus` deletes a fully solved one,
+so the six-week Codeforces re-check stops for it. Group contests never get ratings for
+anyone else.
+
+**Cloud sync (`cloud-sync.js`) mirrors `chrome.storage.local`, which stays the working
+copy.** Layout: `users/{uid}` holds every non-queue key plus `updatedAt`;
+`users/{uid}/contests/{platform:id}` holds one contest each. One document per contest
+because Firestore caps a document at 1 MiB and because the free tier allows 20,000 writes a
+day: a push writes only contests whose `fingerprint` changed since the last push, which
+`tests/cloud-sync.test.js` asserts by **counting writes** — a sync rewriting everything
+would leave identical documents and pass any test that only looked at them. Documents hold
+their payload as a JSON string, because Firestore refuses shapes JSON allows (nested arrays,
+`undefined`).
+
+- **Pull on panel open**, when the remote `updatedAt` is newer than the one this device last
+  matched. The write lands in storage, and the existing `storage.onChanged` listener redraws.
+- **Last write wins.** Every change is pushed as it is made, so devices are behind one
+  another rather than diverged — unless a push failed offline. Solved status is re-derived
+  each refresh, so what that can lose is an offline add or removal, not progress.
+- **First sign-in on a device** (`reconcileOnSignIn`, from Settings): empty cloud → upload;
+  empty device → download; both → the user chooses, since either discards the other.
+- **`upsolve_tracker.cloud.*` is this device's bookkeeping** — fingerprints, the matched
+  `updatedAt`, whose account they describe. Never pushed, pulled, exported or imported, and
+  reset on sign-out or when a different account signs in.
+- A pull is held to `backup-validation.js`, like Import, since it overwrites storage.
+
+**Sign-in** hands `chrome.identity.getAuthToken`'s token to `signInWithCredential` from
+`firebase/auth/web-extension`, the Manifest V3 entry point: the default one loads popup
+helpers from Google at runtime, which an extension may not do. `.env` holds the Firebase
+web config and `VITE_GOOGLE_CLIENT_ID`, none of them secret; `vite.config.js` adds the
+manifest's `oauth2` block only when the client id is set. The manifest's `key` pins the
+extension ID (`jninialpkgocbkpobniofmaliiejeela`) the OAuth client is registered against;
+its private half is in `~/Workbench/__pinned__/upsolve-tracker/extension-key.pem`, not the
+repo. The Chrome Web Store assigns its own ID on first upload, which will need its own
+OAuth client.
+
+Firebase loads lazily, and Firestore — ~580 KB of ~680 — only on first use, which in
+practice means once someone is signed in.
 
 ### Fonts are bundled, and that is load-bearing
 
@@ -924,7 +1076,7 @@ per field — and `core/settings/store.js` reads and writes by slug, routing eac
 to `chrome.storage.local` or IndexedDB from the field's declared `store`.
 Anything that needs a value asks for the slug, the way a WordPress theme calls
 `get_option`. Each platform names its settings section, and the `Platform` base reads
-that section's slugs; `options/index.html` holds only the intro and the Backup section, and
+that section's slugs; `options/index.html` holds only the intro and the Account section, and
 `options/sections.js` renders the rest.
 
 **A section is a credential set, not a platform**, and that is the whole point.
@@ -1003,13 +1155,13 @@ Two conventions the shell depends on:
 - **`refreshData()`** — called on the current view after a global refresh. A view that needs post-sync updates must expose it; `queue-view` also takes the removed-contest list to announce.
 - **`cf-status` event** — views report long operations by dispatching a bubbling `CustomEvent` that the shell renders in its status strip (`null` clears it). That's how adding a contest narrates its stages without each view growing its own progress UI. The same `onProgress` callback is threaded through `processNewContest` and `updateSolvedStatus`; stages that no-op stay silent rather than claiming work they skipped.
 
-**Every step stays on the strip for at least 1.5 seconds** (`ui/status-queue.js`). Quick steps kept flashing — "Updating your queue…", then "Writing backup…" — and fixing them one message at a time only moved the flash to whichever quick step came next, so the rule lives in the strip, once. The minimum is per **step**, not per message: a step is one process, and may narrate itself in many messages (AtCoder's "(1/5)", "(2/5)"), which replace each other at once and share one minimum. Callers name the step with `step` — `progress-manager.js` tags each **site's** messages with its id — Codeforces' platforms are one account, and keyed per platform they showed the same step twice, the add tags all its stages `"add"`, the waiting retry `"retry-waiting"` — and a message naming none is a step of its own. Steps are shown in order, none skipped. **The strip enforces it rather than the callers**: some twenty places post progress without awaiting it, across every platform, and making each wait would slow the work, whereas this only paces what is *shown*. So `clearSyncStatus()` now returns a promise that resolves once the last step has had its minimum, and the refresh's spinner and the add banner's "Adding…" wait for it rather than saying "done" while the strip still narrates. The banner is also held on "Adding…" against the storage listener's redraws for the same reason. A note or error lingers six seconds after the operation ends, as before. `tests/status-queue.test.js` drives it on a fake clock and was confirmed by breaking it two ways — painting immediately, and not merging a step's messages. `tests/progress-steps.test.js` pins the keying by site, through a stubbed Codeforces refresh — the only site where the two ids differ — and fails if it goes back to keying by platform.
+**Every step stays on the strip for at least 1.5 seconds** (`ui/status-queue.js`). Quick steps kept flashing — "Updating your queue…", then the save step — and fixing them one message at a time only moved the flash to whichever quick step came next, so the rule lives in the strip, once. The minimum is per **step**, not per message: a step is one process, and may narrate itself in many messages (AtCoder's "(1/5)", "(2/5)"), which replace each other at once and share one minimum. Callers name the step with `step` — `progress-manager.js` tags each **site's** messages with its id — Codeforces' platforms are one account, and keyed per platform they showed the same step twice, the add tags all its stages `"add"`, the waiting retry `"retry-waiting"` — and a message naming none is a step of its own. Steps are shown in order, none skipped. **The strip enforces it rather than the callers**: some twenty places post progress without awaiting it, across every platform, and making each wait would slow the work, whereas this only paces what is *shown*. So `clearSyncStatus()` now returns a promise that resolves once the last step has had its minimum, and the refresh's spinner and the add banner's "Adding…" wait for it rather than saying "done" while the strip still narrates. The banner is also held on "Adding…" against the storage listener's redraws for the same reason. A note or error lingers six seconds after the operation ends, as before. `tests/status-queue.test.js` drives it on a fake clock and was confirmed by breaking it two ways — painting immediately, and not merging a step's messages. `tests/progress-steps.test.js` pins the keying by site, through a stubbed Codeforces refresh — the only site where the two ids differ — and fails if it goes back to keying by platform.
 
 **A rating change is announced in the status strip.** A contest's rating update moves that platform's whole block of the queue at once, and with nothing said it reads as the queue reshuffling itself — a Codeforces round once pushed a CodeChef problem off the top overnight. The refresh and the add read `getEffectiveRatings()` before they start, and `user-ratings.js#ratingChangeMessage` compares that against what is stored afterwards, naming each **site** whose number moved (Codeforces' two platforms are one line, since they share one rating): *"Codeforces rating change detected (1223 → 1346). Queue reordered."* Only a number becoming a different number counts, since a first rating had no earlier order.
 
-**On refresh the note *is* the "Updating your queue…" step, not a message after it.** Re-sorting the queue is that step's work, and every separate placement flashed: posted after the backup it replaced "Writing backup…" within a split second, and posted before it, it replaced "Updating your queue…" — a step lasting milliseconds — the same way. So `progress-manager.js#updateSolvedStatus` posts the note *instead of* that step's message when a rating moved, saves, and then calls `onProgress.hold?.()` so the step stays up while the note is read — after the save, so the queue re-orders underneath it. The length (three seconds, twice the strip's ordinary minimum) is the shell's: its `hold` raises that message's minimum in the status queue below. progress-manager only asks, and a plain callback gets no hold. The shell hands in its own before-reading as `ratingsBefore`, since the waiting-contest retry runs first and can already have stored the new rating. The add has no such step, so there the note and the backup outcome share one message instead. `tests/rating-change-step.test.js` drives the real `updateSolvedStatus` against a stubbed CodeChef, and fails if a separate "Updating your queue…" is posted beside the note.
+**On refresh the note *is* the "Updating your queue…" step, not a message after it.** Re-sorting the queue is that step's work, and every separate placement flashed: posted after the save it replaced the save step within a split second, and posted before it, it replaced "Updating your queue…" — a step lasting milliseconds — the same way. So `progress-manager.js#updateSolvedStatus` posts the note *instead of* that step's message when a rating moved, saves, and then calls `onProgress.hold?.()` so the step stays up while the note is read — after the save, so the queue re-orders underneath it. The length (three seconds, twice the strip's ordinary minimum) is the shell's: its `hold` raises that message's minimum in the status queue below. progress-manager only asks, and a plain callback gets no hold. The shell hands in its own before-reading as `ratingsBefore`, since the waiting-contest retry runs first and can already have stored the new rating. The add has no such step, so there the note and the save outcome share one message instead. `tests/rating-change-step.test.js` drives the real `updateSolvedStatus` against a stubbed CodeChef, and fails if a separate "Updating your queue…" is posted beside the note.
 
-**Every write that changes storage says how the backup went, in one wording.** Refresh, add (including an add that ends up waiting), remove and import all go through `auto-export.js#backUp(dirHandle)`, which writes the file and answers null, or `{tone, message}`: a **yellow** warning when auto-export is off — a choice, but one that leaves the queue with no backup, so it is said every time — and a **red** error when the write fails or Chrome refuses the folder. `setSyncStatus` takes that `tone` (`"error"`, `"warning"` or null; `sticky` alone still defaults to error), and `cf-status` accepts `{message, sticky, tone}` as well as a string so a view can post one. The outcome shares one message with the refresh's *"Added X — it's published now"* note: both close the same refresh, and as two steps the strip would hold for its minimum twice. Failures still come last, queued after it. There is deliberately no "on, but no folder chosen" case — Settings makes it unreachable (see *Auto-export gotchas*).
+**Every write that changes storage says how the save went, in one wording.** Refresh, add (including an add that ends up waiting), remove, import and the Settings page's Save all go through `cloud-sync.js#saveToCloud()`, which answers null, or `{tone, message}`: a **yellow** warning when signed out — a choice, but one that leaves the queue with no copy off this device, so it is said every time — and a **red** error when the push or the owner's catalog publish fails. A build with no Firebase configured answers null: there is nothing the user could turn on. `setSyncStatus` takes that `tone` (`"error"`, `"warning"` or null; `sticky` alone still defaults to error), and `cf-status` accepts `{message, sticky, tone}` as well as a string so a view can post one. The outcome shares one message with the refresh's *"Added X — it's published now"* note: both close the same refresh, and as two steps the strip would hold for its minimum twice. Failures still come last, queued after it.
 
 `queue-view` flattens all unsolved problems across contests and sorts by solve probability (see above), and shows a setup prompt when `hasCompleteSetup()` is false — which now means *any* platform is usable, not specifically Codeforces, since AtCoder needs only a handle and CodeChef needs nothing at all — without it, a missing handle or API key made refresh look like a dead button. **The prompt names the platforms from `listPlatforms()`** rather than spelling them out in `queue-view.html`, which is how it came to offer two out of three: CodeChef was added and that sentence was not. The platform filter (`ui/platform-filter.js`) is shared by both list views. It is a **dropdown**, not a chip row: chips grew with every platform added and competed for width with the very list they filter, whereas one control stays one line however many platforms exist. The collapsed button shows the active selection as marks plus "2 of 4", so what is filtered stays readable without opening it.
 
@@ -1021,7 +1173,7 @@ Its groups come from `listFilterPlatforms()`, so a new platform appears without 
 
 The row carries a **⋮ menu** holding *Open contest* and *Remove from queue*; the row is a `<button>`, not an anchor, so clicking it no longer leaves the panel. The menu button stops propagation, or opening it would toggle the accordion underneath.
 
-**Removal asks first**, replacing a 700 ms hold on a ✕. The hold existed so "a stray press does nothing at all", and a dialog is a better guard than a timer because it says what is about to happen. Confirming still has to call `backUp()`, or the exported JSON drifts from the panel.
+**Removal asks first**, replacing a 700 ms hold on a ✕. The hold existed so "a stray press does nothing at all", and a dialog is a better guard than a timer because it says what is about to happen. Confirming still has to call `saveToCloud()`, or another device pulls the contest straight back.
 
 `contest-list` sorts by `startTimeSeconds` through `queue-order.js#byStartTimeDesc` — newest first, unknown last.
 
@@ -1041,10 +1193,6 @@ Views build rows with template strings and `innerHTML`, so anything originating 
 
 `backup-validation.js` guards Import, which writes straight into `chrome.storage.local` with no undo. Note it uses `.some()`, not `.find()`: a `null` entry in `trackedContests` is itself falsy, so a truthiness check on `find`'s return value silently accepted malformed backups. There's a test for exactly that case.
 
-**The exported backup is how you inspect the real queue from outside the browser.** `chrome.storage.local` is unreachable from a shell, but auto-export writes the whole store to `upsolve_tracker_backup.json` in whichever folder the picker points at — on this machine, `~/Workbench/__pinned__/upsolve-tracker/`. That is what made it possible to confirm the practice-mirror work against the actual 65 tracked contests rather than against fixtures, and to cross-check every stored flag against the live CodeChef API. It is only as fresh as the last refresh or add, since those — with remove and import — are what write it.
+**Inspecting the real queue from outside the browser.** `chrome.storage.local` is unreachable from a shell. Export from the Contests tab writes it to `upsolve_tracker_backup.json`, and the signed-in user's cloud copy is readable in the Firebase console under `users/{uid}` — each document's `json` field is the stored record verbatim. The folder auto-export that used to keep a file current (in `~/Workbench/__pinned__/upsolve-tracker/` on this machine) is gone; the last file it wrote is still there, as of the 2.15 build.
 
-**Auto-export gotchas** (`services/auto-export.js`, used by the refresh, the add, removal and import):
-
-- `verifyExportPermission()` must be called *before* the slow await in a click handler, because a `FileSystemDirectoryHandle` re-permission prompt only succeeds while the user gesture is still fresh. Moving it after the network work breaks auto-export after every browser restart.
-- Any path that mutates `chrome.storage.local` must call `backUp()` afterwards, and report what it returns. The refresh writes solved status and tags straight to storage, so without that call the on-disk JSON silently drifts from what the UI shows — which is exactly how tags ended up visible in the extension but missing from the backup. An add that ended up *waiting* and Import both skipped it until 2.14.
-- **The auto-export flag and its folder are staged together and written together on Save**, like the rest of the Settings page. The folder used to be saved or cleared the moment it was picked while the flag waited for Save, and that split is what allowed auto-export to be on with no folder: untick, close without saving, and the folder was gone while the flag still read true. The box cannot be ticked without a successful pick, so a Save can never write "on" without a folder either. So "on" always has a folder, and a null handle with the flag on means Chrome refused access. Import strips `upsolve_tracker.auto_export` for the same reason — the folder lives in IndexedDB and never travels in the file, so importing the flag would switch auto-export on with nothing behind it.
+**Any path that mutates `chrome.storage.local` must call `saveToCloud()` afterwards, and report what it returns.** The refresh writes solved status and tags straight to storage, so without that call the cloud copy silently falls behind the panel — and the next device to open pulls the older queue. That is how tags once went missing from the folder backup, and an add that ended up *waiting* and Import both skipped it until 2.14. Export and Import strip `upsolve_tracker.cloud.*`: those keys describe one install's relationship to one account, and carried into another install they would claim a sync that never happened there.

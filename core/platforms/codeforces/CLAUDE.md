@@ -76,6 +76,31 @@ The recorded reason for the gym scrape — "a gym's roster has no API source: it
 need signing" — did not survive checking: needing a key is not an obstacle when the key is in
 hand.
 
+## The key pair is owner-only
+
+**A key is needed for exactly one thing: a gym's standings.** Everything an account asks —
+`user.info`, `user.status`, `contest.list` — answers anonymously, and an official round's
+standings must be fetched unsigned anyway. So `CodeforcesApi.fromSettings` builds an instance
+with no pair when Settings has none, `#call` sends such calls unsigned, and `api.signs` says
+which. Half a pair throws: one half filled in is a mistake, not a choice. Settings shows the
+two fields only to the owner (or an unconfigured build); everyone else never sees them.
+
+Without a key, `CodeforcesGyms#fetchContest` reads the problem list off the gym's own page
+(`fromProblemsPage`) — name, problems, whether it has ended, and nothing else. That is enough
+for an install in catalog mode, which takes every rating from the catalog. An install that
+estimates — the owner's, or an unconfigured build — is refused by `readField` with *"needs a
+Codeforces API key. Add one in Settings"*, since the field lives in the standings; and
+`syncStartTimes` asks no keyless `contest.standings`, which would only fail once per gym per
+refresh.
+
+**This rests on a measurement, recorded so it is not mistaken for an assumption.** On
+2026-10-27 a direct fetch of private gym 722144's page from the side panel, with no
+codeforces.com tab open, came back 200, logged in, unchallenged and carrying the problems
+table — the opposite of the earlier measurement in `services/page-transport.js`. All 39 gyms
+tracked on this install are private (none is in `contest.list?gym=true`), so for this user
+base the private case is the normal one, and it works. If Codeforces' bot check returns, the
+page read goes through the tab the add was started from, as group contests' does.
+
 ## Group contests (`group-contests/`)
 
 `/group/<group>/contest/<id>`. **The API cannot see these contests at all**, and that is the

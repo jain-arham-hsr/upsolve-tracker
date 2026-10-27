@@ -61,6 +61,7 @@ export class CodeforcesGyms extends Platform {
   }
 
   capabilities = {
+    publishable: true,
     // Gyms sit outside CF's taxonomy and their tags are usually bare, but the
     // vocabulary exists — they come off the standings response.
     publishesTags: true,
@@ -75,8 +76,18 @@ export class CodeforcesGyms extends Platform {
    *   the standings are hidden.
    */
   async fetchContest({ contestId, session, onProgress = () => {} }) {
-    onProgress("Reading the standings…");
     let read;
+    // No key, no standings: the problem list comes off the gym's own page,
+    // which needs no key and reaches private gyms through the user's own
+    // codeforces.com login. Enough for an install whose ratings come from the
+    // catalog; an install that estimates is refused in `readField`, with the
+    // reason, since the field lives in the standings.
+    if (!session.api.signs) {
+      onProgress("Reading the problems…");
+      return this.#withRecord(contestId, session, onProgress, await fromProblemsPage(contestId, session));
+    }
+
+    onProgress("Reading the standings…");
     try {
       read = this.fromStandings(contestId, await session.api.contestStandings(contestId));
     } catch (error) {
@@ -87,6 +98,11 @@ export class CodeforcesGyms extends Platform {
       if (!error.isStandingsHidden) throw error;
       read = await fromContestStatus(contestId, session, error);
     }
+    return this.#withRecord(contestId, session, onProgress, read);
+  }
+
+  /** The gates, the record and the context, from whichever source was read. */
+  async #withRecord(contestId, session, onProgress, read) {
     const { contestName, problems, tagsSynced, startTimeSeconds, startTimeUnavailable,
       solveCountsRead, partyHandles, finished, standings } = read;
 
@@ -170,6 +186,15 @@ export class CodeforcesGyms extends Platform {
     const { solveCountsRead, partyHandles, standings } = context;
     const gaps = contest.problems.filter((problem) => problem.rating === null).length;
 
+    // Permanent until a key is set, so a refusal rather than a wait — and one
+    // that says what to do, rather than the API error a keyless call would
+    // surface. Only an install that estimates gets here at all.
+    if (!session.api.signs) {
+      return unavailable(
+        `Rating gym ${contest.id} needs a Codeforces API key. Add one in Settings.`,
+      );
+    }
+
     // Unreachable today — gym counts come from the API, not a parsed totals
     // row — and kept deliberately: the alternative is estimating from counts
     // that were never read, which invents ratings silently.
@@ -226,7 +251,10 @@ export class CodeforcesGyms extends Platform {
     // Near-vestigial: an add reads the answer straight off the standings it
     // already fetched. What still arrives here is a hidden-standings gym,
     // whose time is derived from submissions rather than declared.
-    const gyms = pending.filter(undated);
+    // Each lookup is a signed `contest.standings`; without a key it would only
+    // fail, once per gym per refresh, so it is not asked. A private gym is then
+    // simply undated, which sorts it last — cosmetic, not lost.
+    const gyms = session.api.signs ? pending.filter(undated) : [];
     for (const [index, contest] of gyms.entries()) {
       // Deliberately slow — the API pacer spaces these — so it counts itself off.
       onProgress(`Dating gym ${index + 1} of ${gyms.length}…`);
@@ -265,6 +293,39 @@ export class CodeforcesGyms extends Platform {
 }
 
 
+
+/**
+ * A gym read without a key: its problems page, and nothing else.
+ *
+ * That page carries the name, the problem list and whether the gym has ended —
+ * everything an install that takes its ratings from the catalog stores. It
+ * carries no ratings, solve counts or start time; those need the standings,
+ * which need a key, and only the estimator reads them.
+ */
+async function fromProblemsPage(contestId, session) {
+  const page = await session.scraper.problemsPage(contestId);
+  if (!page) {
+    throw new Error(`Couldn't read the problems of gym ${contestId} from its page.`);
+  }
+  return {
+    contestName: page.contestName ?? `Contest ${contestId}`,
+    problems: page.problems.map((problem) => ({
+      ...problem,
+      rating: null,
+      ratingSource: null,
+      officialSolves: 0,
+      solved: false,
+      tags: [],
+    })),
+    tagsSynced: false,
+    startTimeSeconds: null,
+    startTimeUnavailable: false,
+    solveCountsRead: false,
+    partyHandles: null,
+    finished: page.finished,
+    standings: null,
+  };
+}
 
 /**
  * A gym whose standings Codeforces has hidden, rebuilt from `contest.status`.

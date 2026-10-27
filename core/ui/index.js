@@ -2,10 +2,15 @@ import "./views/queue-view.js";
 import "./views/contest-list.js";
 import "./views/stats-view.js";
 import { updateSolvedStatus } from "../progress-manager.js"; // Import the logic
+import { pullStore, reconcileOnSignIn, saveToCloud } from "../services/cloud-sync.js";
 import {
-  verifyExportPermission,
-  backUp,
-} from "../services/auto-export.js";
+  isAccountConfigured,
+  isSignedIn,
+  signIn,
+  watchSignIn,
+} from "../services/account.js";
+import { chooseQueue } from "./choose-queue.js";
+import { renderGoogleButton } from "./google-button.js";
 import { hasCompleteSetup } from "../settings/store.js";
 import {
   getEffectiveRatings,
@@ -26,7 +31,7 @@ import { escapeHtml } from "./escape-html.js";
 import { platformIcon } from "./platform-icons.js";
 import { StatusQueue } from "./status-queue.js";
 
-// Long enough to read a one-line rating note before the backup step
+// Long enough to read a one-line rating note before the save step
 // replaces it — twice the strip's ordinary minimum, since it is a sentence
 // to read rather than a stage to glance at.
 const RATING_NOTE_HOLD_MS = 3000;
@@ -79,15 +84,130 @@ export class UpsolveApp extends HTMLElement {
     });
     this.tabBar = this.querySelector("#tab-bar");
     this.addBanner = this.querySelector("#add-banner");
+    this.signinGate = this.querySelector("#signin-gate");
+    this.signinStatus = this.querySelector("#signin-gate-status");
+    this.btnSignin = this.querySelector("#btn-signin");
+    renderGoogleButton(this.btnSignin);
 
     this.btnSettings.innerHTML = SETTINGS_ICON;
 
+    // Closed until the gate has decided, so a signed-out panel never flashes
+    // the queue before covering it.
+    this.classList.add("is-gated");
+    this.appOpen = false;
+
     this.setupListeners();
     this.watchActiveTab();
+    this.startGate();
+  }
+
+  /**
+   * The extension is not usable signed out: the queue lives in the account and
+   * every rating comes from the shared catalog. So signed out, the panel is a
+   * sign-in prompt and nothing else.
+   *
+   * A build with no Firebase configured cannot sign in at all, so it opens as
+   * before — that is a test and development build, and the release workflow
+   * refuses to publish one.
+   *
+   * Follows sign-in changes made anywhere: signing out in Settings closes the
+   * panel, and signing in there opens it, through Firebase's own notification
+   * rather than either page telling the other.
+   */
+  async startGate() {
+    this.btnSignin.addEventListener("click", () => this.handleSignIn());
+    if (!isAccountConfigured()) {
+      this.openApp();
+      return;
+    }
+    try {
+      this.stopWatchingSignIn = await watchSignIn(() => this.applyGate());
+    } catch (error) {
+      this.showGate(`Sign-in couldn't load: ${error.message}`);
+    }
+  }
+
+  async applyGate() {
+    // Mid sign-in, the panel opens once the queue is reconciled, not the
+    // moment Firebase reports the account — or it would pull a cloud copy the
+    // reconcile is about to replace.
+    if (this.signingIn) return;
+    let signedIn = false;
+    try {
+      signedIn = await isSignedIn();
+    } catch (error) {
+      console.info("[gate] couldn't read the session:", error.message);
+    }
+    if (signedIn) this.openApp();
+    else this.showGate();
+  }
+
+  openApp() {
+    if (this.appOpen) return;
+    this.appOpen = true;
+    this.classList.remove("is-gated");
+    this.signinGate.classList.add("hidden");
     this.navigate("upsolve-queue-view");
+    this.pullFromCloud();
+  }
+
+  showGate(message = "") {
+    this.appOpen = false;
+    this.classList.add("is-gated");
+    this.signinGate.classList.remove("hidden");
+    // The view goes with the gate: a mounted view keeps reacting to storage
+    // changes, and nothing it shows belongs to a signed-out panel.
+    this.routerOutlet.innerHTML = "";
+    this.setGateStatus(message, { error: Boolean(message) });
+  }
+
+  setGateStatus(message, { error = false } = {}) {
+    this.signinStatus.textContent = message;
+    this.signinStatus.classList.toggle("hidden", message === "");
+    this.signinStatus.classList.toggle("is-error", error);
+  }
+
+  async handleSignIn() {
+    this.signingIn = true;
+    this.btnSignin.disabled = true;
+    this.setGateStatus("Signing in…");
+    try {
+      await signIn();
+      this.setGateStatus("Syncing your queue…");
+      await reconcileOnSignIn({ choose: chooseQueue });
+      this.signingIn = false;
+      await this.applyGate();
+    } catch (error) {
+      // Closing Google's prompt lands here too, and its own wording says so.
+      this.setGateStatus(error.message, { error: true });
+    } finally {
+      this.signingIn = false;
+      this.btnSignin.disabled = false;
+    }
+  }
+
+  /**
+   * Catches this device up with whatever another one pushed since. Not
+   * awaited: storage is the working copy, so the panel renders from it at
+   * once, and a pull that lands rewrites storage — which the storage listener
+   * already turns into a redraw of the banner and the view.
+   */
+  async pullFromCloud() {
+    try {
+      if (await pullStore()) {
+        this.setSyncStatus("Loaded your queue from the cloud.", { sticky: true, tone: null });
+        this.clearSyncStatus();
+      }
+    } catch (error) {
+      // Not an error the user can act on mid-render, and the next open or
+      // save tries again; logged at info so it is not filed as an extension
+      // error on every open while offline.
+      console.info("[cloud] pull failed:", error.message);
+    }
   }
 
   disconnectedCallback() {
+    this.stopWatchingSignIn?.();
     chrome.tabs.onActivated.removeListener(this.boundCheckActiveTab);
     chrome.tabs.onUpdated.removeListener(this.boundTabUpdated);
     chrome.storage.onChanged.removeListener(this.boundStorageChanged);
@@ -217,11 +337,6 @@ export class UpsolveApp extends HTMLElement {
     const pending = this.pendingContest;
     if (!pending || pending.tracked || pending.waiting) return;
 
-    // Unlock the export handle while the click is still fresh. A lapsed
-    // permission can only be re-prompted under user activation, which will not
-    // survive the network work below.
-    const dirHandle = await verifyExportPermission();
-
     // The banner stays on "Adding…" until the strip has shown the add's last
     // message: storage changes redraw it mid-add, and "Added" appearing while
     // the strip still narrates the add reads as the two disagreeing.
@@ -245,10 +360,10 @@ export class UpsolveApp extends HTMLElement {
 
       pending.tracked = contest;
 
-      // One message, not two: the rating note and the backup outcome close
+      // One message, not two: the rating note and the save outcome close
       // the same add, and as separate steps the strip would spend a second
       // minimum on what is one outcome.
-      const outcome = await backUp(dirHandle);
+      const outcome = await saveToCloud();
       const notes = [
         await ratingChangeMessage(ratingsBefore),
         outcome?.message,
@@ -272,9 +387,9 @@ export class UpsolveApp extends HTMLElement {
           contestId: pending.match.contestId,
           lastError: error.message,
         });
-        // The waiting entry is stored, and it travels in the backup like
-        // everything else in storage — so this branch backs up too.
-        const outcome = await backUp(dirHandle);
+        // The waiting entry is stored, and it travels to the cloud like
+        // everything else in storage — so this branch saves too.
+        const outcome = await saveToCloud();
         // The identity, and with it the rating, was settled before the fetch
         // that found nothing, so a waiting add can still have moved it.
         const notes = [
@@ -358,24 +473,19 @@ export class UpsolveApp extends HTMLElement {
     this.btnRefresh.disabled = true;
     this.setSyncStatus("Starting sync…");
 
-    // 2. Unlock the export handle while the click is still fresh. A lapsed
-    // permission can only be re-prompted under user activation, which will
-    // not survive the sync below.
-    const dirHandle = await verifyExportPermission();
-
     try {
       // Inside the try so a failed read cannot leave the button spinning.
       const ratingsBefore = await getEffectiveRatings();
 
-      // 3. Retry anything that failed to add because the platform had not
+      // 2. Retry anything that failed to add because the platform had not
       // published it yet. Before the sync, deliberately: a contest added here
-      // then gets its solved status marked and lands in the same backup write,
+      // then gets its solved status marked and lands in the same cloud save,
       // rather than sitting a whole refresh behind.
       const { added: addedWaiting } = await retryWaitingContests((message) =>
         this.setSyncStatus(message, { step: "retry-waiting" }),
       );
 
-      // 4. Run the sync logic, reporting each stage as it starts. A rating
+      // 3. Run the sync logic, reporting each stage as it starts. A rating
       // that moved is announced as its "Updating your queue…" step, and
       // `hold` is how long that step then stays up — the length is the
       // panel's call, so progress-manager only asks for it.
@@ -388,18 +498,19 @@ export class UpsolveApp extends HTMLElement {
         { ratingsBefore },
       );
 
-      // 5. The sync rewrites stored contests, so the backup has to follow it
-      // or the file drifts from what the extension shows.
-      if (dirHandle) this.setSyncStatus("Writing backup…");
-      const outcome = await backUp(dirHandle);
+      // 4. The sync rewrites stored contests, so the cloud copy has to follow
+      // it or another device would pull a queue older than this one. For the
+      // owner this is also where changed contests reach the catalog.
+      if (isAccountConfigured()) this.setSyncStatus("Saving to the cloud…");
+      const outcome = await saveToCloud();
 
-      // 6. If we are currently looking at the queue, tell it to update
+      // 5. If we are currently looking at the queue, tell it to update
       // Explicit here, and not left to the storage listener: the removed list
       // is what the queue announces, and a storage event cannot carry it.
       await this.refreshCurrentView(removedContests);
 
-      // 7. A refresh that quietly grew the backlog is easy to miss, so say
-      // what arrived — in one message with the backup outcome, since both
+      // 6. A refresh that quietly grew the backlog is easy to miss, so say
+      // what arrived — in one message with the save outcome, since both
       // close the same refresh and two steps would hold the strip twice.
       const closing = [];
       if (addedWaiting.length > 0) {
@@ -414,12 +525,12 @@ export class UpsolveApp extends HTMLElement {
         });
       }
 
-      // 8. Report a refusal *last*, so nothing overwrites it. A platform
+      // 7. Report a refusal *last*, so nothing overwrites it. A platform
       // declining to sync — someone else signed into CodeChef, say — has to be
       // seen: skipping it silently looks exactly like a successful sync, which
       // was half the problem the identity check exists to fix. Reporting it
-      // earlier let "Writing backup…" clear it for precisely the users whose
-      // backup is at risk.
+      // earlier let the save step clear it for precisely the users whose
+      // data is at risk.
       if (failures.length > 0) {
         const [first] = failures;
         const more = failures.length > 1 ? ` (+${failures.length - 1} more)` : "";
@@ -429,7 +540,7 @@ export class UpsolveApp extends HTMLElement {
       console.error("Refresh failed:", error);
       this.setSyncStatus(`Sync failed: ${error.message}`, { sticky: true });
     } finally {
-      // 9. UI Feedback: stop spinning — once the strip has shown the last
+      // 8. UI Feedback: stop spinning — once the strip has shown the last
       // step, so the button does not say "done" while it is still narrating.
       await this.clearSyncStatus();
       this.btnRefresh.classList.remove("spinning");

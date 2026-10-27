@@ -110,6 +110,7 @@ export class CodeChef extends Platform {
   }
 
   capabilities = {
+    publishable: true,
     // Tags come back with each problem, mixed with the setter's handle and
     // the contest code; `cleanTags` strips those.
     publishesTags: true,

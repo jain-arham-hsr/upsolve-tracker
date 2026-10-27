@@ -93,6 +93,33 @@ test("a request is signed, and the secret never appears in the URL", async () =>
   }
 });
 
+test("with no key pair, a request goes out unsigned and still asks the same thing", async () => {
+  // The key is optional: everything an account needs answers anonymously, so
+  // an install without one must still reach the API rather than refuse.
+  reset();
+  const stub = stubFetch();
+
+  try {
+    const api = CodeforcesApi.fromSettings({});
+    assert.equal(api.signs, false);
+    await api.usersInfo(["tourist", "Petr"]);
+    const { url } = stub.calls[0];
+
+    assert.match(url, /\/api\/user\.info\?handles=tourist%3BPetr$/);
+    assert.ok(!/apiKey|apiSig|time=/.test(url), `an unsigned call carried signing parameters: ${url}`);
+  } finally {
+    stub.restore();
+  }
+});
+
+test("half a key pair is refused rather than silently sent unsigned", () => {
+  // One half filled in is a mistake, not a choice; reading it as "no key"
+  // would hide it until a gym failed to rate.
+  assert.throws(() => CodeforcesApi.fromSettings({ api_key: "k" }), /both the Codeforces API key and secret/);
+  assert.throws(() => CodeforcesApi.fromSettings({ api_secret: "s" }), /both the Codeforces API key and secret/);
+  assert.equal(CodeforcesApi.fromSettings({ api_key: "k", api_secret: "s" }).signs, true);
+});
+
 test("a FAILED response becomes the comment Codeforces gave", async () => {
   reset();
   const original = globalThis.fetch;

@@ -37,6 +37,20 @@
       <button type="button" class="tab" data-view="upsolve-stats-view">Stats</button>
     </nav>
 
+    <!-- Shown instead of everything below the header while nobody is signed
+         in. The extension is not usable signed out: the queue lives in the
+         account, and every rating comes from the shared catalog. -->
+    <section id="signin-gate" class="signin-gate hidden">
+      <h2 class="signin-gate-title">Sign in to continue</h2>
+      <p class="signin-gate-text">
+        Upsolve Tracker keeps your queue in your Google account, so it survives
+        clearing Chrome's data and follows you to any computer.
+      </p>
+      <!-- Filled by google-button.js: Google's branded button, logo and all. -->
+      <button type="button" id="btn-signin"></button>
+      <p id="signin-gate-status" class="signin-gate-status hidden"></p>
+    </section>
+
     <div id="sync-status" class="sync-status hidden"></div>
     <main id="router-outlet"></main>
   </template>

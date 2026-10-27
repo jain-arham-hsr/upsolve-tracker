@@ -52,7 +52,7 @@ export const readSection = (section) =>
   getSettings(section.fields.map((field) => field.slug));
 
 /**
- * True once *any* section is filled in completely.
+ * True once *any* section has every field it needs — owner-only ones aside.
  *
  * A section is a credential set, so this asks whether *something* can sync —
  * not whether every platform can. It previously demanded Codeforces
@@ -60,10 +60,13 @@ export const readSection = (section) =>
  * setup prompt and a refresh button that looked broken.
  */
 export async function hasCompleteSetup() {
+  // A section is usable once every field it cannot do without is filled;
+  // owner-only ones — the Codeforces key pair — are not asked for.
   const filled = await Promise.all(
-    SECTIONS.map(async (section) =>
-      Object.values(await readSection(section)).every(Boolean),
-    ),
+    SECTIONS.map(async (section) => {
+      const values = await readSection(section);
+      return section.fields.filter((field) => !field.ownerOnly).every((field) => values[field.slug]);
+    }),
   );
   return filled.some(Boolean);
 }

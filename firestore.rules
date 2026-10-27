@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// The trust boundary. Anyone can modify their copy of the extension, so every
+// permission is decided here, on Google's side, from the signed-in account
+// alone. Paste this into Firebase console > Build > Firestore Database > Rules
+// — not Realtime Database, whose rules page looks the same but takes JSON and
+// rejects this file with "Line 1: Parse error". This file is the version of
+// record.
+//
+// `rules_version` stays the first line, as Google's docs require.
+//
+// The owner is whoever `config/owner` names ({uid: "..."}, set by hand in the
+// console). The extension reads that same document to decide whether to *show*
+// "Owner", so the two cannot disagree. With no such document nobody is the
+// owner, since `get()` on a missing document denies.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return signedIn()
+        && request.auth.uid == get(/databases/$(database)/documents/config/owner).data.uid;
+    }
+
+    // Each user's own data, and nobody else's. Under version 2,
+    // `{document=**}` also matches the user's document itself, not only the
+    // contests beneath it.
+    match /users/{uid}/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Shared problem ratings: readable by anyone signed in, written only by the
+    // owner.
+    match /catalog/{contest} {
+      allow read: if signedIn();
+      allow write: if isOwner();
+    }
+
+    // Set by hand in the console, never from the extension.
+    match /config/{doc} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+  }
+}

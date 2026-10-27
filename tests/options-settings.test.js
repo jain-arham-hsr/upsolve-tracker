@@ -155,3 +155,18 @@ test("a section declared without fields fails here rather than rendering an empt
     "a half-declared section should not render a heading over nothing",
   );
 });
+
+test("the Codeforces key pair renders hidden and owner-only; the handle does not", () => {
+  // Only the catalog's owner rates gyms, which is the one thing a key is for.
+  // Everyone else must never be shown the fields, so they start hidden and
+  // only `showOwnerFields` in options.js reveals them.
+  const doc = render();
+  const group = (slug) => doc.querySelector(`[data-field="${slug}"]`).closest(".form-group");
+
+  for (const slug of ["api_key", "api_secret"]) {
+    assert.ok(group(slug).hasAttribute("data-owner-only"), `${slug} is not marked owner-only`);
+    assert.ok(group(slug).hasAttribute("hidden"), `${slug} is visible before the page knows the role`);
+  }
+  const handle = group("upsolve_tracker.handle");
+  assert.ok(!handle.hasAttribute("hidden") && !handle.hasAttribute("data-owner-only"));
+});

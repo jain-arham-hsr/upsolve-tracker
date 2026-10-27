@@ -47,7 +47,7 @@ function complete({ site = getPlatform("codechef").constructor.site, Api: api = 
     solvedKey(contest, problem) { return `codechef:${problem.index}`; }
     problemKey(contest, problem) { return this.solvedKey(contest, problem); }
     chartColor = "#000";
-    capabilities = { publishesTags: true, canEstimate: false };
+    capabilities = { publishesTags: true, publishable: true, canEstimate: false };
 
     async fetchContest({ contestId }) {
       return {
@@ -100,7 +100,7 @@ test("a class without fetchContest, or without any way to read accepted submissi
 test("canEstimate, readField() and estimate() are one fact, refused in every direction", () => {
   const Claims = complete();
   Claims.prototype.capabilities = undefined;
-  const claims = new Claims(); claims.capabilities = { publishesTags: true, canEstimate: true };
+  const claims = new Claims(); claims.capabilities = { publishesTags: true, publishable: true, canEstimate: true };
   assert.throws(() => Platform.check(claims), /declares canEstimate: true but implements neither/);
 
   const Estimates = complete();
@@ -114,10 +114,18 @@ test("canEstimate, readField() and estimate() are one fact, refused in every dir
   assert.throws(() => build(FitsOnly), /estimate\(\) without readField\(\)/);
 });
 
+test("publishable must be declared, never defaulted", () => {
+  // A default of true would publish a members-only contest into a catalog
+  // everyone signed in can read, the day a platform forgot to say otherwise.
+  const instance = new (complete())();
+  instance.capabilities = { publishesTags: true, canEstimate: false };
+  assert.throws(() => Platform.check(instance), /must declare capabilities.publishable/);
+});
+
 test("ratingGraceMs is optional, but a declared one must be a usable duration", () => {
   // Optional is the load-bearing half: every double in this file declares only
-  // publishesTags and canEstimate, and requiring a third key would fail them
-  // all for a reason that has nothing to do with what they are testing.
+  // the required keys, and requiring this one too would fail them all for a
+  // reason that has nothing to do with what they are testing.
   assert.ok(build(complete()), "a platform declaring no window is fine");
 
   // `capabilities` is a class *field*, so it has to be replaced on the instance
@@ -125,7 +133,7 @@ test("ratingGraceMs is optional, but a declared one must be a usable duration", 
   // then reads the original and passes for the wrong reason.
   const declaring = (ratingGraceMs) => {
     const instance = new (complete())();
-    instance.capabilities = { publishesTags: true, canEstimate: false, ratingGraceMs };
+    instance.capabilities = { publishesTags: true, publishable: true, canEstimate: false, ratingGraceMs };
     return instance;
   };
 
@@ -142,7 +150,7 @@ test("a window declared on a platform that estimates is refused as config that d
   Estimator.prototype.readField = async () => ({});
   Estimator.prototype.estimate = () => {};
   const estimator = new Estimator();
-  estimator.capabilities = { publishesTags: true, canEstimate: true, ratingGraceMs: 1000 };
+  estimator.capabilities = { publishesTags: true, publishable: true, canEstimate: true, ratingGraceMs: 1000 };
   assert.throws(() => Platform.check(estimator), /canEstimate: true, where it is never read/);
 });
 
@@ -289,7 +297,7 @@ test("estimateMissing reads the field once, fits in place, and passes a status t
     for (const problem of contest.problems) if (problem.rating === null) problem.rating = field.size * 100;
   };
   const platform = new Fake();
-  platform.capabilities = { publishesTags: true, canEstimate: true };
+  platform.capabilities = { publishesTags: true, publishable: true, canEstimate: true };
   Platform.check(platform);
 
   const contest = { id: "x", problems: [{ index: "A", rating: null }, { index: "B", rating: 2000 }] };

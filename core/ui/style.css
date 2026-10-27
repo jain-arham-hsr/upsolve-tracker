@@ -1,4 +1,5 @@
 @import "./fonts.css";
+@import "./google-button.css";
 
 /* core/ui/style.css */
 
@@ -207,7 +208,7 @@ upsolve-stats-view {
   background: rgba(239, 83, 80, 0.5);
 }
 
-/* A nudge rather than a failure — auto-export switched off. Literal amber, not
+/* A nudge rather than a failure — cloud backup off while signed out. Literal amber, not
    --band-orange: the band colours carry rank meaning, the same reason the
    error pair above does not borrow --band-red. */
 .sync-status.is-warning {
@@ -1937,4 +1938,53 @@ upsolve-stats-view {
 
 .btn.danger:hover {
   background-color: #f4706d;
+}
+
+/* --- Sign-in gate --- */
+
+/* Signed out, the app is the gate and nothing else: the tabs, the add banner,
+   the strip and the refresh all act on a queue that lives in the account. Hidden
+   by one class on the app rather than per element, so a new control added to
+   the shell is covered without anyone remembering to hide it here. */
+upsolve-app.is-gated #tab-bar,
+upsolve-app.is-gated #add-banner,
+upsolve-app.is-gated #sync-status,
+upsolve-app.is-gated #router-outlet,
+upsolve-app.is-gated #btn-refresh {
+  display: none;
+}
+
+.signin-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 18px 10px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.signin-gate.hidden {
+  display: none;
+}
+
+.signin-gate-title {
+  margin: 0;
+  font-size: var(--title-size);
+  font-weight: 600;
+  color: var(--text-title);
+}
+
+.signin-gate-text,
+.signin-gate-status {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.signin-gate-status.is-error {
+  color: #ef9a9a;
 }

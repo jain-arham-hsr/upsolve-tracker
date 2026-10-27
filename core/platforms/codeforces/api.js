@@ -72,17 +72,30 @@ export class CodeforcesApi extends Api {
   }
 
   /**
-   * The instance a session carries, from a key pair.
+   * The instance a session carries, from a key pair — or from none.
    *
-   * @throws when the extension has not been configured yet.
+   * The pair is optional. Everything an account needs answers anonymously —
+   * `user.info`, `user.status`, `contest.list` — and a gym's problem list can
+   * be read off its own page, which reaches private gyms too: measured from the
+   * side panel with no codeforces.com tab open, a private gym's page came back
+   * logged in, unchallenged, with its problems. What a key alone unlocks is a
+   * gym's *standings*, which only the estimator needs, so only an install
+   * that rates gyms itself — the catalog's owner — has to set one.
+   *
+   * @throws when only one half is filled in, which is a mistake rather than a choice.
    */
   static fromSettings(values) {
-    if (!values.api_key || !values.api_secret) {
-      throw new Error(
-        "No API key set yet. Open Settings and add your Codeforces handle, key and secret.",
-      );
+    const key = values.api_key || null;
+    const secret = values.api_secret || null;
+    if (Boolean(key) !== Boolean(secret)) {
+      throw new Error("Fill in both the Codeforces API key and secret, or leave both empty.");
     }
-    return new CodeforcesApi(values.api_key, values.api_secret);
+    return new CodeforcesApi(key, secret);
+  }
+
+  /** Whether calls are signed, which is what a gym's standings need. */
+  get signs() {
+    return Boolean(this.apiKey && this.apiSecret);
   }
 
   /** Test seam: the signed client and the problemset memo. */
@@ -91,10 +104,16 @@ export class CodeforcesApi extends Api {
     signed.reset(spacingMs);
   }
 
-  /** Issues one signed API call; a FAILED status becomes the comment Codeforces gave. */
+  /**
+   * Issues one API call, signed when there is a key pair; a FAILED status
+   * becomes the comment Codeforces gave.
+   */
   async #call(methodName, params) {
     try {
-      const data = await this.json(await signedUrl(this, methodName, params));
+      const url = this.signs
+        ? await signedUrl(this, methodName, params)
+        : unsignedUrl(methodName, params);
+      const data = await this.json(url);
       if (data.status !== "OK") {
         throw new Error(data.comment || "Codeforces API Error");
       }
@@ -499,6 +518,15 @@ async function signedUrl({ apiKey, apiSecret }, methodName, params) {
 
   const apiSig = `${rand}${await sha512(`${rand}/${methodName}?${queryString}#${apiSecret}`)}`;
   return `${ORIGIN}/api/${methodName}?${queryString}&apiSig=${apiSig}`;
+}
+
+/** The same call with no key: the parameters alone, which every account route accepts. */
+function unsignedUrl(methodName, params) {
+  const query = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${encodeURIComponent(params[key])}`)
+    .join("&");
+  return `${ORIGIN}/api/${methodName}${query ? `?${query}` : ""}`;
 }
 
 async function sha512(message) {

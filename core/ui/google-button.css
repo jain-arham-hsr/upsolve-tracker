@@ -1,0 +1,55 @@
+/* "Sign in with Google", dark theme, to Google's branding guidelines: fill
+   #131314, a 1px #8E918F border, #E3E3E3 label, 40px tall, a 20px logo with
+   12px of padding and 10px before the label. Imported by both the panel and
+   Settings, so the one branded control in the extension looks the same in both.
+
+   The label is Inter rather than Roboto — see google-button.js for why. */
+
+.gsi-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #8e918f;
+  border-radius: 20px;
+  background-color: #131314;
+  color: #e3e3e3;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.25px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.218s, box-shadow 0.218s;
+}
+
+/* Google's hover and focus states: a light wash over the fill and a soft
+   shadow, never a change of the fill colour itself. */
+.gsi-button:hover:not(:disabled) {
+  background-color: #2a2a2b;
+  box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+}
+
+.gsi-button:focus-visible {
+  outline: 2px solid #8ab4f8;
+  outline-offset: 2px;
+}
+
+.gsi-button:disabled {
+  cursor: default;
+  background-color: rgba(19, 19, 20, 0.38);
+  border-color: rgba(142, 145, 143, 0.12);
+}
+
+.gsi-button:disabled .gsi-button-logo,
+.gsi-button:disabled .gsi-button-label {
+  opacity: 0.38;
+}
+
+.gsi-button-logo {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}

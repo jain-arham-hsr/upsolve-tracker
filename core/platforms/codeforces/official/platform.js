@@ -71,6 +71,7 @@ export class CodeforcesOfficial extends Platform {
   }
 
   capabilities = {
+    publishable: true,
     // problemset.problems carries tags, and covers every official problem.
     publishesTags: true,
     // The participant field is readable, so a gap left after the estimator has

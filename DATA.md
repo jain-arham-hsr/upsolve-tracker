@@ -3,12 +3,16 @@
 A map of every number in the panel: which site it came from, what was done to it, and where
 it ended up. Written so that when something looks wrong you can check it yourself.
 
-There is **no server**. Everything is fetched from the three sites directly by your browser
-and stored on your machine.
+Everything is fetched from the three sites directly by your browser and stored on your
+machine. You sign in with Google to use it, and the extension also talks to Firebase
+(Google's app backend): it keeps a copy of your queue there, in documents only your account
+can read, and reads problem difficulties from a shared catalog the extension's maintainer
+keeps. Your API keys never leave this browser.
 
 **Nothing else is fetched at all.** No CDNs, no analytics, no web fonts pulled at runtime.
 The two typefaces (Inter and JetBrains Mono) ship inside the extension, every platform mark
-is inline SVG, and the only remote addresses in the build are the data APIs listed below.
+is inline SVG, and the only remote addresses in the build are the data APIs listed below
+and Firebase.
 
 ---
 
@@ -47,8 +51,8 @@ and the site sees a stranger. Everything unmarked is public.
 | | **Official round** | **Gym** | **Group contest** |
 |---|---|---|---|
 | URL | `/contest/<id>` | `/gym/<id>` | `/group/<g>/contest/<id>` |
-| Can the API see it? | Yes, anonymously | Only with your signed key | **No.** "Contest not found", even with a member's key |
-| Problem list and name | `contest.standings`, unsigned | `contest.standings`, signed | The contest's dashboard page |
+| Can the API see it? | Yes, anonymously | Its standings only with a signed key | **No.** "Contest not found", even with a member's key |
+| Problem list and name | `contest.standings`, unsigned | `contest.standings`, signed — or, with no key, the gym's own page, which needs none | The contest's dashboard page |
 | Is it ready to add? | Listed in `problemset.problems` | `phase` in the standings reply | "Finished" versus "Contest is running" on the standings page |
 | Published ratings | Yes; Codeforces rates them within days | About a third of problems (ones reused from the archive) | None; the problems are the group's own |
 | Tags | Yes | Rarely | None |
@@ -141,7 +145,8 @@ against the new account.
 
 ## What's stored, and where
 
-**`chrome.storage.local`** — this is what Export dumps:
+**`chrome.storage.local`** — this is what Export dumps, and what is copied to the cloud when
+you're signed in:
 
 | Key | Contents |
 |:--|:--|
@@ -150,15 +155,24 @@ against the new account.
 | `upsolve_tracker.platform_ratings` | Your rating on each site |
 | `upsolve_tracker.platform_identity` | Which account each site's solved flags belong to |
 | `upsolve_tracker.waiting_contests` | Contests you asked for that the site hasn't published yet, retried on every refresh |
-| `upsolve_tracker.auto_export` | Whether the backup file is kept current. Not restored by Import, since the folder it writes to isn't in the backup |
+| `upsolve_tracker.cloud.*` | This browser's notes on its cloud copy: what it last saved and which account it belongs to. Never exported, imported or copied to the cloud |
 | `upsolve_tracker.platform_filter`, `.stats_scope`, `.expanded_contests`, `.waiting_expanded`, `.tag_rating_range.*` | UI state that should survive switching tabs |
 
-**IndexedDB** (`upsolve_tracker_db`) — deliberately separate, because it must **not** appear
-in an exported backup:
+**IndexedDB** (`upsolve_tracker_db`) — deliberately separate, because it must appear in
+neither an exported backup nor the cloud: your Codeforces API key and secret. A second
+computer needs them entered again.
 
-- your Codeforces API key and secret
-- the folder handle for auto-export (this one can't be recreated from a backup — if it's
-  lost, just pick the folder again)
+**Firebase**, only when signed in:
+
+| Where | Contents |
+|:--|:--|
+| `users/<your id>` and `users/<your id>/contests/…` | A copy of everything above in `chrome.storage.local`, one document per contest. Only your account can read or write it |
+| `catalog/…` | One document per contest the maintainer has added: its problems and their difficulties, with nothing about who solved what. Readable by anyone signed in |
+
+**Where a difficulty comes from depends on whose copy this is.** On the maintainer's own
+install, exactly as described above: published by the site, or estimated here. On everyone
+else's, it is read from the catalog, so a contest the maintainer hasn't added shows `…`
+until they do.
 
 ---
 
@@ -174,10 +188,12 @@ in an exported backup:
 | Adding a contest is slow | Expected. Requests are spaced deliberately; a CodeChef division costs about one request per problem. |
 | A contest sits in "Waiting" | It isn't ready: still running, or the site hasn't published its problems and difficulties. Every refresh retries it. A Codeforces round waits until Codeforces lists it at all — not until it is rated, since a listed-but-unrated round is added with estimates that settle later. A CodeChef contest also waits while any of its difficulties are missing, for up to a week after it ran. A Codeforces group contest waits while its standings say it is running, and whenever no signed-in codeforces.com tab is open to read it through. |
 | CodeChef says "refused the request" | Open codechef.com in a tab and make sure you're signed in. |
-| The backup file has stopped updating | The export folder handle lives in IndexedDB and can be lost. Re-pick the folder in Settings. |
+| A rating shows `…` | The shared catalog hasn't rated it yet. It fills in on a later refresh once it has, by itself. |
+| "Couldn't save to the cloud" | Your queue is still saved in this browser, and the next change tries again. |
+| A second computer shows an older queue | It pulls the newer one when the panel opens. If both computers were changed while one was offline, the one saved last wins. |
 
-The refresh reports failures **last**, after writing the backup, so a message about a failed
-sync can't be overwritten by the backup notice.
+The refresh reports failures **last**, after saving to the cloud, so a message about a failed
+sync can't be overwritten by the save notice.
 
 ---
 

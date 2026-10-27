@@ -31,6 +31,17 @@ jobs:
       - name: Build Chrome extension
         run: npm run build:chrome
 
+      # A build whose .env leaves Firebase out cannot sign in, so it opens
+      # without the sign-in gate — fine for tests and development, never for a
+      # release. The manifest's oauth2 block is composed from .env only when
+      # the client id is set, so its absence is the tell.
+      - name: Refuse a release without sign-in
+        run: |
+          if ! jq -e '.oauth2.client_id' dist/chrome/manifest.json > /dev/null; then
+            echo "dist/chrome/manifest.json has no oauth2 block: .env is missing its Firebase and OAuth values."
+            exit 1
+          fi
+
       - name: Get version from manifest
         id: version
         run: |

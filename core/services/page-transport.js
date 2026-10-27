@@ -22,6 +22,16 @@
  * already signed in to, which is what a content script is *for*. The request
  * that results is the same one the user's own tab would make.
  *
+ * **That measurement is a moment, not a law.** Re-measured on Codeforces on
+ * 2026-10-27, a direct fetch from the side panel with no codeforces.com tab open
+ * read a *private* gym's page logged in, unchallenged, problems and all — so
+ * at that moment the site was neither challenging the extension nor
+ * withholding the login. CodeChef has never needed a tab in practice either.
+ * Whether a session travels depends on how each site sets its cookie and on
+ * whether its bot check is active, and both change without notice. So this
+ * module stays: it costs nothing when a tab is open, and it is what keeps the
+ * session-gated reads working when a site tightens up again.
+ *
  * ## What it cannot do
  *
  * It needs a tab open on that site. When there is none it falls back to a direct

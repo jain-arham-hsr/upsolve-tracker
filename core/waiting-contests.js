@@ -12,8 +12,8 @@
  * **Waiting entries are their own storage key, not `trackedContests`.** They
  * carry no `problems` array, and putting one in the queue would break backup
  * validation, `collectPendingProblems`, the platform ring and the stats
- * histograms at once. They ride along in the exported backup regardless, since
- * auto-export dumps `chrome.storage.local` wholesale.
+ * histograms at once. They ride along in the exported backup and the cloud
+ * copy regardless, since both are made from `chrome.storage.local` wholesale.
  */
 import { LocalDB } from "./services/storage.js";
 import { makeContestKey, findTrackedContest } from "./platforms/registry.js";

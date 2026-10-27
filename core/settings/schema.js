@@ -44,6 +44,10 @@
  * @property {string} [placeholder]
  * @property {string} [help]  injected as trusted HTML; authored here, in this
  *   repo, which is the deliberate exception to the escaping rule
+ * @property {boolean} [ownerOnly]  shown only to an install that rates
+ *   contests itself — the catalog's owner, or a build with no Firebase — and
+ *   never required: the setup check and the verify button ask only for the
+ *   fields everyone has
  */
 
 export const SECTIONS = [
@@ -59,14 +63,20 @@ export const SECTIONS = [
         placeholder: "e.g., tourist",
         help: "Used to look up your accepted submissions.",
       },
+      // Owner-only: everything a user needs from Codeforces answers without
+      // a key. Only an install that works out gym difficulties itself — the
+      // shared catalog's owner — reads a gym's standings, and those are the
+      // one thing that needs signing, so nobody else is shown these fields.
+      // See `codeforces/api.js#fromSettings`.
       {
         slug: "api_key",
         label: "API key",
         store: "secret",
         type: "text",
         placeholder: "e.g., 70f9b...",
+        ownerOnly: true,
         help:
-          'Generate a key pair at <a href="https://codeforces.com/settings/api" target="_blank" rel="noreferrer">codeforces.com/settings/api</a>, then paste both halves below. The pair is stored in this browser only, is used to sign requests to codeforces.com, and is kept out of the JSON backup on purpose.',
+          'Needed to work out gym difficulties for the shared ratings. Generate a key pair at <a href="https://codeforces.com/settings/api" target="_blank" rel="noreferrer">codeforces.com/settings/api</a>, then paste both halves below. The pair stays in this browser, and is kept out of the backup and the cloud.',
       },
       {
         slug: "api_secret",
@@ -74,14 +84,15 @@ export const SECTIONS = [
         store: "secret",
         type: "password",
         placeholder: "••••••••",
+        ownerOnly: true,
         help: "The secret half of the same key pair.",
       },
     ],
 
     /**
-     * A button rather than verifying on change, because three fields have to be
-     * filled before the check can mean anything — and a signed request fired
-     * after each one would mostly be asking with an incomplete key pair.
+     * A button rather than verifying on change, because up to three fields
+     * belong to one check — a handle alone, or a handle with a key pair — and a
+     * request fired after each field would mostly be asking with half a pair.
      *
      * `adapter` names which platform runs the check, and is asserted against
      * the registry by `tests/module-boundaries.test.js` — a typo here is
@@ -96,8 +107,8 @@ export const SECTIONS = [
       trigger: "button",
       adapter: "codeforces-official",
       label: "Test connection",
-      help: "Checks the handle and key against Codeforces before you rely on them.",
-      incomplete: "Fill in all three fields first.",
+      help: "Checks the handle, and the key if you set one, against Codeforces before you rely on them.",
+      incomplete: "Fill in your handle first.",
     },
   },
 

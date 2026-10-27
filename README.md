@@ -52,21 +52,29 @@ Download `upsolve-tracker-chrome-vX.Y.zip` from the
 Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the
 unzipped folder. Click the extension icon to open the side panel.
 
-**2. Tell it who you are**
+**2. Sign in with Google**
+
+The panel and Settings both ask you to sign in before anything else. Your queue is kept in your Google
+account, so it survives clearing Chrome's data and follows you to another computer — sign in
+there and it appears. Signing in is also how problems get their difficulties: ratings come
+from a shared catalog, kept up to date by the extension's maintainer.
+
+**3. Tell it who you are on each site**
 
 Open **⚙ Settings** from the panel. You only need the sites you actually use, but a site
 needs its handle before you can add any of its contests.
 
 | Site | What it needs |
 |:--|:--|
-| **Codeforces** | Your handle, plus an API key pair from [codeforces.com/settings/api](https://codeforces.com/settings/api) |
+| **Codeforces** | Your handle |
 | **AtCoder** | Your handle |
 | **CodeChef** | Your handle, and be signed in to codechef.com in this browser |
 
 Each section confirms the account it found — *“✓ Connected as tourist”*, or *“✓ Signed in as
 tourist”* on CodeChef, where the browser session really is the identity rather than something
-looked up — so a typo shows up straight away. Your Codeforces key and secret stay in this browser, are only used to sign
-requests to codeforces.com, and are deliberately kept out of the backup file.
+looked up — so a typo shows up straight away. The extension's maintainer also sets a Codeforces key and secret; they stay in that browser, are only used to sign
+requests to codeforces.com, and are deliberately kept out of both the backup file and the cloud.
+A second computer needs the key pair entered again.
 
 ## Using it
 
@@ -106,11 +114,14 @@ on its site, or removes it.
 problems are and how hard they are — and you can click into any site for its own rating
 spread and topic breakdown.
 
-**Keep a backup.** Export writes a JSON file you can re-import later. Turn on auto-export in
-Settings and it stays current by itself.
+**Keep a backup.** Signed in, every change is saved to the cloud as you make it. You can
+also Export a JSON file from the Contests tab at any time, and Import it later.
 
 ## Things worth knowing
 
+- **`…` instead of a rating** means the shared catalog hasn't rated that problem yet. The
+  contest is tracked and its solved problems still clear; it just sorts below the rated
+  ones until a rating arrives, which happens on a later refresh by itself.
 - **Chrome only.** The side panel uses an API Firefox doesn't have an equivalent for.
 - **It's deliberately unhurried.** Requests are spaced out so the sites don't rate-limit you.
   Adding a contest is not instant, and that's on purpose.
@@ -139,9 +150,11 @@ Settings and it stays current by itself.
 
 ## Where your data comes from
 
-Everything stays on your machine — there's no server. If you want to know exactly which
-site each number came from, or something looks wrong and you'd like to check it yourself,
-see **[DATA.md](DATA.md)**.
+Your queue is read from the three sites by your own browser, and kept on your machine, with
+a copy in your own part of the extension's Google Firebase database, which only your account
+can read. If you want to know exactly which site each
+number came from, or something looks wrong and you'd like to check it yourself, see
+**[DATA.md](DATA.md)**.
 
 ## Building it yourself
 
@@ -155,6 +168,11 @@ npm run smoke           # loads the built panel and settings page in headless Ch
 ```
 
 Then load `dist/chrome` with **Load unpacked** as above.
+
+`.env` holds the Firebase project and OAuth client the build signs in with, and
+[firestore.rules](firestore.rules) is what goes in that project's Firestore rules. Left
+empty, the build works without sign-in and works out every difficulty itself — for
+development only; the release workflow refuses to publish such a build.
 
 ## Licence
 

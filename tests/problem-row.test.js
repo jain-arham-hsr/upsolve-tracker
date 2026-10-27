@@ -66,6 +66,19 @@ test("an unrated problem shows ??? and no probability, never a stand-in", () => 
   assert.match(html, /—/);
 });
 
+test("a rating the catalog has not supplied yet shows …, never ???", () => {
+  // "???" means the site says unrated — its one meaning. A problem waiting on
+  // the shared catalog is a different fact, and reads as one.
+  const problem = { index: "A", name: "X", rating: null, ratingSource: "pending" };
+  for (const compact of [false, true]) {
+    const html = renderProblemRow(build("codeforces-official", problem), { compact });
+    assert.match(html, /is-unrated is-pending" title="Not rated in the shared catalog yet">…</);
+    assert.ok(!/\?\?\?/.test(html));
+  }
+  // And it sorts as unrated: no number, no chance.
+  assert.equal(build("codeforces-official", problem).solveProbability, null);
+});
+
 test("a known rating with no rating of yours shows the number but no chance", () => {
   // The second of the two reasons a row can lack a probability; conflating
   // them would hide a missing *user* rating behind missing problem data.

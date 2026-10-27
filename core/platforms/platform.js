@@ -31,8 +31,9 @@
  *   createSessionFrom(values)             unsaved settings → Session
  *   verifyIdentity(session)               → {username, rating}, or throws
  *   describeIdentity(identity)            how Settings names the account
- *   fetchContestRecord({contestId, subtype, session, onProgress})
- *                                          → {status, contest?} — the whole add
+ *   fetchContestRecord({contestId, subtype, session, onProgress, estimate})
+ *                                          → {status, contest?} — the whole add;
+ *                                            `estimate: false` skips the fit
  *   fetchSolvedKeys(session, contests, onProgress)
  *                                          → Set of solvedKey values
  *   syncMetadata(session, contests, onProgress)
@@ -129,6 +130,12 @@ export class Platform {
     }
     if (typeof instance.capabilities?.canEstimate !== "boolean") {
       throw new Error(`${name} must declare capabilities.canEstimate`);
+    }
+    // Whether its contests may go into the shared catalog, which everyone
+    // signed in can read. Required rather than defaulted: a default of true
+    // would publish a members-only contest the day a platform forgot to say.
+    if (typeof instance.capabilities.publishable !== "boolean") {
+      throw new Error(`${name} must declare capabilities.publishable`);
     }
 
     // Optional, and checked only when declared: how long this site is given to
@@ -241,7 +248,7 @@ export class Platform {
    * The whole add: acquire, build the stored record, estimate what the site
    * did not publish. Answers with one of the five statuses.
    */
-  async fetchContestRecord({ contestId, subtype, session, onProgress = () => {} }) {
+  async fetchContestRecord({ contestId, subtype, session, onProgress = () => {}, estimate = true }) {
     // A failure to *ask* is not an answer. The platform flags it at the point
     // that knows (`isSourceUnreachable`); the status it maps to is decided once,
     // here. Anything unflagged still escapes, which keeps an unrecognised
@@ -254,7 +261,9 @@ export class Platform {
     assertAcquired(this.id, acquired);
     const contest = buildContestRecord(this, { type: subtype, ...acquired });
 
-    if (this.capabilities.canEstimate) {
+    // `estimate: false` is catalog mode, where ratings come from the owner's
+    // catalog and a local fit would only be thrown away.
+    if (estimate && this.capabilities.canEstimate) {
       const verdict = await this.estimateMissing({ contest, context: acquired.context, session, onProgress });
       if (verdict?.status) return verdict;
     }

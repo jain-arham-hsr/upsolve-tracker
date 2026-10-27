@@ -111,6 +111,7 @@ export class AtCoder extends Platform {
   }
 
   capabilities = {
+    publishable: true,
     // AtCoder publishes no problem tags at all — not "none yet", none ever —
     // so the stats panel drops its tag section rather than heading an empty one.
     publishesTags: false,

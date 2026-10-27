@@ -1,16 +1,12 @@
 /**
- * Persists sensitive/non-serializable data using IndexedDB.
- * - FileSystemDirectoryHandle (can't be stored in chrome.storage.local)
- * - API credentials (shouldn't appear in exported JSON backups)
+ * Persists secrets using IndexedDB — API credentials, which must appear
+ * neither in an exported backup nor in the cloud copy, both of which are made
+ * from chrome.storage.local.
  */
 
 
 const DB_NAME = "upsolve_tracker_db";
 const STORE_NAME = "secure";
-
-const KEYS = {
-  DIR_HANDLE: "data_dir_handle",
-};
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -42,21 +38,6 @@ async function get(key) {
     request.onerror = (e) => reject(e.target.error);
   });
 }
-
-async function remove(key) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).delete(key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = (e) => reject(e.target.error);
-  });
-}
-
-// --- Directory Handle ---
-export const saveDirHandle = (handle) => put(KEYS.DIR_HANDLE, handle);
-export const loadDirHandle = () => get(KEYS.DIR_HANDLE);
-export const clearDirHandle = () => remove(KEYS.DIR_HANDLE);
 
 // --- Secrets, by slug ---
 //

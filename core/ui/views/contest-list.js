@@ -1,11 +1,6 @@
 import templateHtml from "./contest-list.html?raw";
 import { LocalDB } from "../../services/storage.js";
-import {
-  BACKUP_FILENAME,
-  verifyExportPermission,
-  backUp,
-  AUTO_EXPORT_KEY,
-} from "../../services/auto-export.js";
+import { isDeviceLocal, saveToCloud } from "../../services/cloud-sync.js";
 import { byStartTimeDesc } from "../../queue-order.js";
 import { describeBackupProblem } from "../../backup-validation.js";
 import { escapeHtml } from "../escape-html.js";
@@ -59,6 +54,18 @@ const CHEVRON_ICON = `<svg class="waiting-chevron" viewBox="0 0 16 16" width="12
 </svg>`;
 
 
+/** The manual Export's filename, which Import has always read. */
+const BACKUP_FILENAME = "upsolve_tracker_backup.json";
+
+/**
+ * What a backup file carries: storage, minus this device's bookkeeping about
+ * its cloud copy. Those keys describe one install's relationship to one
+ * account, so carried into another install they would claim a sync that never
+ * happened there.
+ */
+const portable = (data) =>
+  Object.fromEntries(Object.entries(data).filter(([key]) => !isDeviceLocal(key)));
+
 export class ContestList extends HTMLElement {
   constructor() {
     super();
@@ -111,7 +118,7 @@ export class ContestList extends HTMLElement {
 
     // Management Actions
     this.btnExport.addEventListener("click", async () => {
-      const allData = await chrome.storage.local.get(null);
+      const allData = portable(await chrome.storage.local.get(null));
       const blob = new Blob([JSON.stringify(allData, null, 2)], {
         type: "application/json",
       });
@@ -303,9 +310,6 @@ export class ContestList extends HTMLElement {
     if (!pending) return;
 
     const { contest, entry } = pending;
-    // While the confirm click is fresh: a lapsed folder can only be
-    // re-prompted under user activation.
-    const dirHandle = await verifyExportPermission();
 
     if (entry) {
       await cancelWaiting(entry.platform, entry.contestId);
@@ -317,14 +321,14 @@ export class ContestList extends HTMLElement {
 
     await this.renderAll();
 
-    // Storage changed, so the backup has to follow it or the exported JSON
-    // drifts from what the panel shows.
-    await this.backUpAndReport(dirHandle);
+    // Storage changed, so the cloud copy has to follow it, or another
+    // device would pull the contest straight back.
+    await this.saveAndReport();
   }
 
-  /** Writes the backup and puts the outcome, if any, in the shell's strip. */
-  async backUpAndReport(dirHandle) {
-    const outcome = await backUp(dirHandle);
+  /** Saves to the cloud and puts the outcome, if any, in the shell's strip. */
+  async saveAndReport() {
+    const outcome = await saveToCloud();
     if (outcome) this.reportStatus({ ...outcome, sticky: true });
   }
 
@@ -371,16 +375,11 @@ export class ContestList extends HTMLElement {
     this.alertDiv
       .querySelector("[data-import-confirm]")
       .addEventListener("click", async () => {
-        const dirHandle = await verifyExportPermission();
         try {
-          // Auto-export belongs to this browser, not the backup: its folder
-          // lives in IndexedDB and never travels in the file. Importing the
-          // flag would switch auto-export on with no folder behind it.
-          const { [AUTO_EXPORT_KEY]: _ignored, ...incomingData } = data;
-          await chrome.storage.local.set(incomingData);
+          await chrome.storage.local.set(portable(data));
           await this.renderAll();
           this.showInlineAlert(`Imported ${incoming} contest(s).`);
-          await this.backUpAndReport(dirHandle);
+          await this.saveAndReport();
         } catch (error) {
           this.showInlineAlert(`Import failed: ${error.message}`);
         }

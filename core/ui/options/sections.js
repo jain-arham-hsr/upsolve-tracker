@@ -46,8 +46,12 @@ function renderField(section, field, isLast) {
   const onChange = section.verify.trigger === "change" && isLast;
   const id = `setting-${field.slug}`;
 
+  // Hidden until the page knows this install rates contests itself; see
+  // `ownerOnly` in schema.js and `showOwnerFields` in options.js.
+  const ownerOnly = field.ownerOnly ? ` data-owner-only hidden` : "";
+
   return `
-      <div class="form-group">
+      <div class="form-group"${ownerOnly}>
         <label for="${id}">${field.label}</label>
         <p class="help-text">${field.help}</p>
         <input type="${field.type}" id="${id}" data-field="${field.slug}"

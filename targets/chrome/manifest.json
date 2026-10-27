@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Upsolve Tracker",
-  "version": "2.15.0",
+  "version": "3.0.0",
   "description": "Systematically upsolve Codeforces, AtCoder and CodeChef contests.",
-  "permissions": ["activeTab", "storage", "sidePanel"],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyuwIEXLyMvgW4Prg0B83CFZuHVOUHbrJ4r4tjjYu4LFv4Z+K/SYlo78OoIgPLi2QDVsqMRY1YpDRW7sUdCmAqNBN9RHJXkmFAt120h511UQEWyOL/R+jTmrEm7ijVu8h2l8+cElqlpCWIypYny4y3XkOVaUqkFPzjrW8H1xDHLZWLjDyBV6U0/fhHDZY9YFTTPhDlRH+zXp9vaYoCGw8AQBeb6oktjp60SSn3mv+Eahpue08yz80WQZDfvdw8QwG9m8wWjffgaIVW3d+6NZ0AnXj9JHEOi9C0lWc9i4oCT3z4AkbJz24r/pwHBN+w+8SDv+Jmp69BKIMvSNx7M974QIDAQAB",
+  "permissions": ["activeTab", "storage", "sidePanel", "identity"],
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",

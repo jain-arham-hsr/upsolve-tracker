@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { crx } from "@crxjs/vite-plugin";
 import { resolve } from "path";
 import fs from "fs";
@@ -40,26 +40,41 @@ manifest.content_scripts = [
   },
 ];
 
-export default defineConfig({
-  plugins: [crx({ manifest })],
-  resolve: {
-    alias: {
-      // Create a shortcut so you can import core files easily
-      // Example: import fetcher from '@core/services/fetcher.js'
-      "@core": resolve(__dirname, "core"),
+// Sign-in is configured from `.env` rather than written into the manifest, so a
+// self-hosted copy changes its Firebase project and OAuth client in one file. With no
+// client id the block is left out and Settings says sign-in is not set up:
+// Chrome refuses `getAuthToken` outright without one, so shipping a placeholder
+// would only turn that explanation into an opaque error.
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, __dirname, "VITE_");
+  if (env.VITE_GOOGLE_CLIENT_ID) {
+    manifest.oauth2 = {
+      client_id: env.VITE_GOOGLE_CLIENT_ID,
+      scopes: ["openid", "https://www.googleapis.com/auth/userinfo.email"],
+    };
+  }
+
+  return {
+    plugins: [crx({ manifest })],
+    resolve: {
+      alias: {
+        // Create a shortcut so you can import core files easily
+        // Example: import fetcher from '@core/services/fetcher.js'
+        "@core": resolve(__dirname, "core"),
+      },
     },
-  },
-  server: {
-    port: 5173,
-    strictPort: true,
-    hmr: {
+    server: {
       port: 5173,
+      strictPort: true,
+      hmr: {
+        port: 5173,
+      },
+      cors: true,
     },
-    cors: true,
-  },
-  build: {
-    // Output the build to a target-specific folder (e.g., dist/chrome)
-    outDir: resolve(__dirname, `dist/${target}`),
-    emptyOutDir: true,
-  },
+    build: {
+      // Output the build to a target-specific folder (e.g., dist/chrome)
+      outDir: resolve(__dirname, `dist/${target}`),
+      emptyOutDir: true,
+    },
+  };
 });

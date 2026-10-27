@@ -8,6 +8,7 @@
 import { solveProbability, formatSolveProbability } from "../queue-order.js";
 import { escapeHtml } from "./escape-html.js";
 import { platformIcon } from "./platform-icons.js";
+import { PENDING_RATING } from "../services/catalog.js";
 
 /**
  * @param {{contest: object, platform: object, problem: object}} pending
@@ -60,8 +61,15 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
   // No "Rating:" label. The word implied a single scale shared across
   // platforms, which is the one thing the ordering model denies — the mark
   // beside the number says whose scale it is instead.
-  const ratingText = rated ? String(row.rating) : "???";
-  const tone = rated ? (row.tone ?? "tone-neutral") : "is-unrated";
+  //
+  // Two kinds of missing, and they must not share a glyph. "???" means the
+  // site says this problem is unrated — that is its whole meaning. "…" means
+  // the shared catalog has not rated it *yet*: an install that is not the
+  // owner's reads every rating from there, and the owner may add it later.
+  const pending = !rated && row.ratingSource === PENDING_RATING;
+  const ratingText = rated ? String(row.rating) : pending ? "…" : "???";
+  const tone = rated ? (row.tone ?? "tone-neutral") : `is-unrated${pending ? " is-pending" : ""}`;
+  const pendingTitle = pending ? ` title="Not rated in the shared catalog yet"` : "";
 
   // This number was modelled, not published.
   //
@@ -145,7 +153,7 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
       <span class="compact-index">${escapeHtml(row.index ?? "")}</span>
       <span class="compact-name">${warn}${name}</span>
       <span class="compact-chance">${formatSolveProbability(row.solveProbability)}</span>
-      <span class="compact-rating ${tone}${estimated}"${estimatedTitle}>${ratingText}</span>
+      <span class="compact-rating ${tone}${estimated}"${estimatedTitle}${pendingTitle}>${ratingText}</span>
     </a>`;
   }
 
@@ -160,7 +168,7 @@ export function renderProblemRow(row, { position, compact = false } = {}) {
               row.solveProbability,
             )}</span>
             ${mark}
-            <span class="rating ${tone}${estimated}"${estimatedTitle}>${ratingText}</span>
+            <span class="rating ${tone}${estimated}"${estimatedTitle}${pendingTitle}>${ratingText}</span>
           </span>
           <span class="meta-line">
             <span class="source">${escapeHtml(row.sourceLabel)}</span>

@@ -429,3 +429,54 @@ test("gym 712373 end to end, against its real submissions", () => {
     assert.equal(stats.partyHandles.length, 12);
   });
 });
+
+// ── without a key ───────────────────────────────────────────────────────
+//
+// The key pair is optional: an install whose ratings come from the shared
+// catalog never needs a gym's standings, so it reads the problem list off the
+// gym's own page — which reaches private gyms through the user's login, as
+// measured from the side panel with no codeforces.com tab open.
+
+const keyless = (fake = {}) =>
+  Object.assign(new CodeforcesApi(null, null), { contestList: async () => [] }, forbiddenService(), fake);
+
+test("with no key, a gym is read from its page and the standings are never asked for", async () => {
+  const seen = serve({ standings: new Error("standings must not be read"), problems: problemsPage(722144) });
+  const scraper = Object.assign(new CodeforcesScraper(), { document: parsed });
+
+  const acquired = await getPlatform("codeforces-gyms").fetchContest({
+    contestId: "722144",
+    session: { api: keyless(), scraper },
+  });
+
+  assert.equal(acquired.status, undefined, `refused: ${acquired.reason}`);
+  assert.deepEqual(seen.map((url) => url.includes("/standings")), [false], "exactly one page: the problems page");
+  assert.equal(acquired.name, "ICPC PRELIMS PC : 1");
+  assert.deepEqual(acquired.problems.map((p) => p.index), ["A", "B", "C"]);
+  // No ratings from a page: those come from the catalog on such an install.
+  assert.ok(acquired.problems.every((p) => p.rating === null && p.ratingSource === null));
+});
+
+test("an install that estimates is told it needs a key, not shown an API error", async () => {
+  const contest = { id: "722144", problems: [{ index: "A", rating: null }] };
+  const verdict = await getPlatform("codeforces-gyms").readField({
+    contest,
+    context: { solveCountsRead: false, partyHandles: null, standings: null },
+    session: { api: keyless() },
+  });
+  assert.equal(verdict.status, "unavailable");
+  assert.match(verdict.reason, /needs a Codeforces API key\. Add one in Settings\./);
+});
+
+test("with no key, dating a private gym asks nothing that can only fail", async () => {
+  // Each lookup is a signed contest.standings; unsigned it fails, and would
+  // fail again on every refresh. The gym stays undated instead.
+  // Counted rather than forbidden: the loop catches a failed lookup, so a
+  // throwing stub would leave the gym undated either way and prove nothing.
+  let asked = 0;
+  const contest = { id: "722144" };
+  const api = keyless({ contestStandings: async () => { asked++; return null; } });
+  await getPlatform("codeforces-gyms").syncStartTimes({ api }, [contest]);
+  assert.equal(asked, 0, "a keyless install asked for standings it cannot read");
+  assert.equal(contest.startTimeSeconds, undefined);
+});

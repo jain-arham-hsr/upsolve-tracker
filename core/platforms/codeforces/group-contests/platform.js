@@ -82,6 +82,9 @@ export class CodeforcesGroupContests extends Platform {
   }
 
   capabilities = {
+    // A group's contests are visible to its members only, and the catalog is
+    // readable by everyone signed in, so they never leave the owner's queue.
+    publishable: false,
     // No source carries tags for a group's own problems.
     publishesTags: false,
     canEstimate: true,

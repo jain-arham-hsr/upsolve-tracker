@@ -396,6 +396,10 @@ test("rating-models/ holds only the statistical models", () => {
  */
 const TEST_SEAMS = new Set([
   "progress-manager.js#applySolvedStatus",
+  // What reaches the shared catalog from a stored contest. Fails quietly in
+  // the worst direction: a field it forgets to strip is the owner's own
+  // solved history, published to everyone.
+  "services/catalog.js#catalogRecord",
   "services/platform-identity.js#classifyIdentity",
   "services/platform-identity.js#getStoredIdentity",
   "services/platform-identity.js#IDENTITY_STORAGE_KEY",

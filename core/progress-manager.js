@@ -16,6 +16,8 @@ import {
   settleIdentity,
   clearSolvedForPlatform,
 } from "./services/platform-identity.js";
+import { ratingMode } from "./services/account.js";
+import { refreshFromCatalog } from "./services/catalog.js";
 
 /**
  * Reconciles local contest data with each platform's submission history.
@@ -27,25 +29,45 @@ import {
  *   are returned rather than only logged: refusing silently looks the same to
  *   the user as corrupting silently.
  */
-export async function updateSolvedStatus(onProgress = () => {}, { ratingsBefore } = {}) {
+export async function updateSolvedStatus(onProgress = () => {}, { ratingsBefore, mode, firebase } = {}) {
   const trackedContests = await LocalDB.getTrackedContests();
   // The caller's reading when it has one: a refresh can move a rating before
   // it gets here, in the waiting-contest retry, and that change is this
   // step's to announce too.
   const before = ratingsBefore ?? (await getEffectiveRatings());
+  // Where ratings come from — see `account.js#ratingMode`.
+  mode ??= await ratingMode();
+  const fromCatalog = mode === "catalog";
 
   const { solvedKeys, ratings, failures, anySucceeded } = await syncPlatforms(
     trackedContests,
     onProgress,
+    { syncMetadata: !fromCatalog },
   );
+
+  // In catalog mode, ratings arrive here instead of from the sites: problems
+  // the catalog had not rated when they were added, and estimates the owner's
+  // later re-checks may have replaced with published numbers.
+  let fromCatalogChanged = 0;
+  if (fromCatalog) {
+    try {
+      onProgress("Checking the shared catalog for ratings…", { step: "catalog" });
+      fromCatalogChanged = await refreshFromCatalog(trackedContests, { firebase });
+    } catch (error) {
+      console.warn("[Progress Manager] catalog lookup failed:", error.message);
+      failures.push({ platform: "Catalog", message: "Couldn't read the shared catalog." });
+    }
+  }
 
   // Only platforms that actually answered. A failed lookup must leave the
   // previous rating in place, not blank it and re-sort the queue.
   await storeFetchedRatings(ratings);
 
   // Every platform failed — usually an unconfigured extension or an outage.
-  // Returning before the write keeps a bad sync from touching storage at all.
-  if (!anySucceeded) return { removed: [], failures };
+  // Returning before the write keeps a bad sync from touching storage at all,
+  // unless the catalog supplied ratings: those are worth keeping, and an empty
+  // solved set clears nothing, since `solved` is only ever set true.
+  if (!anySucceeded && fromCatalogChanged === 0) return { removed: [], failures };
 
   // A rating that moved re-sorts that platform's whole block, which is this
   // step's work — so it is this step's message, not a separate one after it.
@@ -108,7 +130,7 @@ export function applySolvedStatus(contests, solvedKeys) {
  * Failures are isolated per platform: one site being down or unconfigured
  * must not stop the others syncing, and must never clear anything.
  */
-async function syncPlatforms(trackedContests, onProgress) {
+async function syncPlatforms(trackedContests, onProgress, { syncMetadata = true } = {}) {
   const solvedKeys = new Set();
   const ratings = {};
   const failures = [];
@@ -151,8 +173,10 @@ async function syncPlatforms(trackedContests, onProgress) {
       ratings[platform.id] = identity.rating;
 
       // Fill in metadata for contests still missing it. Handed only this
-      // platform's contests, since these match on bare contest ids.
-      await platform.syncMetadata(session, mine, report);
+      // platform's contests, since these match on bare contest ids. Not in
+      // catalog mode: these passes write published ratings, and there every
+      // rating comes from the catalog.
+      if (syncMetadata) await platform.syncMetadata(session, mine, report);
 
       anySucceeded = true;
     } catch (error) {

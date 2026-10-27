@@ -6,7 +6,7 @@
  * what to do with what comes back.
  */
 import { LocalDB } from "./services/storage.js";
-import { matchContestUrl } from "./platforms/registry.js";
+import { contestKey, makeContestKey, matchContestUrl } from "./platforms/registry.js";
 import {
   READY,
   NOT_PUBLISHED_YET,
@@ -18,13 +18,24 @@ import {
   settleIdentity,
   clearSolvedForPlatform,
 } from "./services/platform-identity.js";
+import { ratingMode } from "./services/account.js";
+import { applyCatalogRatings, lookupCatalog, markPending } from "./services/catalog.js";
 
-export async function processNewContest(url, onProgress = () => {}) {
+/**
+ * @param {string} url
+ * @param {Function} [onProgress]
+ * @param {{mode?: "local"|"owner"|"catalog", firebase?: object}} [options]
+ *   `mode` is where ratings come from — see `account.js#ratingMode`, which
+ *   supplies it when omitted. `firebase` is the test seam for catalog reads.
+ */
+export async function processNewContest(url, onProgress = () => {}, { mode, firebase } = {}) {
   try {
     const parsed = matchContestUrl(url);
     if (!parsed) throw new Error("Not a supported contest URL.");
 
     const { platform, contestId, subtype } = parsed;
+    mode ??= await ratingMode();
+    const fromCatalog = mode === "catalog";
 
     const session = await platform.createSession();
 
@@ -33,12 +44,25 @@ export async function processNewContest(url, onProgress = () => {}) {
     // on refresh.
     await establishIdentity(platform, session);
 
-    const result = await platform.fetchContestRecord({
-      contestId,
-      subtype,
-      session,
-      onProgress,
-    });
+    // In catalog mode the owner may already have done the expensive part.
+    // A hit is the whole add bar solved status: no contest fetch, no field
+    // read, no estimate. Presence in the catalog also answers every gate
+    // `fetchContest` would have asked, since only a ready contest is published.
+    const cached = fromCatalog
+      ? await readCatalog(makeContestKey(platform.id, contestId), { firebase })
+      : null;
+
+    const result = cached
+      ? { status: READY, contest: fromCatalogRecord(cached) }
+      : await platform.fetchContestRecord({
+          contestId,
+          subtype,
+          session,
+          onProgress,
+          // Catalog mode never rates locally, so the field read and the fit —
+          // most of an add's requests — are skipped rather than discarded.
+          estimate: !fromCatalog,
+        });
 
     // The one place a status becomes an outcome, and it consults nothing about
     // the platform. That is the property the vocabulary exists to give: a fact
@@ -61,6 +85,15 @@ export async function processNewContest(url, onProgress = () => {}) {
     }
 
     const contest = result.contest;
+
+    if (fromCatalog && !cached) {
+      // Every rating comes from the catalog in this mode, the site's own
+      // published ones included, so the queue reads one source. The key is
+      // asked again now that it is resolved: a CodeChef parent's URL names the
+      // parent, while the catalog files the division it resolved to.
+      markPending(contest);
+      applyCatalogRatings(contest, await readCatalog(contestKey(contest), { firebase }));
+    }
 
     const solvedKeys = await platform.fetchSolvedKeys(session, [contest], onProgress);
 
@@ -92,7 +125,12 @@ export async function processNewContest(url, onProgress = () => {}) {
     // cannot, the site simply has not rated that problem, and it stores as null
     // and shows "???". Deriving both from `canEstimate` is what stops the two
     // being declared separately and drifting apart.
-    const missing = contest.problems.filter((problem) => problem.rating === null);
+    //
+    // None of it applies in catalog mode, where a missing rating is the catalog
+    // not having this contest yet: stored pending, and filled by a refresh.
+    const missing = fromCatalog
+      ? []
+      : contest.problems.filter((problem) => problem.rating === null);
 
     if (missing.length > 0) {
       if (platform.capabilities.canEstimate) {
@@ -158,6 +196,29 @@ export async function processNewContest(url, onProgress = () => {}) {
     }
     throw error;
   }
+}
+
+/**
+ * One catalog record, or null — including when the catalog cannot be read at
+ * all (signed out, offline). An add must not fail for want of a rating it
+ * would only have stored as pending anyway; the next refresh asks again.
+ */
+async function readCatalog(key, options) {
+  try {
+    return (await lookupCatalog([key], options)).get(key) ?? null;
+  } catch (error) {
+    console.info("[Contest Manager] catalog unavailable:", error.message);
+    return null;
+  }
+}
+
+/** A tracked contest made from a catalog record: the shared part, plus this user's fresh state. */
+function fromCatalogRecord(record) {
+  return {
+    ...record,
+    problems: record.problems.map((problem) => ({ ...problem, solved: false })),
+    addedAt: Date.now(),
+  };
 }
 
 /**

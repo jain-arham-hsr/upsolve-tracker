@@ -129,7 +129,18 @@ const STORE = {
   ],
 };
 
-const stub = `<script>
+const builtManifest = JSON.parse(readFileSync(path.join(dist, "manifest.json"), "utf8"));
+
+// The views pass runs with the sign-in block taken out of the manifest. A
+// configured build gates a signed-out panel — the whole app is a sign-in
+// prompt — and the harness cannot sign in, so with the real manifest every
+// view check below would measure an empty outlet. Taking `oauth2` out is what
+// makes `isAccountConfigured()` false, which opens the app as an unconfigured
+// build does. The gate itself gets a pass of its own, with the real manifest,
+// at the end.
+const { oauth2: _oauth2, ...openManifest } = builtManifest;
+
+const stubFor = (manifest) => `<script>
 (function () {
   const store = ${JSON.stringify(STORE)};
   // A contest page, and one of the seeded waiting contests: the banner only
@@ -145,35 +156,69 @@ const stub = `<script>
   // secure-store keeps the API pair in IndexedDB. Without it hasCompleteSetup()
   // is false and the queue renders a setup prompt instead of any rows — which
   // would leave the most-used renderer in the app untested.
-  const secure = { api_key: "k", api_secret: "s", data_dir_handle: null };
+  const secure = { api_key: "k", api_secret: "s" };
   // defineProperty, not assignment: window.indexedDB is getter-only, so a
   // plain assignment fails silently. And real IndexedDB is unavailable on
   // file:// origins, so loadCredentials() would reject and take
   // hasCompleteSetup() down with it, leaving the queue on its setup prompt.
-  Object.defineProperty(window, "indexedDB", { configurable: true, value: {
-    open() {
-      const request = {};
-      queueMicrotask(() => {
-        request.result = {
-          objectStoreNames: { contains: () => true },
-          close() {},
-          createObjectStore() {},
-          transaction: () => ({
-            objectStore: () => ({
-              get: (key) => { const r = { result: secure[key] ?? null };
-                queueMicrotask(() => r.onsuccess?.({ target: r })); return r; },
-              put(value, key) { secure[key] = value; },
-              delete(key) { delete secure[key]; },
-            }),
-            set oncomplete(fn) { queueMicrotask(fn); },
-            set onerror(_fn) {},
+  //
+  // It has to behave like the real thing, not just answer secure-store's calls:
+  // Firebase keeps its sign-in in IndexedDB too, and it listens with
+  // addEventListener rather than onsuccess, stores by keyPath and reads with
+  // getAll. A fake that only set onsuccess left Firebase waiting forever, and
+  // the Account section never left its loading state.
+  const databases = new Map([
+    ["upsolve_tracker_db", new Map([["secure", { keyPath: null, rows: new Map(Object.entries(secure)) }]])],
+  ]);
+  const settle = (target, type, payload) => {
+    target[\`on\${type}\`]?.({ target });
+    target.dispatchEvent(Object.assign(new Event(type), payload));
+  };
+  const request = (work) => {
+    const r = new EventTarget();
+    queueMicrotask(() => {
+      try { r.result = work(); settle(r, "success"); }
+      catch (error) { r.error = error; settle(r, "error"); }
+    });
+    return r;
+  };
+  const openDatabase = (stores) => ({
+    objectStoreNames: { contains: (name) => stores.has(name) },
+    close() {},
+    createObjectStore(name, { keyPath = null } = {}) { stores.set(name, { keyPath, rows: new Map() }); },
+    transaction() {
+      const tx = new EventTarget();
+      // After the requests queued in this tick, as a real transaction commits.
+      setTimeout(() => settle(tx, "complete"), 0);
+      tx.objectStore = (name) => {
+        const store = stores.get(name);
+        return {
+          get: (key) => request(() => store.rows.get(key)),
+          getAll: () => request(() => [...store.rows.values()]),
+          put: (value, key) => request(() => {
+            const k = key ?? value[store.keyPath];
+            store.rows.set(k, value);
+            return k;
           }),
+          delete: (key) => request(() => { store.rows.delete(key); }),
         };
-        request.onsuccess?.({ target: request });
-      });
-      return request;
+      };
+      return tx;
     },
-    deleteDatabase() { const r = {}; queueMicrotask(() => r.onsuccess?.()); return r; },
+  });
+  Object.defineProperty(window, "indexedDB", { configurable: true, value: {
+    open(name) {
+      const r = new EventTarget();
+      queueMicrotask(() => {
+        const isNew = !databases.has(name);
+        if (isNew) databases.set(name, new Map());
+        r.result = openDatabase(databases.get(name));
+        if (isNew) settle(r, "upgradeneeded");
+        settle(r, "success");
+      });
+      return r;
+    },
+    deleteDatabase: (name) => request(() => { databases.delete(name); }),
   } });
 
   // The shell rebuilds its add banner from storage.onChanged, so the stub has
@@ -217,10 +262,21 @@ const stub = `<script>
       onActivated: { addListener() {} },
       onUpdated: { addListener: (fn) => tabListeners.push(fn) },
     },
-    runtime: { openOptionsPage() {}, lastError: null },
+    // The built manifest, so the Account section sees exactly what this build
+    // ships: no oauth2 block when .env leaves the client id empty.
+    runtime: { openOptionsPage() {}, lastError: null, getManifest: () => (${JSON.stringify(manifest)}) },
+    // Signed out of Chrome: no token without a prompt, and nothing to drop.
+    identity: {
+      getAuthToken: async ({ interactive }) => {
+        throw new Error(interactive ? "The user did not approve access." : "OAuth2 not granted or revoked.");
+      },
+      removeCachedAuthToken: async () => {},
+    },
   };
 })();
 </script>`;
+
+const stub = stubFor(openManifest);
 
 const driver = `<script type="module">
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -592,13 +648,30 @@ const optionsDriver = `<script type="module">
     verdict: s.querySelector("[data-status]")?.textContent ?? "",
   }));
 
-  document.title = "SMOKE " + JSON.stringify({ errors: window.__errors, sections });
+  // Settled means enabled, or carrying a verdict. Waited on rather than given a
+  // fixed delay: Firebase's chunks load in a time that varies run to run, and a
+  // fixed wait failed intermittently on a page that was fine. Capped, so a load
+  // path that never runs still reports — as the disabled, silent button it is.
+  const accountBtn = document.getElementById("account-btn");
+  const settled = () =>
+    !accountBtn || !accountBtn.disabled || document.getElementById("account-status")?.textContent;
+  for (let i = 0; i < 50 && !settled(); i++) await wait(200);
+  const account = accountBtn && {
+    button: accountBtn.textContent.trim(),
+    disabled: accountBtn.disabled,
+    status: document.getElementById("account-status")?.textContent ?? "",
+  };
+
+  document.title = "SMOKE " + JSON.stringify({ errors: window.__errors, sections, account });
 </script>`;
 
 writeFileSync(
   optionsPage,
   optionsHtml
-    .replace("<head>", "<head>\n" + stub + "\n" + offline)
+    // The open manifest, for the same reason the views pass uses it: a
+    // configured build shows a signed-out visitor only the sign-in prompt, and
+    // everything checked below lives behind it. The gate pass covers that.
+    .replace("<head>", "<head>\n" + stubFor(openManifest) + "\n" + offline)
     .replace("</body>", optionsDriver + "</body>"),
 );
 
@@ -688,6 +761,16 @@ if (handle?.value !== "tourist") {
   process.exitCode = 1;
 }
 
+// With the sign-in block taken out, the Account section has one legitimate
+// state: it says sign-in isn't set up and keeps its button disabled. A blank
+// status means the load path did not run.
+const account = optionsReport.account;
+const accountOk = account && account.disabled && account.status.includes("isn't set up");
+if (!accountOk) {
+  console.error(`smoke: the Account section did not settle on a signed-out state — ${JSON.stringify(account)}`);
+  process.exitCode = 1;
+}
+
 // Errors the offline stub itself causes are the point of it, not a fault: a
 // failed verify legitimately logs. Anything else is a real escape.
 const optionsErrors = optionsReport.errors.filter((e) => !e.includes("offline in smoke"));
@@ -712,3 +795,136 @@ console.log(
 );
 
 console.log("smoke: views clean, fonts loaded —", seen.join("  "), " drilled:" + drilled);
+
+// ---------------------------------------------------------------------------
+// The sign-in gate: a configured build, signed out, must be a sign-in prompt
+// and nothing else. The views pass above cannot see this — it removes the
+// manifest's oauth2 block precisely so the app opens — so this pass loads the
+// same panel with the real manifest and Chrome's identity stub signed out.
+//
+// A build whose .env leaves Firebase out has no gate to check: it cannot sign
+// in, so it opens as before. Said rather than silently skipped.
+if (!builtManifest.oauth2) {
+  console.log("smoke: sign-in gate not checked — this build has no Firebase config");
+} else {
+  const gatePage = path.join(work, "core/ui/gate-check.html");
+  const gateDriver = `<script type="module">
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Waited on rather than given a fixed delay: Firebase's chunks load in a
+    // time that varies run to run. Capped, so a gate that never decides still
+    // reports — as the blank, closed panel it is.
+    const gate = () => document.getElementById("signin-gate");
+    for (let i = 0; i < 50 && gate()?.classList.contains("hidden"); i++) await wait(200);
+    const app = document.querySelector("upsolve-app");
+    const shown = (id) => {
+      const el = document.getElementById(id);
+      return Boolean(el) && getComputedStyle(el).display !== "none";
+    };
+    document.title = "SMOKE " + JSON.stringify({
+      errors: window.__errors,
+      gated: app?.classList.contains("is-gated") ?? false,
+      gateShown: shown("signin-gate"),
+      tabsShown: shown("tab-bar"),
+      refreshShown: shown("btn-refresh"),
+      mounted: document.getElementById("router-outlet")?.childElementCount ?? -1,
+      button: document.getElementById("btn-signin")?.textContent.trim() ?? null,
+      logo: Boolean(document.querySelector("#btn-signin svg.gsi-button-logo")),
+      buttonDisabled: document.getElementById("btn-signin")?.disabled ?? null,
+      status: document.getElementById("signin-gate-status")?.textContent ?? "",
+    });
+  </script>`;
+  writeFileSync(
+    gatePage,
+    html.replace("<head>", "<head>\n" + stubFor(builtManifest)).replace("</body>", gateDriver + "</body>"),
+  );
+
+  const gateDom = execFileSync(chrome, [
+    "--headless", "--disable-gpu", "--allow-file-access-from-files",
+    "--virtual-time-budget=20000", "--dump-dom", `file://${gatePage}`,
+  ], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 });
+
+  const gateTitle = gateDom.match(/<title>SMOKE ([\s\S]*?)<\/title>/);
+  if (!gateTitle) {
+    console.error("smoke: the gated panel never finished booting — no report was produced");
+    process.exit(1);
+  }
+  const gate = JSON.parse(decode(gateTitle[1]));
+  const problems = [];
+  if (!gate.gated || !gate.gateShown) problems.push("the sign-in prompt is not showing");
+  if (gate.tabsShown) problems.push("the tabs are visible to a signed-out user");
+  if (gate.refreshShown) problems.push("refresh is visible to a signed-out user");
+  if (gate.mounted !== 0) problems.push(`a view is mounted behind the gate (${gate.mounted})`);
+  if (gate.button !== "Sign in with Google" || gate.buttonDisabled) {
+    problems.push(`the sign-in button is not usable (${JSON.stringify(gate.button)}, disabled: ${gate.buttonDisabled})`);
+  }
+  if (!gate.logo) problems.push("the sign-in button has no Google logo");
+  if (gate.status) problems.push(`the gate shows an error: "${gate.status}"`);
+  if (gate.errors.length) problems.push(...gate.errors);
+
+  if (problems.length) {
+    console.error("smoke: the sign-in gate failed:");
+    for (const problem of problems) console.error("  " + problem);
+    process.exit(1);
+  }
+  console.log("smoke: sign-in gate clean — signed out, the panel shows only the prompt");
+
+  // Settings, signed out: also only the prompt. Settings live in the account,
+  // so a signed-out page must render none of them — and must not run the
+  // platform checks, which would reach out to all three sites.
+  const optionsGatePage = path.join(work, "core/ui/options/gate-check.html");
+  const optionsGateDriver = `<script type="module">
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const gate = () => document.getElementById("signin-gate");
+    for (let i = 0; i < 50 && gate()?.classList.contains("hidden"); i++) await wait(200);
+    const shown = (id) => {
+      const el = document.getElementById(id);
+      return Boolean(el) && getComputedStyle(el).display !== "none";
+    };
+    document.title = "SMOKE " + JSON.stringify({
+      errors: window.__errors,
+      gateShown: shown("signin-gate"),
+      bodyShown: shown("settings-body"),
+      sections: document.querySelectorAll(".settings-section[data-section]").length,
+      button: document.getElementById("btn-signin")?.textContent.trim() ?? null,
+      logo: Boolean(document.querySelector("#btn-signin svg.gsi-button-logo")),
+      fetched: window.__fetched ?? 0,
+    });
+  </script>`;
+  // Counts what the page tries to fetch: a gated page must not have checked
+  // any platform account, and every such check starts with a fetch.
+  const countingOffline = `<script>
+    window.__fetched = 0;
+    window.fetch = () => { window.__fetched++; return Promise.reject(new Error("offline in smoke")); };
+  </script>`;
+  writeFileSync(
+    optionsGatePage,
+    optionsHtml
+      .replace("<head>", "<head>\n" + stubFor(builtManifest) + "\n" + countingOffline)
+      .replace("</body>", optionsGateDriver + "</body>"),
+  );
+  const optionsGateDom = execFileSync(chrome, [
+    "--headless", "--disable-gpu", "--allow-file-access-from-files",
+    "--virtual-time-budget=20000", "--dump-dom", `file://${optionsGatePage}`,
+  ], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 });
+  const optionsGateTitle = optionsGateDom.match(/<title>SMOKE ([\s\S]*?)<\/title>/);
+  if (!optionsGateTitle) {
+    console.error("smoke: the gated settings page never finished booting — no report was produced");
+    process.exit(1);
+  }
+  const og = JSON.parse(decode(optionsGateTitle[1]));
+  const optionsProblems = [];
+  if (!og.gateShown) optionsProblems.push("the sign-in prompt is not showing");
+  if (og.bodyShown) optionsProblems.push("the settings are visible to a signed-out user");
+  if (og.sections !== 0) optionsProblems.push(`${og.sections} settings section(s) rendered behind the gate`);
+  if (og.fetched !== 0) optionsProblems.push(`the page made ${og.fetched} request(s) while signed out`);
+  if (og.button !== "Sign in with Google" || !og.logo) {
+    optionsProblems.push(`the sign-in button is not Google's (${JSON.stringify(og.button)}, logo: ${og.logo})`);
+  }
+  if (og.errors.length) optionsProblems.push(...og.errors);
+  if (optionsProblems.length) {
+    console.error("smoke: the settings sign-in gate failed:");
+    for (const problem of optionsProblems) console.error("  " + problem);
+    process.exit(1);
+  }
+  console.log("smoke: settings gate clean — signed out, no settings and no requests");
+}
